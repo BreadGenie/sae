@@ -456,6 +456,11 @@ export class SFUMeetingManager {
 		const pending = this.bufferedProducerEvents.splice(0);
 		for (const event of pending) {
 			try {
+				if (!event || !event.producerId || !event.participantId) {
+					console.warn("⚠️ Skipping malformed buffered producer event:", event);
+					continue;
+				}
+
 				const metadata = { isScreen: !!event.isScreen };
 				await this.subscribeToProducer(
 					event.producerId,

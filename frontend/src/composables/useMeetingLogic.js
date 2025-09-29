@@ -880,27 +880,38 @@ export function useMeetingLogic(meetingState, meetingId) {
 	/**
 	 * Setup chat events
 	 */
-	const setupChatEvents = () => {
+	const setupChatEvents = (notificationQueue) => {
 		try {
 			const sfuClient = getSFUClient();
 
 			sfuClient.on("chat:message", (data) => {
 				const message = {
 					id: Date.now() + Math.random(),
-					user_id: data.userId,
-					user_name: data.userName || data.userId,
+					user_id: data.fromUser,
+					user_name: data.fromName || data.fromUser,
 					message: data.message,
 					timestamp: new Date().toISOString(),
 				};
-				// push to reactive array
-				meetingState.chatMessages.value = [
-					...(meetingState.chatMessages.value || []),
-					message,
-				];
 
-				// Show notification if chat is closed
-				if (!meetingState.isChatOpen.value) {
+				if (!meetingState.chatMessages.value) {
+					meetingState.chatMessages.value = [];
+				}
+				meetingState.chatMessages.value.push(message);
+
+				if (
+					!meetingState.isChatOpen.value &&
+					data.fromUser !== meetingState.currentUser.value?.user_id
+				) {
 					meetingState.hasUnreadMessages.value = true;
+
+					if (notificationQueue?.addNotification) {
+						notificationQueue.addNotification({
+							message: data.message,
+							fromUser: data.fromUser,
+							fromName: data.fromName || data.fromUser,
+							timestamp: message.timestamp,
+						});
+					}
 				}
 			});
 		} catch (error) {
@@ -913,6 +924,21 @@ export function useMeetingLogic(meetingState, meetingId) {
 	 */
 	const onSendChat = (text) => {
 		try {
+			const message = {
+				id: Date.now() + Math.random(),
+				user_id: meetingState.currentUser.value?.user_id,
+				user_name:
+					meetingState.currentUser.value?.full_name ||
+					meetingState.currentUser.value?.name ||
+					meetingState.currentUser.value?.user_id,
+				message: text,
+				timestamp: new Date().toISOString(),
+			};
+			if (!meetingState.chatMessages.value) {
+				meetingState.chatMessages.value = [];
+			}
+			meetingState.chatMessages.value.push(message);
+
 			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
 				sfuClient.sendChatMessage(text, {

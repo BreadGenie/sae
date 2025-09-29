@@ -257,7 +257,7 @@ onMounted(async () => {
 	await initializeCamera();
 
 	// Setup chat events
-	setupChatEvents();
+	setupChatEvents(chatNotificationQueue.value);
 
 	// Auto-join if just created
 	const wasJustCreated = route.query.created === "true";

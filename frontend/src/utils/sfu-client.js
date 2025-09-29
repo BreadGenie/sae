@@ -268,7 +268,7 @@ class SFUClient {
 		console.log(
 			`📡 Creating consumer for producer ${producerId} @ ${Date.now()}`,
 		);
-		const resp = await this.sendRequest("create_consumer", {
+		return this.sendRequest("create_consumer", {
 			transportId,
 			producerId,
 			rtpCapabilities,
