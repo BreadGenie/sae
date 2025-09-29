@@ -133,20 +133,18 @@ class SaeMeeting(Document):
 			self.waiting_room = json.dumps(waiting_users)
 			self.save(ignore_permissions=True)
 
-			user_doc = frappe.db.get_value("User", user, ["full_name", "user_image"], as_dict=True)
-
-			frappe.publish_realtime(
-				"meeting_join_request",
-				doctype=self.doctype,
-				docname=self.name,
-				message={
-					"meeting": self.name,
-					"user": user,
-					"user_name": user_doc.full_name,
-					"user_image": user_doc.user_image,
-					"waiting_count": len(waiting_users),
-				},
-			)
+		user_doc = frappe.db.get_value("User", user, ["full_name", "user_image"], as_dict=True)
+		frappe.publish_realtime(
+			"meeting_join_request",
+			user=self.owner,
+			message={
+				"meeting": self.name,
+				"user": user,
+				"user_name": user_doc.full_name,
+				"user_image": user_doc.user_image,
+				"waiting_count": len(waiting_users),
+			},
+		)
 
 	def remove_from_waiting_room(self, user):
 		"""Remove user from waiting room"""
@@ -175,8 +173,7 @@ class SaeMeeting(Document):
 
 		frappe.publish_realtime(
 			"meeting_join_approved",
-			doctype=self.doctype,
-			docname=self.name,
+			user=user,
 			message={"meeting": self.name, "user": user, "approved_by": frappe.session.user},
 		)
 
@@ -206,8 +203,7 @@ class SaeMeeting(Document):
 
 		frappe.publish_realtime(
 			"meeting_join_rejected",
-			doctype=self.doctype,
-			docname=self.name,
+			user=user,
 			message={"meeting": self.name, "user": user, "rejected_by": rejected_by},
 		)
 
@@ -220,7 +216,11 @@ class SaeMeeting(Document):
 		)
 
 	def is_user_approved(self, user):
-		"""Check if user is already approved (in members list)"""
+		"""Check if user is already approved"""
+
+		if user == self.owner:
+			return True
+
 		members = self.get_members()
 		return user in members
 

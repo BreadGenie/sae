@@ -1,4 +1,3 @@
-import { frappeRequest } from "frappe-ui";
 import { Device } from "mediasoup-client";
 import { getSFUClient } from "./utils/sfu-client.js";
 
@@ -39,7 +38,7 @@ export async function getRouterCapabilities(meetingId) {
 	try {
 		const sfuClient = getSFUClient();
 
-		// Connect to SFU if not already connected
+		// Ensure SFU client is connected
 		if (!sfuClient.isConnected()) {
 			await sfuClient.connect(meetingId);
 		}
@@ -83,11 +82,8 @@ export async function createTransport(
 			await sfuClient.connect(meetingId);
 		}
 
-		// Add a small delay to ensure the room is ready after connection
 		await new Promise((resolve) => setTimeout(resolve, 100));
 
-		// Get transport options directly from SFU
-		// Map transport types to direction values expected by SFU
 		const direction = transportType === "recv" ? "receive" : transportType;
 
 		const transportOptions = await sfuClient.createWebRtcTransport(direction);
@@ -153,7 +149,6 @@ export async function connectTransport(meetingId, transportId, dtlsParameters) {
 		if (!sfuClient.isConnected()) {
 			throw new Error("SFU client not connected");
 		}
-
 		// Connect transport directly with SFU
 		await sfuClient.connectWebRtcTransport(transportId, dtlsParameters);
 
@@ -893,92 +888,6 @@ export async function createValidatedConsumer(
 			error,
 		);
 
-		// If it's a transport connection timeout, try creating consumer without waiting
-		if (
-			error.message.includes("Transport connection timeout") &&
-			!allowUnconnectedTransport
-		) {
-			try {
-				const consumer = await subscribeToProducerWithoutConnectionWait(
-					meetingId,
-					producerId,
-				);
-
-				return consumer;
-			} catch (retryError) {
-				console.error(
-					`❌ Retry without connection wait also failed: ${retryError}`,
-				);
-				throw retryError;
-			}
-		}
-
-		throw error;
-	}
-}
-
-/**
- * Subscribe to a producer without waiting for transport connection
- * This is a fallback method for when transport connection is problematic
- */
-export async function subscribeToProducerWithoutConnectionWait(
-	meetingId,
-	producerId,
-) {
-	await ensureDeviceReady(meetingId);
-
-	// Check if recv transport exists
-	if (
-		!recvTransport ||
-		recvTransport.connectionState === "failed" ||
-		recvTransport.connectionState === "closed"
-	) {
-		if (recvTransport) {
-			try {
-				recvTransport.close();
-			} catch (e) {
-				console.warn("Error closing failed recv transport:", e);
-			}
-			recvTransport = null;
-		}
-
-		await createTransport(meetingId, "recv");
-	}
-
-	if (!recvTransport) {
-		throw new Error("Failed to create or get receive transport");
-	}
-
-	try {
-		const response = await consumeMedia(
-			meetingId,
-			producerId,
-			mediasoupDevice.rtpCapabilities,
-		);
-
-		// Create the consumer - this will trigger transport connection automatically
-		const consumer = await recvTransport.consume({
-			id: response.id,
-			producerId: response.producerId,
-			kind: response.kind,
-			rtpParameters: response.rtpParameters,
-		});
-
-		consumers.set(consumer.id, consumer);
-
-		consumer.on("transportclose", () => {
-			console.log("Consumer transport closed");
-		});
-
-		consumer.on("close", () => {
-			consumers.delete(consumer.id);
-		});
-
-		return consumer;
-	} catch (error) {
-		console.error(
-			`❌ Error creating consumer without connection wait: ${error}`,
-		);
 		throw error;
 	}
 }

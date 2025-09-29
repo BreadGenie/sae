@@ -241,12 +241,12 @@ class MediasoupManager {
     // });
 
     // Log transport details
-    console.log(`📋 Transport created with details:`, {
-      id: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidatesLength: transport.iceCandidates.length,
-      dtlsParametersRole: transport.dtlsParameters.role
-    });
+    // console.log(`📋 Transport created with details:`, {
+    //   id: transport.id,
+    //   iceParameters: transport.iceParameters,
+    //   iceCandidatesLength: transport.iceCandidates.length,
+    //   dtlsParametersRole: transport.dtlsParameters.role
+    // });
 
     // Store transport
     const transportKey = `${direction}-${Date.now()}`;
@@ -491,16 +491,41 @@ class MediasoupManager {
     const { roomId, peerId, producer } = producerData;
     const isScreen = producer?.appData?.type === 'screen';
 
+    // Find and close any consumers that were consuming from this producer
+    const removedConsumers = [];
+    try {
+      for (const [cid, cdata] of this.consumers.entries()) {
+        const c = cdata.consumer;
+        try {
+          if (c && (c.producerId === producerId || c._producerId === producerId)) {
+            const targetPeerId = cdata.peerId;
+            try { c.close(); } catch (e) { /* ignore */ }
+            const r = this.rooms.get(cdata.roomId);
+            if (r) {
+              const peerObj = r.peers.get(targetPeerId);
+              if (peerObj) peerObj.consumers.delete(cid);
+            }
+            this.consumers.delete(cid);
+            removedConsumers.push({ consumerId: cid, peerId: targetPeerId, roomId: cdata.roomId });
+          }
+        } catch (e) {
+          console.warn('⚠️ Error while closing consumer', cid, e.message);
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Error while closing related consumers for producer', producerId, e.message);
+    }
+
     try { producer.close(); } catch (_) {}
     
-    // Clean up
+    // Clean up producer references
     const room = this.rooms.get(roomId);
     const peer = room?.peers?.get(peerId);
     if (peer) peer.producers.delete(producerId);
     this.producers.delete(producerId);
 
     console.log(`✅ Producer closed: ${producerId}${isScreen ? ' (screen)' : ''}`);
-    return { isScreen };
+    return { isScreen, removedConsumers };
   }
 
   async closeConsumer(consumerId) {

@@ -21,6 +21,7 @@ declare module "vue" {
 		FloatingControls: typeof import(
 			"./src/components/FloatingControls.vue",
 		)["default"];
+		GroupTile: typeof import("./src/components/GroupTile.vue")["default"];
 		JoinRequestNotifications: typeof import(
 			"./src/components/JoinRequestNotifications.vue",
 		)["default"];
@@ -38,9 +39,6 @@ declare module "vue" {
 		)["default"];
 		LucideMessageSquareOff: typeof import(
 			"~icons/lucide/message-square-off",
-		)["default"];
-		LucideMessagesSquare: typeof import(
-			"~icons/lucide/messages-square",
 		)["default"];
 		LucideMic: typeof import("~icons/lucide/mic")["default"];
 		LucideMicOff: typeof import("~icons/lucide/mic-off")["default"];
@@ -66,9 +64,19 @@ declare module "vue" {
 		MeetingPreview: typeof import(
 			"./src/components/MeetingPreview.vue",
 		)["default"];
+		ParticipantTile: typeof import(
+			"./src/components/ParticipantTile.vue",
+		)["default"];
 		RouterLink: typeof import("vue-router")["RouterLink"];
 		RouterView: typeof import("vue-router")["RouterView"];
+		ScreenShareLayout: typeof import(
+			"./src/components/ScreenShareLayout.vue",
+		)["default"];
+		ScreenShareSidebar: typeof import(
+			"./src/components/ScreenShareSidebar.vue",
+		)["default"];
 		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
+		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];
 		VideoPreview: typeof import("./src/components/VideoPreview.vue")["default"];
 	}
 }

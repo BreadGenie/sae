@@ -59,7 +59,7 @@ const props = defineProps({
 	open: { type: Boolean, default: false },
 	userId: { type: String, default: "" },
 	userName: { type: String, default: "" },
-	messages: { type: Array, default: () => [] },
+	messages: { type: [Array, Object], default: () => [] },
 });
 
 const emit = defineEmits(["close", "send"]);

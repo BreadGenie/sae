@@ -267,10 +267,10 @@ class SFUServer {
         try {
           const { producerId } = data;
           const result = await this.mediasoup.closeProducer(producerId);
-          
+
           if (callback) callback({ success: true, ...result });
-          
-          // Notify other peers
+
+          // Notify other peers about producer close
           const roomId = socket.meetingId;
           socket.to(roomId).emit('producer_closed', {
             roomId: roomId,
@@ -278,6 +278,21 @@ class SFUServer {
             producerId,
             isScreen: !!result?.isScreen
           });
+
+          try {
+            const removed = result?.removedConsumers || [];
+            for (const rc of removed) {
+              const targetPeerSocket = Array.from(this.io.sockets.sockets.values()).find(s => s.userId === rc.peerId && s.meetingId === rc.roomId);
+              if (targetPeerSocket) {
+                targetPeerSocket.emit('consumer_closed', { consumerId: rc.consumerId });
+              } else {
+                // if no peer found, just let everyone know
+                socket.to(roomId).emit('consumer_closed', { consumerId: rc.consumerId, peerId: rc.peerId });
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ Failed to emit consumer_closed notifications', e.message);
+          }
         } catch (error) {
           console.error('❌ Error closing producer:', error);
           if (callback) callback({ success: false, error: error.message });
@@ -351,9 +366,9 @@ class SFUServer {
 
       socket.on('webrtc_answer', (data) => {
         const { targetUser, signalData } = data;
-        const roomId = socket.meetingId;
+        const roomId = socket.roomId;
         socket.to(roomId).emit('webrtc_answer', {
-          fromUser: socket.userId,
+          fromUser: socket.participantId,
           targetUser,
           signalData
         });
@@ -361,9 +376,9 @@ class SFUServer {
 
       socket.on('ice_candidate', (data) => {
         const { targetUser, signalData } = data;
-        const roomId = socket.meetingId;
+        const roomId = socket.roomId;
         socket.to(roomId).emit('ice_candidate', {
-          fromUser: socket.userId,
+          fromUser: socket.participantId,
           targetUser,
           signalData
         });
@@ -372,16 +387,16 @@ class SFUServer {
       // Media control
       socket.on('media_control', async (data) => {
         const { action } = data;
-        const roomId = socket.meetingId;
+        const roomId = socket.roomId;
         // Apply on server: update flags + pause/resume local producers
         try {
-          await this.mediasoup.applyMediaControl(roomId, socket.userId, action);
+          await this.mediasoup.applyMediaControl(roomId, socket.participantId, action);
         } catch (e) {
           console.warn('⚠️ Failed to apply media control on server:', e.message);
         }
         // Notify other peers (exclude sender)
         socket.to(roomId).emit('media_control_update', {
-          participantId: socket.userId,
+          participantId: socket.participantId,
           action,
           timestamp: new Date().toISOString()
         });
@@ -390,17 +405,17 @@ class SFUServer {
       // Screen sharing
       socket.on('screen_share', (data) => {
         const { action, shareData } = data;
-        const roomId = socket.meetingId;
+        const roomId = socket.roomId;
         
         if (action === 'start_share') {
           socket.to(roomId).emit('screen_share_started', {
-            participantId: socket.userId,
+            participantId: socket.participantId,
             shareData,
             timestamp: new Date().toISOString()
           });
         } else if (action === 'stop_share') {
           socket.to(roomId).emit('screen_share_stopped', {
-            participantId: socket.userId,
+            participantId: socket.participantId,
             timestamp: new Date().toISOString()
           });
         }
@@ -408,7 +423,7 @@ class SFUServer {
 
       socket.on('chat:send', (data = {}) => {
         try {
-          const roomId = socket.meetingId;
+          const roomId = socket.roomId;
           const text = (typeof data.message === 'string' ? data.message : '')
             .slice(0, 2000);
             
@@ -419,7 +434,7 @@ class SFUServer {
           const payload = {
             roomId,
             message: text,
-            fromUser: socket.userId,
+            fromUser: socket.participantId,
             fromName: socket.userName,
             timestamp: new Date().toISOString(),
           };
@@ -432,15 +447,31 @@ class SFUServer {
       });
 
       socket.on('connect', async () => {
-        console.log(`🔌 Connected: ${socket.id} (User: ${socket.userId})`);
+        console.log(`🔌 Connected: ${socket.id} (User: ${socket.participantId})`);
       });
 
       // Disconnect handling
+      socket.on('leave_room', async (data = {}) => {
+        const roomId = socket.roomId || data.roomId;
+        const participantId = socket.participantId;
+        if (roomId && participantId) {
+          try {
+            await this.mediasoup.removePeer(roomId, participantId);
+            socket.to(roomId).emit('participant_left', { roomId, participantId });
+            socket.leave(roomId);
+            socket.roomId = null;
+            console.log(`🚪 ${participantId} left room ${roomId}`);
+          } catch (e) {
+            console.warn('⚠️ leave_room cleanup failed:', e?.message || e);
+          }
+        }
+      });
+
       socket.on('disconnect', async () => {
-        console.log(`🔌 Disconnected: ${socket.id} (User: ${socket.userId})`);
+        console.log(`🔌 Disconnected: ${socket.id} (User: ${socket.participantId})`);
         
-        const roomId = socket.meetingId;
-        const participantId = socket.userId;
+        const roomId = socket.roomId;
+        const participantId = socket.participantId;
         
         if (roomId && participantId) {
           try {

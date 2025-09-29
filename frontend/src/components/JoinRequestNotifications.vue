@@ -14,18 +14,18 @@
 							<img
 								v-if="request.user_image"
 								:src="request.user_image"
-								:alt="request.full_name"
+								:alt="request.user_name"
 								class="w-10 h-10 rounded-full object-cover"
 							/>
 							<span v-else class="text-sm font-medium text-blue-400">
-								{{ getInitials(request.full_name || request.user_id) }}
+								{{ getInitials(request.user_name || request.user_id) }}
 							</span>
 						</div>
 
 						<div class="flex-1 min-w-0">
 							<p class="text-sm text-gray-200">
 								<span class="font-semibold text-white">
-									{{ request.full_name || request.user_id }}
+									{{ request.user_name || request.user_id }}
 								</span>
 								wants to join the meeting
 							</p>
@@ -72,11 +72,11 @@ import { computed, ref, watch } from "vue";
 
 const props = defineProps({
 	waitingUsers: {
-		type: Array,
+		type: [Array, Object],
 		default: () => [],
 	},
 	loadingUsers: {
-		type: Array,
+		type: [Array, Object],
 		default: () => [],
 	},
 	maxVisible: {
@@ -89,8 +89,17 @@ defineEmits(["approve-user", "reject-user", "view-all-requests"]);
 
 const dismissedRequests = ref([]);
 
+const waitingUsers = computed(() => {
+	const users = props.waitingUsers?.value || props.waitingUsers;
+	return Array.isArray(users) ? users : [];
+});
+
+const loadingUsers = computed(() =>
+	Array.isArray(props.loadingUsers) ? props.loadingUsers : [],
+);
+
 const joinRequests = computed(() => {
-	return props.waitingUsers
+	return waitingUsers.value
 		.filter((user) => !dismissedRequests.value.includes(user.user_id))
 		.slice(-props.maxVisible)
 		.reverse();
@@ -115,16 +124,16 @@ function getInitials(name) {
 
 const previousWaitingUsers = ref([]);
 watch(
-	() => props.waitingUsers,
-	(newUsers, oldUsers) => {
-		if (oldUsers && newUsers.length < oldUsers.length) {
+	() => waitingUsers.value,
+	(newUsersArray, oldUsersArray) => {
+		if (oldUsersArray && newUsersArray.length < oldUsersArray.length) {
 			// Some users were removed, clear dismissed list
-			const currentUserIds = new Set(newUsers.map((u) => u.user_id));
+			const currentUserIds = new Set(newUsersArray.map((u) => u.user_id));
 			dismissedRequests.value = dismissedRequests.value.filter((id) =>
 				currentUserIds.has(id),
 			);
 		}
-		previousWaitingUsers.value = [...newUsers];
+		previousWaitingUsers.value = [...newUsersArray];
 	},
 	{ immediate: true },
 );

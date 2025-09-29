@@ -1,4 +1,3 @@
-// Direct SFU Client Manager - Connects directly to SFU without relay
 // Copyright (c) 2025, Frappe and contributors
 // For license information, please see license.txt
 
@@ -9,179 +8,136 @@ class SFUClient {
 	constructor() {
 		this.socket = null;
 		this.connected = false;
-		this.authToken = null;
-		this.meetingId = null;
-		this.userId = null;
-		this.sfuUrl = null;
-		this.sfuPort = null;
-		this.eventHandlers = {};
-
+		this.connectionDetails = {
+			authToken: null,
+			meetingId: null,
+			userId: null,
+			sfuUrl: null,
+			sfuPort: null,
+		};
+		this.eventHandlers = new Map();
 		this.setupDefaultHandlers();
 	}
 
-	setupDefaultHandlers() {
-		this.eventHandlers = {
-			connect: () => {
-				console.log("✅ Connected to SFU");
-				this.connected = true;
-			},
-			disconnect: () => {
-				console.log("🔌 Disconnected from SFU");
-				this.connected = false;
-			},
-			connect_error: (error) => {
-				console.error("❌ SFU connection error:", error);
-				this.connected = false;
-			},
-			participant_joined: (data) => {
-				console.log("👥 Participant joined:", data);
-			},
-			participant_left: (data) => {
-				console.log("👋 Participant left:", data);
-			},
-			producer_created: (data) => {
-				console.log("🎥 Producer created:", data);
-			},
-			producer_closed: (data) => {
-				console.log("❌ Producer closed:", data);
-			},
-			consumer_created: (data) => {
-				console.log("🎬 Consumer created:", data);
-			},
-			consumer_closed: (data) => {
-				console.log("❌ Consumer closed:", data);
-			},
-			media_control_update: (data) => {
-				console.log("🎛️ Media control update:", data);
-			},
-			screen_share_started: (data) => {
-				console.log("🖥️ Screen share started:", data);
-			},
-			screen_share_stopped: (data) => {
-				console.log("🖥️ Screen share stopped:", data);
-			},
-			webrtc_offer: (data) => {
-				console.log("📡 WebRTC offer received:", data);
-			},
-			webrtc_answer: (data) => {
-				console.log("📡 WebRTC answer received:", data);
-			},
-			ice_candidate: (data) => {
-				console.log("🧊 ICE candidate received:", data);
-			},
-			"chat:message": (data) => {
-				console.log("💬 Chat message:", data);
-			},
-		};
-	}
+	// ==================== CONNECTION MANAGEMENT ====================
 
 	async connect(meetingId) {
 		try {
-			// Get SFU connection details from Frappe server
-			const response = await frappeRequest({
-				url: "sae.api.meeting.get_sfu_connection_details",
-				params: { meeting_id: meetingId },
-			});
+			const connectionDetails = await this.getConnectionDetails(meetingId);
+			this.connectionDetails = connectionDetails;
 
-			if (!response.success) {
-				throw new Error(
-					response.error || "Failed to get SFU connection details",
-				);
-			}
+			await this.validateSFUHealth();
 
-			const { sfu_url, sfu_port, auth_token, user_id, meeting_id, user_data } =
-				response;
+			await this.establishSocketConnection();
 
-			this.authToken = auth_token;
-			this.meetingId = meeting_id;
-			this.userId = user_id;
-			this.sfuUrl = sfu_url;
-			this.sfuPort = sfu_port;
-
-			let sfuEndpoint;
-			const urlObj = new URL(sfu_url);
-			const isSecured = urlObj.protocol === "https:";
-			if (isSecured) {
-				sfuEndpoint = urlObj.origin;
-			} else {
-				sfuEndpoint = `${urlObj.protocol}//${urlObj.hostname}:${sfu_port}`;
-			}
-
-			try {
-				const healthResponse = await fetch(`${sfuEndpoint}/health`);
-				if (!healthResponse.ok) {
-					console.warn(
-						"⚠️ SFU health check failed, but attempting connection anyway",
-					);
-				}
-			} catch (fetchError) {
-				console.warn(
-					"⚠️ SFU health check failed:",
-					fetchError.message,
-					"- attempting socket connection anyway",
-				);
-			}
-
-			this.socket = io(sfuEndpoint, {
-				auth: {
-					token: auth_token,
-				},
-				reconnection: true,
-				reconnectionAttempts: 5,
-				reconnectionDelay: 1000,
-				// Add transport configuration to handle XHR poll errors
-				transports: ["websocket", "polling"],
-				upgrade: true,
-				// Add timeout configurations
-				timeout: 20000,
-				forceNew: true,
-				// Add additional CORS handling
-				withCredentials: false,
-			});
-
-			// Register event handlers
-			for (const [event, handler] of Object.entries(this.eventHandlers)) {
-				this.socket.on(event, handler);
-			}
-
-			// Wait for connection
-			return new Promise((resolve, reject) => {
-				// Add more detailed error handling
-				this.socket.on("connect", () => {
-					this.connected = true;
-					resolve();
-				});
-
-				this.socket.on("connect_error", (error) => {
-					console.error("❌ Failed to connect to SFU:", error);
-					console.error("❌ SFU endpoint:", sfuEndpoint);
-					console.error("❌ Error details:", {
-						message: error.message,
-						description: error.description,
-						context: error.context,
-						type: error.type,
-					});
-					this.connected = false;
-					reject(new Error(`SFU connection failed: ${error.message || error}`));
-				});
-
-				this.socket.on("disconnect", (reason) => {
-					console.log("🔌 Disconnected from SFU:", reason);
-					this.connected = false;
-				});
-
-				// Set timeout
-				setTimeout(() => {
-					if (!this.connected) {
-						console.error("❌ SFU connection timeout after 10 seconds");
-						reject(new Error("SFU connection timeout"));
-					}
-				}, 10000);
-			});
+			return true;
 		} catch (error) {
-			console.error("❌ Error connecting to SFU:", error);
+			console.error("❌ SFU connection failed:", error);
 			throw error;
 		}
+	}
+
+	async getConnectionDetails(meetingId) {
+		const response = await frappeRequest({
+			url: "sae.api.meeting.get_sfu_connection_details",
+			params: { meeting_id: meetingId },
+		});
+
+		if (!response.success) {
+			throw new Error(response.error || "Failed to get SFU connection details");
+		}
+
+		const { sfu_url, sfu_port, auth_token, user_id, meeting_id, user_data } =
+			response;
+
+		return {
+			authToken: auth_token,
+			meetingId: meeting_id,
+			userId: user_id,
+			sfuUrl: sfu_url,
+			sfuPort: sfu_port,
+			userData: user_data,
+		};
+	}
+
+	async validateSFUHealth() {
+		const { sfuUrl, sfuPort } = this.connectionDetails;
+
+		let sfuEndpoint;
+		const urlObj = new URL(sfuUrl);
+		const isSecured = urlObj.protocol === "https:";
+
+		if (isSecured) {
+			sfuEndpoint = urlObj.origin;
+		} else {
+			sfuEndpoint = `${urlObj.protocol}//${urlObj.hostname}:${sfuPort}`;
+		}
+
+		try {
+			const healthResponse = await fetch(`${sfuEndpoint}/health`);
+			if (!healthResponse.ok) {
+				console.warn(
+					"⚠️ SFU health check failed, but attempting connection anyway",
+				);
+			}
+		} catch (fetchError) {
+			console.warn(
+				"⚠️ SFU health check failed:",
+				fetchError.message,
+				"- attempting socket connection anyway",
+			);
+		}
+
+		return sfuEndpoint;
+	}
+
+	async establishSocketConnection() {
+		const sfuEndpoint = await this.validateSFUHealth();
+		const { authToken } = this.connectionDetails;
+
+		this.socket = io(sfuEndpoint, {
+			auth: { token: authToken },
+			reconnection: true,
+			reconnectionAttempts: 5,
+			reconnectionDelay: 1000,
+			transports: ["websocket", "polling"],
+			upgrade: true,
+			timeout: 20000,
+			forceNew: true,
+			withCredentials: false,
+		});
+
+		this.registerEventHandlers();
+
+		return new Promise((resolve, reject) => {
+			this.socket.on("connect", () => {
+				this.connected = true;
+				resolve();
+			});
+
+			this.socket.on("connect_error", (error) => {
+				console.error("❌ Socket connection failed:", {
+					message: error.message,
+					description: error.description,
+					context: error.context,
+					type: error.type,
+					endpoint: sfuEndpoint,
+				});
+				this.connected = false;
+				reject(new Error(`SFU connection failed: ${error.message || error}`));
+			});
+
+			this.socket.on("disconnect", (reason) => {
+				this.connected = false;
+			});
+
+			setTimeout(() => {
+				if (!this.connected) {
+					console.error("❌ SFU connection timeout after 10 seconds");
+					reject(new Error("SFU connection timeout"));
+				}
+			}, 10000);
+		});
 	}
 
 	disconnect() {
@@ -190,279 +146,246 @@ class SFUClient {
 			this.socket = null;
 		}
 		this.connected = false;
-		this.authToken = null;
-		this.meetingId = null;
-		this.userId = null;
+		this.connectionDetails = {
+			authToken: null,
+			meetingId: null,
+			userId: null,
+			sfuUrl: null,
+			sfuPort: null,
+		};
 	}
 
-	// WebRTC operations - direct to SFU
-	async getRouterRtpCapabilities() {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
+	// ==================== EVENT HANDLING ====================
 
-			this.socket.emit("get_router_rtp_capabilities", {}, (response) => {
-				if (response.success) {
-					resolve(response.rtpCapabilities);
-				} else {
-					reject(new Error(response.error));
-				}
-			});
-		});
-	}
+	setupDefaultHandlers() {
+		const defaultHandlers = {
+			connect: () => {
+				this.connected = true;
+			},
+			disconnect: () => {
+				this.connected = false;
+			},
+			connect_error: (error) => {
+				console.error("❌ SFU connection error:", error);
+				this.connected = false;
+			},
+			participant_joined: () => {},
+			participant_left: () => {},
+			producer_created: () => {},
+			producer_closed: () => {},
+			consumer_created: () => {},
+			consumer_closed: () => {},
+			media_control_update: () => {},
+			screen_share_started: () => {},
+			screen_share_stopped: () => {},
+			webrtc_offer: () => {},
+			webrtc_answer: () => {},
+			ice_candidate: () => {},
+			"chat:message": () => {},
+		};
 
-	async createWebRtcTransport(direction) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			this.socket.emit("create_webrtc_transport", { direction }, (response) => {
-				if (response.success) {
-					const { id, iceParameters, iceCandidates, dtlsParameters } = response;
-					resolve({ id, iceParameters, iceCandidates, dtlsParameters });
-				} else {
-					console.error(`❌ SFU transport creation failed: ${response.error}`);
-					reject(new Error(response.error || "Failed to create transport"));
-				}
-			});
-		});
-	}
-
-	async connectWebRtcTransport(transportId, dtlsParameters) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			console.log(`🔗 Connecting transport ${transportId} to SFU...`);
-			console.log(`📋 DTLS Parameters: ${JSON.stringify(dtlsParameters)}`);
-
-			this.socket.emit(
-				"connect_webrtc_transport",
-				{
-					transportId,
-					dtlsParameters,
-				},
-				(response) => {
-					console.log(
-						`📡 SFU transport connection response: ${JSON.stringify(response)}s`,
-					);
-
-					if (response.success) {
-						console.log(`✅ Transport ${transportId} connected successfully`);
-						resolve();
-					} else {
-						console.error(
-							`❌ SFU transport connection failed: ${response.error}`,
-						);
-						reject(new Error(response.error || "Failed to connect transport"));
-					}
-				},
-			);
-		});
-	}
-
-	async createProducer(transportId, rtpParameters, kind, appData = {}) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			this.socket.emit(
-				"create_producer",
-				{
-					transportId,
-					rtpParameters,
-					kind,
-					appData,
-				},
-				(response) => {
-					if (response.success) {
-						resolve(response);
-					} else {
-						reject(new Error(response.error));
-					}
-				},
-			);
-		});
-	}
-
-	async createConsumer(transportId, producerId, rtpCapabilities) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			this.socket.emit(
-				"create_consumer",
-				{
-					transportId,
-					producerId,
-					rtpCapabilities,
-				},
-				(response) => {
-					console.log(`📡 SFU create_consumer response: ${response}`);
-					if (response.success) {
-						resolve(response);
-					} else {
-						reject(new Error(response.error));
-					}
-				},
-			);
-		});
-	}
-
-	async getExistingProducers(roomId = null) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			const requestData = roomId ? { roomId } : {};
-			this.socket.emit("get_existing_producers", requestData, (response) => {
-				if (response.success) {
-					resolve(response.producers);
-				} else {
-					reject(new Error(response.error));
-				}
-			});
-		});
-	}
-
-	async getRoomParticipants() {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			this.socket.emit("get_room_participants", {}, (response) => {
-				if (response.success) {
-					resolve(response.participants);
-				} else {
-					reject(new Error(response.error));
-				}
-			});
-		});
-	}
-
-	async closeProducer(producerId) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			this.socket.emit("close_producer", { producerId }, (response) => {
-				if (response.success) {
-					resolve();
-				} else {
-					reject(new Error(response.error));
-				}
-			});
-		});
-	}
-
-	async closeConsumer(consumerId) {
-		return new Promise((resolve, reject) => {
-			if (!this.connected) {
-				reject(new Error("Not connected to SFU"));
-				return;
-			}
-
-			this.socket.emit("close_consumer", { consumerId }, (response) => {
-				if (response.success) {
-					resolve();
-				} else {
-					reject(new Error(response.error));
-				}
-			});
-		});
-	}
-
-	// WebRTC signaling
-	sendWebRtcOffer(targetUser, signalData) {
-		if (!this.connected) {
-			throw new Error("Not connected to SFU");
+		for (const [event, handler] of Object.entries(defaultHandlers)) {
+			this.eventHandlers.set(event, handler);
 		}
-		this.socket.emit("webrtc_offer", { targetUser, signalData });
 	}
 
-	sendWebRtcAnswer(targetUser, signalData) {
-		if (!this.connected) {
-			throw new Error("Not connected to SFU");
+	registerEventHandlers() {
+		if (!this.socket) return;
+
+		for (const [event, handler] of this.eventHandlers.entries()) {
+			this.socket.on(event, handler);
 		}
-		this.socket.emit("webrtc_answer", { targetUser, signalData });
 	}
 
-	sendIceCandidate(targetUser, signalData) {
-		if (!this.connected) {
-			throw new Error("Not connected to SFU");
-		}
-		this.socket.emit("ice_candidate", { targetUser, signalData });
-	}
-
-	// Media control
-	sendMediaControl(action) {
-		if (!this.connected) {
-			throw new Error("Not connected to SFU");
-		}
-		this.socket.emit("media_control", { action });
-	}
-
-	sendChatMessage(message, options = {}) {
-		if (!this.connected) throw new Error("Not connected to SFU");
-		const payload = { message: String(message || "") };
-		if (options.clientId) payload.clientId = String(options.clientId);
-		this.socket.emit("chat:send", payload);
-	}
-
-	// Screen sharing
-	sendScreenShare(action, shareData = {}) {
-		if (!this.connected) {
-			throw new Error("Not connected to SFU");
-		}
-		this.socket.emit("screen_share", { action, shareData });
-	}
-
-	// Event handler management
 	on(event, handler) {
-		this.eventHandlers[event] = handler;
+		this.eventHandlers.set(event, handler);
 		if (this.socket) {
 			this.socket.on(event, handler);
 		}
 	}
 
 	off(event) {
-		delete this.eventHandlers[event];
-		if (this.socket) {
-			this.socket.off(event);
+		const handler = this.eventHandlers.get(event);
+		if (handler && this.socket) {
+			this.socket.off(event, handler);
+		}
+		this.eventHandlers.delete(event);
+	}
+
+	// ==================== WEBRTC OPERATIONS ====================
+
+	async getRouterRtpCapabilities() {
+		const resp = await this.sendRequest("get_router_rtp_capabilities", {});
+		try {
+			const payload = resp?.rtpCapabilities || resp;
+			return JSON.parse(JSON.stringify(payload));
+		} catch (err) {
+			console.warn("Failed to deep-clone router RTP capabilities:", err);
+			return resp?.rtpCapabilities || resp;
 		}
 	}
 
-	// Utility methods
+	async createWebRtcTransport(direction) {
+		const response = await this.sendRequest("create_webrtc_transport", {
+			direction,
+		});
+		try {
+			const clean = JSON.parse(JSON.stringify(response));
+			const { id, iceParameters, iceCandidates, dtlsParameters } = clean;
+			return { id, iceParameters, iceCandidates, dtlsParameters };
+		} catch (err) {
+			console.warn(
+				"Failed to deep-clone transport response, returning raw response",
+				err,
+			);
+			const { id, iceParameters, iceCandidates, dtlsParameters } = response;
+			return { id, iceParameters, iceCandidates, dtlsParameters };
+		}
+	}
+
+	async connectWebRtcTransport(transportId, dtlsParameters) {
+		console.log(`🔗 Connecting transport ${transportId} to SFU...`);
+		console.log("📋 DTLS Parameters:", dtlsParameters);
+
+		await this.sendRequest("connect_webrtc_transport", {
+			transportId,
+			dtlsParameters,
+		});
+
+		console.log(`✅ Transport ${transportId} connected successfully`);
+	}
+
+	async createProducer(transportId, rtpParameters, kind, appData = {}) {
+		return this.sendRequest("create_producer", {
+			transportId,
+			rtpParameters,
+			kind,
+			appData,
+		});
+	}
+
+	async createConsumer(transportId, producerId, rtpCapabilities) {
+		console.log(
+			`📡 Creating consumer for producer ${producerId} @ ${Date.now()}`,
+		);
+		const resp = await this.sendRequest("create_consumer", {
+			transportId,
+			producerId,
+			rtpCapabilities,
+		});
+	}
+
+	async closeProducer(producerId) {
+		return this.sendRequest("close_producer", { producerId });
+	}
+
+	async closeConsumer(consumerId) {
+		return this.sendRequest("close_consumer", { consumerId });
+	}
+
+	// ==================== ROOM OPERATIONS ====================
+
+	async getExistingProducers(roomId = null) {
+		const requestData = roomId ? { roomId } : {};
+		const response = await this.sendRequest(
+			"get_existing_producers",
+			requestData,
+		);
+		return response.producers;
+	}
+
+	async getRoomParticipants() {
+		const response = await this.sendRequest("get_room_participants", {});
+		return response.participants;
+	}
+
+	// ==================== SIGNALING OPERATIONS ====================
+
+	sendWebRtcOffer(targetUser, signalData) {
+		this.sendEvent("webrtc_offer", { targetUser, signalData });
+	}
+
+	sendWebRtcAnswer(targetUser, signalData) {
+		this.sendEvent("webrtc_answer", { targetUser, signalData });
+	}
+
+	sendIceCandidate(targetUser, signalData) {
+		this.sendEvent("ice_candidate", { targetUser, signalData });
+	}
+
+	// ==================== MEDIA CONTROL ====================
+
+	sendMediaControl(action) {
+		this.sendEvent("media_control", { action });
+	}
+
+	sendScreenShare(action, shareData = {}) {
+		this.sendEvent("screen_share", { action, shareData });
+	}
+
+	// ==================== CHAT OPERATIONS ====================
+
+	sendChatMessage(message, options = {}) {
+		if (!this.connected) {
+			throw new Error("Not connected to SFU");
+		}
+
+		const payload = { message: String(message || "") };
+		if (options.clientId) {
+			payload.clientId = String(options.clientId);
+		}
+
+		this.sendEvent("chat:send", payload);
+	}
+
+	async sendRequest(event, data) {
+		return new Promise((resolve, reject) => {
+			if (!this.connected) {
+				reject(new Error("Not connected to SFU"));
+				return;
+			}
+
+			this.socket.emit(event, data, (response) => {
+				if (response.success) {
+					resolve(response);
+				} else {
+					const error = new Error(response.error || `Request failed: ${event}`);
+					console.error(`❌ SFU request failed (${event}):`, response.error);
+					reject(error);
+				}
+			});
+		});
+	}
+
+	sendEvent(event, data) {
+		if (!this.connected) {
+			throw new Error("Not connected to SFU");
+		}
+		this.socket.emit(event, data);
+	}
+
 	isConnected() {
 		return this.connected;
 	}
 
 	getMeetingId() {
-		return this.meetingId;
+		return this.connectionDetails.meetingId;
 	}
 
 	getUserId() {
-		return this.userId;
+		return this.connectionDetails.userId;
+	}
+
+	getConnectionStatus() {
+		return {
+			connected: this.connected,
+			meetingId: this.connectionDetails.meetingId,
+			userId: this.connectionDetails.userId,
+			socketId: this.socket?.id || null,
+		};
 	}
 }
 
-// Export singleton instance
 let sfuClient = null;
 
 export function getSFUClient() {
