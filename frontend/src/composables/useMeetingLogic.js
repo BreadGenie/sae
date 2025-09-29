@@ -149,10 +149,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 				// Turning mic OFF
 				if (stream) {
 					const at = stream.getAudioTracks()[0];
-					if (at) {
-						at.stop();
-						stream.removeTrack(at);
-					}
+					if (at) at.enabled = false;
 				}
 				if (mh?.audioProducer) {
 					try {
@@ -263,10 +260,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 				// Turning camera OFF
 				if (stream) {
 					const vt = stream.getVideoTracks()[0];
-					if (vt) {
-						vt.stop();
-						stream.removeTrack(vt);
-					}
+					if (vt) vt.enabled = false;
 				}
 				if (mh?.videoProducer) {
 					try {
