@@ -121,8 +121,6 @@ export class MediaStreamHandler {
 		this.videoProducer = null;
 		this.audioProducer = null;
 		this.screenProducer = null;
-
-		console.log("🧹 Media streams cleaned up");
 	}
 
 	getMediaState() {

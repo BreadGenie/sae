@@ -998,8 +998,6 @@ export function useMeetingLogic(meetingState, meetingId) {
 				track.stop();
 			}
 		}
-
-		console.log("🧹 Meeting logic cleaned up");
 	});
 
 	return {

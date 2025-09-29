@@ -717,8 +717,6 @@ export class SFUMeetingManager {
 		this.eventHandlers = {};
 		this.isConnected = false;
 		this.isSetupComplete = false;
-
-		console.log("🧹 SFU Meeting Manager cleaned up");
 	}
 
 	/**

@@ -193,9 +193,6 @@ export class ConsumerManager {
 			}
 		}
 
-		console.log(
-			`🧹 Cleaned up ${removedConsumers.length} consumers for ${participantId}`,
-		);
 		return removedConsumers;
 	}
 
@@ -245,7 +242,5 @@ export class ConsumerManager {
 		if (this.eventHandlers.onAllConsumersCleared) {
 			this.eventHandlers.onAllConsumersCleared(consumerIds);
 		}
-
-		console.log("🧹 All consumers cleared");
 	}
 }
