@@ -118,9 +118,9 @@ class MediasoupManager {
     const normalizedInfo = {
       ...peerInfo,
       audio_enabled:
-        typeof peerInfo.audio_enabled === 'boolean' ? peerInfo.audio_enabled : true,
+        typeof peerInfo.audio_enabled === 'boolean' ? peerInfo.audio_enabled : false,
       video_enabled:
-        typeof peerInfo.video_enabled === 'boolean' ? peerInfo.video_enabled : true,
+        typeof peerInfo.video_enabled === 'boolean' ? peerInfo.video_enabled : false,
       avatar: peerInfo.avatar
     };
 
@@ -655,39 +655,18 @@ class MediasoupManager {
       peer.info[k] = v;
     };
 
-    const toggleProducers = async (kind, shouldPause, { excludeScreens = false } = {}) => {
-      for (const producer of peer.producers.values()) {
-        if (producer.kind !== kind) continue;
-        if (excludeScreens && producer.appData?.type === 'screen') continue;
-        try {
-          if (shouldPause && !producer.paused) {
-            await producer.pause();
-          } else if (!shouldPause && producer.paused) {
-            await producer.resume();
-          }
-        } catch (e) {
-          console.warn(`⚠️ Failed to ${shouldPause ? 'pause' : 'resume'} ${kind} producer ${producer.id}: ${e.message}`);
-        }
-      }
-    };
-
     switch (action) {
       case 'mute':
         setFlag('audio_enabled', false);
-        await toggleProducers('audio', true);
         break;
       case 'unmute':
         setFlag('audio_enabled', true);
-        await toggleProducers('audio', false);
         break;
       case 'video_off':
         setFlag('video_enabled', false);
-        // Pause only camera video, keep screen share alive
-        await toggleProducers('video', true, { excludeScreens: true });
         break;
       case 'video_on':
         setFlag('video_enabled', true);
-        await toggleProducers('video', false, { excludeScreens: true });
         break;
       default:
         break;

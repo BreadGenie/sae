@@ -27,8 +27,8 @@ export class ParticipantManager {
 					participantData.user_name ||
 					participantData.participantId,
 			),
-			audio_enabled: participantData.audio_enabled !== false, // Default to true unless explicitly false
-			video_enabled: participantData.video_enabled !== false, // Default to true unless explicitly false
+			audio_enabled: participantData.audio_enabled === true,
+			video_enabled: participantData.video_enabled === true,
 			...participantData,
 		};
 

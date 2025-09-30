@@ -119,42 +119,89 @@ export function useMeetingLogic(meetingState, meetingId) {
 							return;
 						}
 					} else {
-						// Ensure existing track is enabled
+						// Ensure existing track is enabled, or get new if stopped
 						const at = stream.getAudioTracks()[0];
-						at.enabled = true;
+						if (at.readyState === "ended") {
+							// Track was stopped, get a new one
+							try {
+								const audioOnly = await navigator.mediaDevices.getUserMedia({
+									audio: true,
+									video: false,
+								});
+								const newTrack = audioOnly.getAudioTracks()[0];
+								if (newTrack) {
+									stream.removeTrack(at);
+									stream.addTrack(newTrack);
+								}
+							} catch (err) {
+								console.error("❌ Failed to replace audio track:", err);
+								toast.error("Could not enable microphone");
+								return;
+							}
+						} else {
+							at.enabled = true;
+						}
 					}
 				}
 
 				// Publish or resume audio producer
 				const track = stream.getAudioTracks()[0];
 				if (mh?.audioProducer) {
-					try {
-						mh.audioProducer.resume?.();
-					} catch (_) {}
-				} else if (track && sfuManager.value?.transportManager) {
-					try {
+					if (meetingState.isScreenSharing.value) {
+						try {
+							const currentTrack = mh.audioProducer.track;
+							if (currentTrack && currentTrack.readyState === "ended") {
+								await mh.audioProducer.replaceTrack({ track });
+							} else {
+								mh.audioProducer.resume?.();
+								if (track) track.enabled = true;
+							}
+						} catch (_) {}
+					} else {
 						const producer =
 							await sfuManager.value.transportManager.createProducer(track, {
 								type: "microphone",
 							});
 						mh?.setProducers({ audioProducer: producer });
-					} catch (err) {
-						console.warn(
-							"⚠️ Failed to publish microphone track:",
-							err?.message || err,
-						);
 					}
+				} else if (track && sfuManager.value?.transportManager) {
+					const producer =
+						await sfuManager.value.transportManager.createProducer(track, {
+							type: "microphone",
+						});
+					mh?.setProducers({ audioProducer: producer });
 				}
 			} else {
 				// Turning mic OFF
 				if (stream) {
 					const at = stream.getAudioTracks()[0];
-					if (at) at.enabled = false;
+					if (at) {
+						if (meetingState.isScreenSharing.value) {
+							// Keep track alive for resuming, else user can't unmute after screen share
+							at.enabled = false;
+						} else {
+							at.stop();
+							stream.removeTrack(at);
+						}
+					}
 				}
 				if (mh?.audioProducer) {
-					try {
-						mh.audioProducer.pause?.();
-					} catch (_) {}
+					if (meetingState.isScreenSharing.value) {
+						try {
+							mh.audioProducer.pause?.();
+						} catch (_) {}
+					} else {
+						try {
+							mh.audioProducer.close?.();
+
+							const sfuClient = getSFUClient();
+							if (sfuClient.isConnected()) {
+								sfuClient.closeProducer(mh.audioProducer.id).catch(() => {});
+							}
+						} catch (_) {}
+
+						mh.audioProducer = null;
+					}
 				}
 			}
 
@@ -222,14 +269,33 @@ export function useMeetingLogic(meetingState, meetingId) {
 							return;
 						}
 					} else {
-						// Ensure existing track is enabled
+						// Ensure existing track is enabled, or get new if stopped
 						const vt = stream.getVideoTracks()[0];
-						vt.enabled = true;
+						if (vt.readyState === "ended") {
+							// Track was stopped, get a new one
+							try {
+								const videoOnly = await navigator.mediaDevices.getUserMedia({
+									video: true,
+									audio: false,
+								});
+								const newTrack = videoOnly.getVideoTracks()[0];
+								if (newTrack) {
+									stream.removeTrack(vt);
+									stream.addTrack(newTrack);
+								}
+							} catch (err) {
+								console.error("❌ Failed to replace video track:", err);
+								toast.error("Could not enable camera");
+								return;
+							}
+						} else {
+							vt.enabled = true;
+						}
 					}
 				}
 
-				// Attach/refresh local video element
-				if (localVideo.value && stream) {
+				// Attach/refresh local video element (only if not screen sharing)
+				if (localVideo.value && stream && !meetingState.isScreenSharing.value) {
 					localVideo.value.srcObject = stream;
 					try {
 						await localVideo.value.play();
@@ -239,33 +305,61 @@ export function useMeetingLogic(meetingState, meetingId) {
 				// Publish or resume producer
 				const track = stream.getVideoTracks()[0];
 				if (mh?.videoProducer) {
-					try {
-						mh.videoProducer.resume?.();
-					} catch (_) {}
-				} else if (track && sfuManager.value?.transportManager) {
-					try {
+					if (meetingState.isScreenSharing.value) {
+						try {
+							const currentTrack = mh.videoProducer.track;
+							if (currentTrack && currentTrack.readyState === "ended") {
+								await mh.videoProducer.replaceTrack({ track });
+							} else {
+								mh.videoProducer.resume?.();
+								if (track) track.enabled = true;
+							}
+						} catch (_) {}
+					} else {
 						const producer =
 							await sfuManager.value.transportManager.createProducer(track, {
 								type: "camera",
 							});
 						mh?.setProducers({ videoProducer: producer });
-					} catch (err) {
-						console.warn(
-							"⚠️ Failed to publish camera track:",
-							err?.message || err,
-						);
 					}
+				} else if (track && sfuManager.value?.transportManager) {
+					const producer =
+						await sfuManager.value.transportManager.createProducer(track, {
+							type: "camera",
+						});
+					mh?.setProducers({ videoProducer: producer });
 				}
 			} else {
 				// Turning camera OFF
 				if (stream) {
 					const vt = stream.getVideoTracks()[0];
-					if (vt) vt.enabled = false;
+					if (vt) {
+						if (meetingState.isScreenSharing.value) {
+							// Keep track alive for resuming, else user can't re-enable after screen share
+							vt.enabled = false;
+						} else {
+							vt.stop();
+							stream.removeTrack(vt);
+						}
+					}
 				}
 				if (mh?.videoProducer) {
-					try {
-						mh.videoProducer.pause?.();
-					} catch (_) {}
+					if (meetingState.isScreenSharing.value) {
+						try {
+							mh.videoProducer.pause?.();
+						} catch (_) {}
+					} else {
+						try {
+							mh.videoProducer.close?.();
+
+							const sfuClient = getSFUClient();
+							if (sfuClient.isConnected()) {
+								sfuClient.closeProducer(mh.videoProducer.id).catch(() => {});
+							}
+						} catch (_) {}
+
+						mh.videoProducer = null;
+					}
 				}
 			}
 
@@ -361,30 +455,6 @@ export function useMeetingLogic(meetingState, meetingId) {
 				meetingState.isScreenSharing.value = true;
 				meetingState.localScreenShareStartedAt.value = Date.now();
 
-				// Diagnostics: log mic/audio producer and localStream state BEFORE publishing screen share
-				try {
-					const mhDiag = sfuManager.value?.mediaHandler;
-					console.log("🎯 [diag] Before publishScreenShare - audioProducer:", {
-						id: mhDiag?.audioProducer?.id,
-						paused: !!mhDiag?.audioProducer?.paused,
-					});
-					console.log(
-						"🎯 [diag] Before publishScreenShare - localStream audio tracks:",
-						meetingState.localStream.value?.getAudioTracks
-							? meetingState.localStream.value.getAudioTracks().map((t) => ({
-									id: t.id,
-									readyState: t.readyState,
-									enabled: t.enabled,
-								}))
-							: null,
-					);
-				} catch (e) {
-					console.warn(
-						"⚠️ [diag] failed to collect pre-publish audio diagnostics",
-						e,
-					);
-				}
-
 				// Publish via mediasoup
 				try {
 					const producer = await publishScreenShare(meetingId, screenStream);
@@ -396,30 +466,6 @@ export function useMeetingLogic(meetingState, meetingId) {
 							});
 						}
 					} catch (_) {}
-
-					// Diagnostics: log mic/audio producer and localStream state AFTER publishing screen share
-					try {
-						const mhDiag2 = sfuManager.value?.mediaHandler;
-						console.log("🎯 [diag] After publishScreenShare - audioProducer:", {
-							id: mhDiag2?.audioProducer?.id,
-							paused: !!mhDiag2?.audioProducer?.paused,
-						});
-						console.log(
-							"🎯 [diag] After publishScreenShare - localStream audio tracks:",
-							meetingState.localStream.value?.getAudioTracks
-								? meetingState.localStream.value.getAudioTracks().map((t) => ({
-										id: t.id,
-										readyState: t.readyState,
-										enabled: t.enabled,
-									}))
-								: null,
-						);
-					} catch (e) {
-						console.warn(
-							"⚠️ [diag] failed to collect post-publish audio diagnostics",
-							e,
-						);
-					}
 
 					// Ensure audio producer remains active/independent of screen producer
 					try {

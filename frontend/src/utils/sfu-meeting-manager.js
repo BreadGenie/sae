@@ -508,6 +508,7 @@ export class SFUMeetingManager {
 			try {
 				const pid = data?.participantId;
 				const closedProducerId = data?.producerId;
+				const closedIsScreen = data?.isScreen;
 				if (pid) {
 					const allForPid = this.consumerManager.getConsumersByParticipant(pid);
 					for (const c of allForPid) {
@@ -520,7 +521,10 @@ export class SFUMeetingManager {
 							c.isScreen ||
 							c.appData?.type === "screen" ||
 							c.consumer?.appData?.type === "screen";
-						if (producedMatch || isScreenLike) {
+						// Only remove screen consumers if the closed producer was also screen
+						const shouldRemove =
+							producedMatch || (isScreenLike && closedIsScreen);
+						if (shouldRemove) {
 							this.consumerManager.removeConsumer(c.id);
 							try {
 								this.processedConsumers.delete(c.id);
