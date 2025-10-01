@@ -107,16 +107,26 @@ const micSelectOptions = computed(() =>
 
 // Watch for device changes like plug/unplug or bluetooth connect
 watch(selectedCameraIdLocal, (newDeviceId) => {
-	if (newDeviceId !== selectedCameraId.value) {
-		setSelectedCameraId(newDeviceId);
-		emit("device-changed", { type: "camera", deviceId: newDeviceId });
+	// Handle both string and object formats from autocomplete :/
+	const deviceId =
+		typeof newDeviceId === "object" ? newDeviceId?.value : newDeviceId;
+
+	if (deviceId && deviceId !== selectedCameraId.value) {
+		setSelectedCameraId(deviceId);
+		emit("device-changed", { type: "camera", deviceId });
+		console.log("📹 Camera changed to:", deviceId);
 	}
 });
 
 watch(selectedMicIdLocal, (newDeviceId) => {
-	if (newDeviceId !== selectedMicId.value) {
-		setSelectedMicId(newDeviceId);
-		emit("device-changed", { type: "microphone", deviceId: newDeviceId });
+	// Handle both string and object formats from autocomplete
+	const deviceId =
+		typeof newDeviceId === "object" ? newDeviceId?.value : newDeviceId;
+
+	if (deviceId && deviceId !== selectedMicId.value) {
+		setSelectedMicId(deviceId);
+		emit("device-changed", { type: "microphone", deviceId });
+		console.log("🎤 Microphone changed to:", deviceId);
 	}
 });
 

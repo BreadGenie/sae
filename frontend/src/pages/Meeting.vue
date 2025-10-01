@@ -229,12 +229,18 @@ const handleNotificationClick = () => {
 };
 
 const handleDeviceChanged = async (event) => {
-	// If we're in an active meeting with media enabled, update the stream and producers
-	if (
-		(meetingState.isCameraOn.value || meetingState.isMicOn.value) &&
-		sfuManager.value?.mediaHandler
-	) {
+	console.log("🔄 Device changed:", event);
+
+	if (meetingState.isCameraOn.value || meetingState.isMicOn.value) {
 		try {
+			// Stop old tracks else we won't release the camera/mic
+			const oldStream = meetingState.localStream.value;
+			if (oldStream) {
+				for (const track of oldStream.getTracks()) {
+					track.stop();
+				}
+			}
+
 			const constraints = {};
 
 			if (meetingState.isCameraOn.value) {
@@ -266,20 +272,22 @@ const handleDeviceChanged = async (event) => {
 			const newStream = await navigator.mediaDevices.getUserMedia(constraints);
 			meetingState.localStream.value = newStream;
 
-			const mh = sfuManager.value.mediaHandler;
-
-			if (mh.audioProducer && newStream.getAudioTracks().length > 0) {
-				const audioTrack = newStream.getAudioTracks()[0];
-				await mh.audioProducer.replaceTrack({ track: audioTrack });
-			}
-
-			if (mh.videoProducer && newStream.getVideoTracks().length > 0) {
-				const videoTrack = newStream.getVideoTracks()[0];
-				await mh.videoProducer.replaceTrack({ track: videoTrack });
-			}
-
 			if (meetingState.localVideo) {
 				meetingState.localVideo.srcObject = newStream;
+			}
+
+			if (sfuManager.value?.mediaHandler) {
+				const mh = sfuManager.value.mediaHandler;
+
+				if (mh.audioProducer && newStream.getAudioTracks().length > 0) {
+					const audioTrack = newStream.getAudioTracks()[0];
+					await mh.audioProducer.replaceTrack({ track: audioTrack });
+				}
+
+				if (mh.videoProducer && newStream.getVideoTracks().length > 0) {
+					const videoTrack = newStream.getVideoTracks()[0];
+					await mh.videoProducer.replaceTrack({ track: videoTrack });
+				}
 			}
 		} catch (error) {
 			console.error("❌ Failed to update media with new device:", error);
