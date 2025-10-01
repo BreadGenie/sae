@@ -20,7 +20,9 @@ import {
 } from "frappe-ui";
 
 import "./index.css";
+import { loadMediaPreferences } from "./data/mediaPreferences.js";
 import { getPlatform } from "./utils/device";
+import { deviceManager } from "./utils/media/DeviceManager.js";
 
 const globalComponents = {
 	Button,
@@ -48,5 +50,8 @@ app.config.globalProperties.$platform = getPlatform();
 for (const key in globalComponents) {
 	app.component(key, globalComponents[key]);
 }
+
+loadMediaPreferences();
+deviceManager.enumerateDevices().catch(console.warn);
 
 app.mount("#app");

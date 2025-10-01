@@ -10,7 +10,7 @@
 		<div
 			v-show="isVisible"
 			:class="[
-				'z-10 pointer-events-none w-auto max-w-3xl px-4 md:px-0 bottom-4 left-1/2 transform -translate-x-1/2',
+				'z-5 pointer-events-none w-auto max-w-3xl px-4 md:px-0 bottom-4 left-1/2 transform -translate-x-1/2',
 				isPreview ? 'absolute' : 'fixed',
 			]"
 		>
@@ -100,6 +100,21 @@
 					</template>
 				</Button>
 
+				<!-- Device Settings -->
+				<Button
+					v-if="isPreview"
+					@click="showDeviceSettingsDialog = true"
+					variant="solid"
+					theme="gray"
+					size="2xl"
+					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
+					title="Device Settings"
+				>
+					<template #icon>
+						<lucide-settings class="w-5 h-5 text-white" />
+					</template>
+				</Button>
+
 				<!-- More Options -->
 				<div
 					v-if="!isPreview"
@@ -147,11 +162,17 @@
 		:meetingId="meetingId"
 		:meetingTitle="meetingTitle"
 	/>
+
+	<DeviceSettingsDialog
+		v-model="showDeviceSettingsDialog"
+		@device-changed="$emit('device-changed', $event)"
+	/>
 </template>
 
 <script setup>
 import { Button, Dropdown } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
+import DeviceSettingsDialog from "./DeviceSettingsDialog.vue";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
 
 const props = defineProps({
@@ -197,9 +218,18 @@ const emit = defineEmits([
 	"toggle-camera",
 	"toggle-screen-share",
 	"end-call",
+	"device-changed",
 ]);
 
 const moreOptions = computed(() => [
+	{
+		icon: "settings",
+		label: "Device settings",
+		onClick: () => {
+			showDeviceSettingsDialog.value = true;
+			resetHideTimer();
+		},
+	},
 	{
 		icon: "info",
 		label: "Meeting information",
@@ -214,6 +244,7 @@ const isVisible = ref(true);
 const isDropdownOpen = ref(false);
 const dropdownContainer = ref(null);
 const showMeetingInfoDialog = ref(false);
+const showDeviceSettingsDialog = ref(false);
 let hideTimeout = null;
 
 const showControls = () => {

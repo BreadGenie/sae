@@ -48,6 +48,7 @@
 								:isScreenSharing="false"
 								@toggle-microphone="$emit('toggle-microphone')"
 								@toggle-camera="$emit('toggle-camera')"
+								@device-changed="$emit('device-changed', $event)"
 							/>
 						</div>
 					</div>
@@ -234,6 +235,7 @@ const emit = defineEmits([
 	"join-from-preview",
 	"leave-waiting-room",
 	"try-join-again",
+	"device-changed",
 ]);
 
 const participantsCount = ref(0);

@@ -4,11 +4,16 @@ import { useRouter } from "vue-router";
 import {
 	cameraEnabled as prefCameraEnabled,
 	micEnabled as prefMicEnabled,
+	selectedCameraId,
+	selectedMicId,
 	setCameraEnabled,
 	setMicEnabled,
+	setSelectedCameraId,
+	setSelectedMicId,
 } from "../data/mediaPreferences.js";
 import { publishScreenShare } from "../mediasoup-client.js";
 import { useSocket } from "../socket.js";
+import { deviceManager } from "../utils/media/DeviceManager.js";
 import { getSFUClient } from "../utils/sfu-client.js";
 import {
 	getSFUMeetingManager,
@@ -49,18 +54,65 @@ export function useMeetingLogic(meetingState, meetingId) {
 
 	// ==================== CAMERA & MEDIA SETUP ====================
 
+	const buildMediaConstraints = (videoEnabled, audioEnabled) => {
+		const constraints = {};
+		const deviceIds = {};
+
+		if (videoEnabled) {
+			constraints.video = {};
+
+			// Check if selected camera is available
+			if (
+				selectedCameraId.value &&
+				deviceManager.isDeviceAvailable(selectedCameraId.value, "camera")
+			) {
+				deviceIds.camera = selectedCameraId.value;
+			} else {
+				// Else default camera
+				const defaultCamera = deviceManager.getDefaultDevice("camera");
+				if (defaultCamera) {
+					deviceIds.camera = defaultCamera.deviceId;
+					setSelectedCameraId(defaultCamera.deviceId);
+				}
+			}
+		}
+
+		if (audioEnabled) {
+			constraints.audio = {};
+
+			// Check if selected microphone is available
+			if (
+				selectedMicId.value &&
+				deviceManager.isDeviceAvailable(selectedMicId.value, "microphone")
+			) {
+				deviceIds.microphone = selectedMicId.value;
+			} else {
+				// Else default microphone
+				const defaultMic = deviceManager.getDefaultDevice("microphone");
+				if (defaultMic) {
+					deviceIds.microphone = defaultMic.deviceId;
+					setSelectedMicId(defaultMic.deviceId);
+				}
+			}
+		}
+
+		return { constraints, deviceIds };
+	};
+
 	/**
 	 * Initialize camera and media devices
 	 */
 	const initializeCamera = async () => {
 		try {
+			await deviceManager.enumerateDevices();
+
 			meetingState.setMediaState(prefMicEnabled.value, prefCameraEnabled.value);
 
 			if (meetingState.isCameraOn.value || meetingState.isMicOn.value) {
-				const constraints = {
-					video: meetingState.isCameraOn.value,
-					audio: meetingState.isMicOn.value,
-				};
+				const { constraints, deviceIds } = buildMediaConstraints(
+					meetingState.isCameraOn.value,
+					meetingState.isMicOn.value,
+				);
 
 				const stream = await navigator.mediaDevices.getUserMedia(constraints);
 				meetingState.localStream.value = stream;
@@ -90,10 +142,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 				// Turning mic ON
 				if (!stream) {
 					try {
-						stream = await navigator.mediaDevices.getUserMedia({
-							audio: true,
-							video: meetingState.isCameraOn.value,
-						});
+						const { constraints, deviceIds } = buildMediaConstraints(
+							true,
+							enable,
+						);
+						stream = await navigator.mediaDevices.getUserMedia(constraints);
 						meetingState.localStream.value = stream;
 					} catch (err) {
 						console.error("❌ Failed to get microphone stream:", err);
@@ -105,10 +158,12 @@ export function useMeetingLogic(meetingState, meetingId) {
 					const hasAudio = stream.getAudioTracks().length > 0;
 					if (!hasAudio) {
 						try {
-							const audioOnly = await navigator.mediaDevices.getUserMedia({
-								audio: true,
-								video: false,
-							});
+							const { constraints, deviceIds } = buildMediaConstraints(
+								false,
+								true,
+							);
+							const audioOnly =
+								await navigator.mediaDevices.getUserMedia(constraints);
 							const newTrack = audioOnly.getAudioTracks()[0];
 							if (newTrack) {
 								stream.addTrack(newTrack);
@@ -124,10 +179,12 @@ export function useMeetingLogic(meetingState, meetingId) {
 						if (at.readyState === "ended") {
 							// Track was stopped, get a new one
 							try {
-								const audioOnly = await navigator.mediaDevices.getUserMedia({
-									audio: true,
-									video: false,
-								});
+								const { constraints, deviceIds } = buildMediaConstraints(
+									false,
+									true,
+								);
+								const audioOnly =
+									await navigator.mediaDevices.getUserMedia(constraints);
 								const newTrack = audioOnly.getAudioTracks()[0];
 								if (newTrack) {
 									stream.removeTrack(at);
@@ -240,10 +297,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 				if (!stream) {
 					// No existing stream: request both video and current audio state
 					try {
-						stream = await navigator.mediaDevices.getUserMedia({
-							video: true,
-							audio: meetingState.isMicOn.value,
-						});
+						const { constraints, deviceIds } = buildMediaConstraints(
+							true,
+							meetingState.isMicOn.value,
+						);
+						stream = await navigator.mediaDevices.getUserMedia(constraints);
 						meetingState.localStream.value = stream;
 					} catch (err) {
 						console.error("❌ Failed to get camera stream:", err);
@@ -255,10 +313,12 @@ export function useMeetingLogic(meetingState, meetingId) {
 					const hasVideo = stream.getVideoTracks().length > 0;
 					if (!hasVideo) {
 						try {
-							const videoOnly = await navigator.mediaDevices.getUserMedia({
-								video: true,
-								audio: false,
-							});
+							const { constraints, deviceIds } = buildMediaConstraints(
+								true,
+								false,
+							);
+							const videoOnly =
+								await navigator.mediaDevices.getUserMedia(constraints);
 							const newTrack = videoOnly.getVideoTracks()[0];
 							if (newTrack) {
 								stream.addTrack(newTrack);
@@ -274,10 +334,12 @@ export function useMeetingLogic(meetingState, meetingId) {
 						if (vt.readyState === "ended") {
 							// Track was stopped, get a new one
 							try {
-								const videoOnly = await navigator.mediaDevices.getUserMedia({
-									video: true,
-									audio: false,
-								});
+								const { constraints, deviceIds } = buildMediaConstraints(
+									true,
+									false,
+								);
+								const videoOnly =
+									await navigator.mediaDevices.getUserMedia(constraints);
 								const newTrack = videoOnly.getVideoTracks()[0];
 								if (newTrack) {
 									stream.removeTrack(vt);

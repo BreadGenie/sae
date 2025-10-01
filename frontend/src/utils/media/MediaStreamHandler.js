@@ -20,10 +20,13 @@ export class MediaStreamHandler {
 		this._audioCtx = null;
 	}
 
-	async getUserMedia(constraints = { video: true, audio: true }) {
+	async getUserMedia(
+		constraints = { video: true, audio: true },
+		deviceIds = {},
+	) {
 		try {
-			console.log("🎥 Requesting user media with constraints:", constraints);
-			const stream = await navigator.mediaDevices.getUserMedia(constraints);
+			const fullConstraints = this.buildConstraints(constraints, deviceIds);
+			const stream = await navigator.mediaDevices.getUserMedia(fullConstraints);
 			this.localStream = stream;
 			return stream;
 		} catch (error) {
@@ -32,6 +35,36 @@ export class MediaStreamHandler {
 		}
 	}
 
+	// constrainsts for getUserMedia with optional device IDs
+	buildConstraints(baseConstraints = {}, deviceIds = {}) {
+		const constraints = { ...baseConstraints };
+
+		if (constraints.video && typeof constraints.video === "object") {
+			constraints.video = { ...constraints.video };
+			if (deviceIds.camera) {
+				constraints.video.deviceId = { exact: deviceIds.camera };
+			}
+		} else if (constraints.video === true) {
+			constraints.video = {};
+			if (deviceIds.camera) {
+				constraints.video.deviceId = { exact: deviceIds.camera };
+			}
+		}
+
+		if (constraints.audio && typeof constraints.audio === "object") {
+			constraints.audio = { ...constraints.audio };
+			if (deviceIds.microphone) {
+				constraints.audio.deviceId = { exact: deviceIds.microphone };
+			}
+		} else if (constraints.audio === true) {
+			constraints.audio = {};
+			if (deviceIds.microphone) {
+				constraints.audio.deviceId = { exact: deviceIds.microphone };
+			}
+		}
+
+		return constraints;
+	}
 	async getScreenShare() {
 		try {
 			console.log("🖥️ Requesting screen share");

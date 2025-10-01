@@ -8,6 +8,9 @@ export {};
 /* prettier-ignore */
 declare module "vue" {
 	export interface GlobalComponents {
+		AudioIndicator: typeof import(
+			"./src/components/AudioIndicator.vue",
+		)["default"];
 		ChatNotification: typeof import(
 			"./src/components/ChatNotification.vue",
 		)["default"];
@@ -18,6 +21,9 @@ declare module "vue" {
 		ClickToCopyField: typeof import(
 			"./src/components/ClickToCopyField.vue",
 		)["default"];
+		DeviceSettingsDialog: typeof import(
+			"./src/components/DeviceSettingsDialog.vue",
+		)["default"];
 		FloatingControls: typeof import(
 			"./src/components/FloatingControls.vue",
 		)["default"];
@@ -27,6 +33,7 @@ declare module "vue" {
 		)["default"];
 		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
 		LucideArrowLeft: typeof import("~icons/lucide/arrow-left")["default"];
+		LucideCamera: typeof import("~icons/lucide/camera")["default"];
 		LucideCheck: typeof import("~icons/lucide/check")["default"];
 		LucideClock: typeof import("~icons/lucide/clock")["default"];
 		LucideCopy: typeof import("~icons/lucide/copy")["default"];
@@ -50,9 +57,11 @@ declare module "vue" {
 		LucidePhoneOff: typeof import("~icons/lucide/phone-off")["default"];
 		LucidePlus: typeof import("~icons/lucide/plus")["default"];
 		LucideRefreshCw: typeof import("~icons/lucide/refresh-cw")["default"];
+		LucideSettings: typeof import("~icons/lucide/settings")["default"];
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
+		LucideVolume2: typeof import("~icons/lucide/volume2")["default"];
 		LucideX: typeof import("~icons/lucide/x")["default"];
 		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
 		MeetingAvatar: typeof import(

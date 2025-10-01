@@ -38,6 +38,7 @@
 			@join-from-preview="joinMeetingFromPreview"
 			@leave-waiting-room="leaveWaitingRoom"
 			@try-join-again="tryJoinAgain"
+			@device-changed="handleDeviceChanged"
 		/>
 
 		<!-- Main meeting interface -->
@@ -88,6 +89,7 @@
 					@toggle-camera="toggleCamera"
 					@toggle-screen-share="toggleScreenShare"
 					@end-call="endCall"
+					@device-changed="handleDeviceChanged"
 				/>
 
 				<!-- Chat Panel -->
@@ -141,7 +143,9 @@ import VideoGrid from "../components/VideoGrid.vue";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
 // Composables and utilities
 import { useMeetingState } from "../composables/useMeetingState.js";
+import { selectedCameraId, selectedMicId } from "../data/mediaPreferences.js";
 import { session } from "../data/session.js";
+import { deviceManager } from "../utils/media/DeviceManager.js";
 
 // Router access
 const route = useRoute();
@@ -167,6 +171,7 @@ const {
 	onSendChat,
 	setupChatEvents,
 	handleKeyDown,
+	sfuManager,
 } = useMeetingLogic(meetingState, meetingId.value);
 
 // Computed properties
@@ -223,6 +228,65 @@ const handleNotificationClick = () => {
 	}
 };
 
+const handleDeviceChanged = async (event) => {
+	// If we're in an active meeting with media enabled, update the stream and producers
+	if (
+		(meetingState.isCameraOn.value || meetingState.isMicOn.value) &&
+		sfuManager.value?.mediaHandler
+	) {
+		try {
+			const constraints = {};
+
+			if (meetingState.isCameraOn.value) {
+				constraints.video = {};
+				// Use the deviceId from the event if it's a camera change, otherwise use current selection
+				const cameraDeviceId =
+					event.type === "camera" ? event.deviceId : selectedCameraId.value;
+				if (
+					cameraDeviceId &&
+					deviceManager.isDeviceAvailable(cameraDeviceId, "camera")
+				) {
+					constraints.video.deviceId = { exact: cameraDeviceId };
+				}
+			}
+
+			if (meetingState.isMicOn.value) {
+				constraints.audio = {};
+				const micDeviceId =
+					event.type === "microphone" ? event.deviceId : selectedMicId.value;
+				if (
+					micDeviceId &&
+					deviceManager.isDeviceAvailable(micDeviceId, "microphone")
+				) {
+					constraints.audio.deviceId = { exact: micDeviceId };
+				}
+			}
+
+			// use new device
+			const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+			meetingState.localStream.value = newStream;
+
+			const mh = sfuManager.value.mediaHandler;
+
+			if (mh.audioProducer && newStream.getAudioTracks().length > 0) {
+				const audioTrack = newStream.getAudioTracks()[0];
+				await mh.audioProducer.replaceTrack({ track: audioTrack });
+			}
+
+			if (mh.videoProducer && newStream.getVideoTracks().length > 0) {
+				const videoTrack = newStream.getVideoTracks()[0];
+				await mh.videoProducer.replaceTrack({ track: videoTrack });
+			}
+
+			if (meetingState.localVideo) {
+				meetingState.localVideo.srcObject = newStream;
+			}
+		} catch (error) {
+			console.error("❌ Failed to update media with new device:", error);
+		}
+	}
+};
+
 // Lifecycle
 onMounted(async () => {
 	window.addEventListener("keydown", handleKeyDown);
@@ -250,7 +314,7 @@ onMounted(async () => {
 		user_id: session.user?.sessionUser || "",
 		name: session.user?.full_name || session.user?.sessionUser || "",
 		full_name: session.user?.full_name || "",
-		avatar: session.user?.user_image || "",
+		avatar: session.user?.avatar || "",
 	};
 
 	// Initialize camera

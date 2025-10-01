@@ -4,7 +4,7 @@
 			:ref="videoRef"
 			:participant-id="participant.user_id"
 			class="w-full h-full object-cover remote-video"
-			:class="{ 'transform scale-x-[-1]': isLocal }"
+			:style="{ transform: isLocal ? 'scaleX(-1) translateZ(0)' : 'translateZ(0)' }"
 			autoplay
 			:muted="isLocal"
 			playsinline
@@ -28,7 +28,7 @@
 		</div>
 
 		<div
-			v-if="!isAudioEnabled && !isLocal"
+			v-if="!isAudioEnabled"
 			class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5"
 		>
 			<lucide-mic-off class="w-4 h-4 text-white" />
@@ -37,7 +37,6 @@
 </template>
 
 <script setup>
-import { watch } from "vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 
 defineProps({
