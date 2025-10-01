@@ -216,11 +216,6 @@ const testSpeaker = async () => {
 
 		const audioContext = new window.AudioContext();
 
-		// Resume AudioContext if it's suspended (required after user gesture)
-		if (audioContext.state === "suspended") {
-			await audioContext.resume();
-		}
-
 		const oscillator = audioContext.createOscillator();
 		const gainNode = audioContext.createGain();
 
