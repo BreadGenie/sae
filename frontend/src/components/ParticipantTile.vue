@@ -11,12 +11,6 @@
 		/>
 
 		<div
-			class="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm pointer-events-none"
-		>
-			{{ participant.user_name || participant.user_id }}
-		</div>
-
-		<div
 			v-if="!isVideoEnabled"
 			class="absolute inset-0 bg-gray-700 flex items-center justify-center pointer-events-none"
 		>
@@ -28,9 +22,12 @@
 		</div>
 
 		<div
-			v-if="!isAudioEnabled"
-			class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5"
+			class="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm pointer-events-none"
 		>
+			{{ participant.user_name || participant.user_id }}
+		</div>
+
+		<div v-if="!isAudioEnabled" class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5">
 			<lucide-mic-off class="w-4 h-4 text-white" />
 		</div>
 	</div>

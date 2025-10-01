@@ -143,7 +143,11 @@ import VideoGrid from "../components/VideoGrid.vue";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
 // Composables and utilities
 import { useMeetingState } from "../composables/useMeetingState.js";
-import { selectedCameraId, selectedMicId } from "../data/mediaPreferences.js";
+import {
+	selectedCameraId,
+	selectedMicId,
+	selectedSpeakerId,
+} from "../data/mediaPreferences.js";
 import { session } from "../data/session.js";
 import { deviceManager } from "../utils/media/DeviceManager.js";
 
@@ -228,8 +232,47 @@ const handleNotificationClick = () => {
 	}
 };
 
+const setSinkIdOnVideoElements = async (sinkId) => {
+	// Set speaker output on all video elements
+	const videoElements = document.querySelectorAll("video");
+
+	if (videoElements.length === 0) {
+		console.warn("⚠️ No video elements found yet");
+	}
+
+	const promises = [];
+	for (const videoEl of videoElements) {
+		if (typeof videoEl.setSinkId === "function") {
+			const promise = videoEl
+				.setSinkId(sinkId)
+				.then(() => {
+					console.log(
+						"✅ Successfully set speaker for video element to:",
+						sinkId,
+					);
+				})
+				.catch((error) => {
+					console.error("❌ Failed to set speaker for video element:", error);
+				});
+			promises.push(promise);
+		}
+	}
+
+	await Promise.all(promises);
+	console.log("🔊 Finished setting speaker on all video elements");
+};
+
 const handleDeviceChanged = async (event) => {
 	console.log("🔄 Device changed:", event);
+
+	if (event.type === "speaker") {
+		const speakerId = event.deviceId;
+
+		if (speakerId) {
+			await setSinkIdOnVideoElements(speakerId);
+		}
+		return;
+	}
 
 	if (meetingState.isCameraOn.value || meetingState.isMicOn.value) {
 		try {
@@ -328,6 +371,11 @@ onMounted(async () => {
 	// Initialize camera
 	await initializeCamera();
 
+	await deviceManager.enumerateDevices();
+	if (selectedSpeakerId.value) {
+		await setSinkIdOnVideoElements(selectedSpeakerId.value);
+	}
+
 	// Setup chat events
 	setupChatEvents(chatNotificationQueue.value);
 
@@ -367,6 +415,17 @@ watch(
 			try {
 				videoElement.srcObject = stream;
 				await videoElement.play();
+
+				if (
+					selectedSpeakerId.value &&
+					typeof videoElement.setSinkId === "function"
+				) {
+					try {
+						await videoElement.setSinkId(selectedSpeakerId.value);
+					} catch (error) {
+						console.warn("⚠️ Could not set speaker for local video:", error);
+					}
+				}
 			} catch (error) {
 				console.warn("⚠️ Could not play local video:", error);
 			}
@@ -374,6 +433,15 @@ watch(
 	},
 	{ immediate: true },
 );
+
+watch(selectedSpeakerId, async (newSpeakerId) => {
+	if (
+		newSpeakerId &&
+		deviceManager.isDeviceAvailable(newSpeakerId, "speaker")
+	) {
+		await setSinkIdOnVideoElements(newSpeakerId);
+	}
+});
 </script>
 
 <style scoped>

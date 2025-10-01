@@ -167,34 +167,6 @@ export class MediaStreamHandler {
 		}
 	}
 
-	// Create a silent audio track using WebAudio and a MediaStreamDestination.
-	// The oscillator is created and its gain set to zero so it produces silence.
-	// We keep references to stop() it later when cleaning up.
-	createBlankAudioTrack() {
-		try {
-			if (this._blankAudioTrack && this._blankAudioTrack.readyState === "live")
-				return this._blankAudioTrack;
-
-			const AudioCtx = window.AudioContext || window.webkitAudioContext;
-			if (!AudioCtx) return null;
-			this._audioCtx = this._audioCtx || new AudioCtx();
-			const osc = this._audioCtx.createOscillator();
-			const gain = this._audioCtx.createGain();
-			gain.gain.value = 0; // silence
-			osc.connect(gain);
-			const dst = this._audioCtx.createMediaStreamDestination();
-			gain.connect(dst);
-			osc.start?.();
-			this._blankAudioOsc = osc;
-			const [track] = dst.stream.getAudioTracks();
-			this._blankAudioTrack = track;
-			return track;
-		} catch (err) {
-			console.warn("⚠️ Failed to create blank audio track", err);
-			return null;
-		}
-	}
-
 	stopScreenShare() {
 		if (this.screenShareStream) {
 			for (const track of this.screenShareStream.getTracks()) {

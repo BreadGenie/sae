@@ -58,6 +58,7 @@ declare module "vue" {
 		LucidePlus: typeof import("~icons/lucide/plus")["default"];
 		LucideRefreshCw: typeof import("~icons/lucide/refresh-cw")["default"];
 		LucideSettings: typeof import("~icons/lucide/settings")["default"];
+		LucideSpeaker: typeof import("~icons/lucide/speaker")["default"];
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];

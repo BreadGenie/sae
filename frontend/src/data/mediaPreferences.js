@@ -15,6 +15,7 @@ export const micEnabled = ref(readBool("mediaPref.mic", true));
 export const cameraEnabled = ref(readBool("mediaPref.camera", true));
 export const selectedCameraId = ref(readString("mediaPref.cameraId", ""));
 export const selectedMicId = ref(readString("mediaPref.micId", ""));
+export const selectedSpeakerId = ref(readString("mediaPref.speakerId", ""));
 
 export function setMicEnabled(val) {
 	micEnabled.value = !!val;
@@ -44,9 +45,17 @@ export function setSelectedMicId(deviceId) {
 	} catch (_) {}
 }
 
+export function setSelectedSpeakerId(deviceId) {
+	selectedSpeakerId.value = deviceId || "";
+	try {
+		localStorage.setItem("mediaPref.speakerId", selectedSpeakerId.value);
+	} catch (_) {}
+}
+
 export function loadMediaPreferences() {
 	micEnabled.value = readBool("mediaPref.mic", true);
 	cameraEnabled.value = readBool("mediaPref.camera", true);
 	selectedCameraId.value = readString("mediaPref.cameraId", "");
+	selectedSpeakerId.value = readString("mediaPref.speakerId", "");
 	selectedMicId.value = readString("mediaPref.micId", "");
 }
