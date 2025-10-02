@@ -270,7 +270,9 @@ watch(
 
 const loadDevices = async () => {
 	try {
-		await deviceManager.enumerateDevices();
+		await deviceManager.checkExistingPermissions();
+
+		await deviceManager.enumerateDevices({ video: true, audio: true });
 
 		cameraOptions.value = deviceManager.getCameras();
 		micOptions.value = deviceManager.getMicrophones();
@@ -297,7 +299,9 @@ const loadDevices = async () => {
 };
 
 onMounted(() => {
-	loadDevices();
+	if (show.value) {
+		loadDevices();
+	}
 
 	const handleDeviceChange = () => {
 		const oldCameraOptions = cameraOptions.value;

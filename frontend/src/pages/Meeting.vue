@@ -371,7 +371,6 @@ onMounted(async () => {
 	// Initialize camera
 	await initializeCamera();
 
-	await deviceManager.enumerateDevices();
 	if (selectedSpeakerId.value) {
 		await setSinkIdOnVideoElements(selectedSpeakerId.value);
 	}

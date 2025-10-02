@@ -61,39 +61,22 @@ export function useMeetingLogic(meetingState, meetingId) {
 		if (videoEnabled) {
 			constraints.video = {};
 
-			// Check if selected camera is available
-			if (
-				selectedCameraId.value &&
-				deviceManager.isDeviceAvailable(selectedCameraId.value, "camera")
-			) {
+			// Use stored camera ID if available (don't check if device exists to avoid enumeration)
+			// If the device doesn't exist, getUserMedia will fail gracefully and we can handle it
+			if (selectedCameraId.value) {
 				deviceIds.camera = selectedCameraId.value;
-			} else {
-				// Else default camera
-				const defaultCamera = deviceManager.getDefaultDevice("camera");
-				if (defaultCamera) {
-					deviceIds.camera = defaultCamera.deviceId;
-					setSelectedCameraId(defaultCamera.deviceId);
-				}
 			}
+			// If no stored device ID, let browser use its default (don't enumerate)
 		}
 
 		if (audioEnabled) {
 			constraints.audio = {};
 
-			// Check if selected microphone is available
-			if (
-				selectedMicId.value &&
-				deviceManager.isDeviceAvailable(selectedMicId.value, "microphone")
-			) {
+			// Use stored microphone ID if available (don't check if device exists to avoid enumeration)
+			if (selectedMicId.value) {
 				deviceIds.microphone = selectedMicId.value;
-			} else {
-				// Else default microphone
-				const defaultMic = deviceManager.getDefaultDevice("microphone");
-				if (defaultMic) {
-					deviceIds.microphone = defaultMic.deviceId;
-					setSelectedMicId(defaultMic.deviceId);
-				}
 			}
+			// If no stored device ID, let browser use its default (don't enumerate)
 		}
 
 		return { constraints, deviceIds };
@@ -104,8 +87,6 @@ export function useMeetingLogic(meetingState, meetingId) {
 	 */
 	const initializeCamera = async () => {
 		try {
-			await deviceManager.enumerateDevices();
-
 			meetingState.setMediaState(prefMicEnabled.value, prefCameraEnabled.value);
 
 			if (meetingState.isCameraOn.value || meetingState.isMicOn.value) {

@@ -9,25 +9,94 @@ export class DeviceManager {
 		this.speakers = [];
 		this.isEnumerating = false;
 		this.deviceChangeListeners = [];
+		this.hasVideoPermission = false;
+		this.hasAudioPermission = false;
 		this.setupDeviceChangeListener();
 	}
 
-	async enumerateDevices() {
+	/**
+	 * Check if we already have permissions without requesting them
+	 */
+	async checkExistingPermissions() {
+		if (!navigator.permissions) return;
+
+		try {
+			const cameraPermission = await navigator.permissions.query({
+				name: "camera",
+			});
+			this.hasVideoPermission = cameraPermission.state === "granted";
+
+			const micPermission = await navigator.permissions.query({
+				name: "microphone",
+			});
+			this.hasAudioPermission = micPermission.state === "granted";
+		} catch (_) {
+			// Permissions API might not be fully supported, don't break
+		}
+	}
+
+	/**
+	 * Detect what type of devices changed by comparing current vs new device lists
+	 * Returns { video: boolean, audio: boolean } indicating what changed
+	 */
+	async detectDeviceChanges() {
+		const oldCameraCount = this.cameras.length;
+		const oldMicCount = this.microphones.length;
+		const oldSpeakerCount = this.speakers.length;
+
+		const devices = await navigator.mediaDevices.enumerateDevices();
+		const newCameraCount = devices.filter(
+			(d) => d.kind === "videoinput",
+		).length;
+		const newMicCount = devices.filter((d) => d.kind === "audioinput").length;
+		const newSpeakerCount = devices.filter(
+			(d) => d.kind === "audiooutput",
+		).length;
+
+		return {
+			videoChanged: newCameraCount !== oldCameraCount,
+			audioChanged:
+				newMicCount !== oldMicCount || newSpeakerCount !== oldSpeakerCount,
+		};
+	}
+
+	async enumerateDevices(options = { video: false, audio: false }) {
 		if (this.isEnumerating) return;
 
 		try {
 			this.isEnumerating = true;
 
-			try {
-				await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-			} catch (error) {
-				console.warn(
-					"Could not get media permissions for device enumeration:",
-					error,
-				);
+			let permissionStream = null;
+
+			// Only request permissions if explicitly requested
+			// Why? Cuz I don't want camera LED from turning on unnecessarily
+			if (options.video || options.audio) {
+				try {
+					const constraints = {};
+					if (options.video) constraints.video = true;
+					if (options.audio) constraints.audio = true;
+
+					permissionStream =
+						await navigator.mediaDevices.getUserMedia(constraints);
+
+					if (options.video) this.hasVideoPermission = true;
+					if (options.audio) this.hasAudioPermission = true;
+				} catch (error) {
+					console.warn(
+						"Could not get media permissions for device enumeration:",
+						error,
+					);
+				}
 			}
 
 			const devices = await navigator.mediaDevices.enumerateDevices();
+
+			// this is needed to stop all tracks to release camera/mic hardware
+			if (permissionStream) {
+				for (const track of permissionStream.getTracks()) {
+					track.stop();
+				}
+			}
 
 			this.cameras = devices
 				.filter((device) => device.kind === "videoinput")
@@ -98,21 +167,40 @@ export class DeviceManager {
 
 	setupDeviceChangeListener() {
 		if (navigator.mediaDevices?.addEventListener) {
-			navigator.mediaDevices.addEventListener("devicechange", () => {
+			navigator.mediaDevices.addEventListener("devicechange", async () => {
 				console.log("📱 Device change detected, re-enumerating devices...");
-				this.enumerateDevices()
-					.then(() => {
-						for (const listener of this.deviceChangeListeners) {
-							try {
-								listener();
-							} catch (error) {
-								console.error("Error in device change listener:", error);
-							}
-						}
-					})
-					.catch((error) => {
-						console.error("Failed to re-enumerate devices on change:", error);
+
+				try {
+					const changes = await this.detectDeviceChanges();
+
+					// Only request permissions if:
+					// 1. We already have them, OR
+					// 2. Only audio changed and we have audio permission
+					const requestVideo = changes.videoChanged && this.hasVideoPermission;
+					const requestAudio = changes.audioChanged && this.hasAudioPermission;
+
+					console.log("📱 Device change type:", {
+						videoChanged: changes.videoChanged,
+						audioChanged: changes.audioChanged,
+						willRequestVideo: requestVideo,
+						willRequestAudio: requestAudio,
 					});
+
+					await this.enumerateDevices({
+						video: requestVideo,
+						audio: requestAudio,
+					});
+
+					for (const listener of this.deviceChangeListeners) {
+						try {
+							listener();
+						} catch (error) {
+							console.error("Error in device change listener:", error);
+						}
+					}
+				} catch (error) {
+					console.error("Failed to re-enumerate devices on change:", error);
+				}
 			});
 		}
 	}

@@ -52,6 +52,5 @@ for (const key in globalComponents) {
 }
 
 loadMediaPreferences();
-deviceManager.enumerateDevices().catch(console.warn);
 
 app.mount("#app");
