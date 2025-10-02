@@ -52,29 +52,13 @@ export class VideoElementManager {
 			element.srcObject = stream;
 			element.muted = isLocal;
 
-			const tryPlay = async () => {
-				if (!element.isConnected) {
-					console.warn(
-						`⚠️ Video element not connected for ${participantId}, skipping play`,
-					);
-					return false;
-				}
+			if (!isLocal) {
 				try {
 					await element.play();
-					return true;
 				} catch (err) {
 					console.error(`❌ Error playing video for ${participantId}:`, err);
-					return false;
 				}
-			};
-
-			if (!isLocal) {
-				const played = await tryPlay();
-				return played;
 			}
-
-			tryPlay();
-			return true;
 		}
 	}
 
@@ -139,19 +123,6 @@ export class VideoElementManager {
 				elementExists: !!element,
 			});
 		} catch (_) {}
-	}
-
-	createCombinedStream(videoTrack, audioTrack) {
-		const combinedStream = new MediaStream();
-
-		if (videoTrack) {
-			combinedStream.addTrack(videoTrack);
-		}
-		if (audioTrack) {
-			combinedStream.addTrack(audioTrack);
-		}
-
-		return combinedStream;
 	}
 
 	cleanup() {

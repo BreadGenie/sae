@@ -335,36 +335,18 @@ export class SFUMeetingManager {
 		try {
 			const audioConsumer =
 				this.consumerManager.getAudioConsumer(participantId);
+			const tracks = audioConsumer
+				? [consumer.track, audioConsumer.track]
+				: [consumer.track];
+			const stream = new MediaStream(tracks);
 
-			let stream;
-			if (audioConsumer) {
-				stream = new MediaStream([consumer.track, audioConsumer.track]);
-			} else {
-				stream = new MediaStream([consumer.track]);
-			}
-
-			const attachOk = await this.videoManager.attachStream(
-				participantId,
-				stream,
-				false,
-			);
+			await this.videoManager.attachStream(participantId, stream, false);
 
 			const participant = this.participantManager.getParticipant(participantId);
-			if (participant) {
-				if (attachOk) {
-					if (!participant.video_enabled) {
-						this.participantManager.updateParticipant(participantId, {
-							video_enabled: true,
-						});
-					}
-				} else {
-					console.warn(
-						"📹 Camera stream attached but rendering verification failed for",
-						participantId,
-					);
-				}
-			} else {
-				console.warn("📹 Participant not found for", participantId);
+			if (participant && !participant.video_enabled) {
+				this.participantManager.updateParticipant(participantId, {
+					video_enabled: true,
+				});
 			}
 		} catch (error) {
 			console.error(
@@ -378,21 +360,12 @@ export class SFUMeetingManager {
 		try {
 			const videoConsumer =
 				this.consumerManager.getVideoConsumer(participantId);
+			const tracks = videoConsumer
+				? [videoConsumer.track, consumer.track]
+				: [consumer.track];
+			const stream = new MediaStream(tracks);
 
-			if (videoConsumer) {
-				const combinedStream = this.videoManager.createCombinedStream(
-					videoConsumer.track,
-					consumer.track,
-				);
-				await this.videoManager.attachStream(
-					participantId,
-					combinedStream,
-					false,
-				);
-			} else {
-				const audioStream = new MediaStream([consumer.track]);
-				await this.videoManager.attachStream(participantId, audioStream, false);
-			}
+			await this.videoManager.attachStream(participantId, stream, false);
 		} catch (error) {
 			console.error(
 				`❌ Failed to attach audio consumer for ${participantId}:`,
