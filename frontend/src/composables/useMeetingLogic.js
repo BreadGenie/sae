@@ -64,6 +64,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 			// Use stored camera ID if available (don't check if device exists to avoid enumeration)
 			// If the device doesn't exist, getUserMedia will fail gracefully and we can handle it
 			if (selectedCameraId.value) {
+				constraints.video.deviceId = { exact: selectedCameraId.value };
 				deviceIds.camera = selectedCameraId.value;
 			}
 			// If no stored device ID, let browser use its default (don't enumerate)
@@ -74,6 +75,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 
 			// Use stored microphone ID if available (don't check if device exists to avoid enumeration)
 			if (selectedMicId.value) {
+				constraints.audio.deviceId = { exact: selectedMicId.value };
 				deviceIds.microphone = selectedMicId.value;
 			}
 			// If no stored device ID, let browser use its default (don't enumerate)

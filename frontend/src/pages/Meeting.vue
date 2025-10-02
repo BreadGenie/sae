@@ -242,20 +242,18 @@ const setSinkIdOnVideoElements = async (sinkId) => {
 
 	const promises = [];
 	for (const videoEl of videoElements) {
-		if (typeof videoEl.setSinkId === "function") {
-			const promise = videoEl
-				.setSinkId(sinkId)
-				.then(() => {
-					console.log(
-						"✅ Successfully set speaker for video element to:",
-						sinkId,
-					);
-				})
-				.catch((error) => {
-					console.error("❌ Failed to set speaker for video element:", error);
-				});
-			promises.push(promise);
-		}
+		const promise = videoEl
+			.setSinkId(sinkId)
+			.then(() => {
+				console.log(
+					"✅ Successfully set speaker for video element to:",
+					sinkId,
+				);
+			})
+			.catch((error) => {
+				console.error("❌ Failed to set speaker for video element:", error);
+			});
+		promises.push(promise);
 	}
 
 	await Promise.all(promises);
