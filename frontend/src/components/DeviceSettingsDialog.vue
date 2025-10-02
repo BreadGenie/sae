@@ -354,8 +354,7 @@ onMounted(() => {
 			selectedSpeakerIdLocal.value = "";
 		}
 
-		// auto select newly connected devices if none selected
-		if (newCameras.length > 0 && !selectedCameraIdLocal.value) {
+		if (newCameras.length > 0) {
 			selectedCameraIdLocal.value = newCameras[0].deviceId;
 			setSelectedCameraId(selectedCameraIdLocal.value);
 			emit("device-changed", {
@@ -363,7 +362,7 @@ onMounted(() => {
 				deviceId: selectedCameraIdLocal.value,
 			});
 		}
-		if (newMics.length > 0 && !selectedMicIdLocal.value) {
+		if (newMics.length > 0) {
 			selectedMicIdLocal.value = newMics[0].deviceId;
 			setSelectedMicId(selectedMicIdLocal.value);
 			emit("device-changed", {
@@ -371,7 +370,7 @@ onMounted(() => {
 				deviceId: selectedMicIdLocal.value,
 			});
 			console.log("🎤 Auto-selected new microphone:", newMics[0].label);
-		} else if (newMics.length > 0 && selectedMicIdLocal.value) {
+		} else if (newMics.length > 0) {
 			// if we already have a mic selected, still switch to the new one
 			selectedMicIdLocal.value = newMics[0].deviceId;
 			setSelectedMicId(selectedMicIdLocal.value);
@@ -380,13 +379,14 @@ onMounted(() => {
 				deviceId: selectedMicIdLocal.value,
 			});
 		}
-		if (newSpeakers.length > 0 && !selectedSpeakerIdLocal.value) {
+		if (newSpeakers.length > 0) {
 			selectedSpeakerIdLocal.value = newSpeakers[0].deviceId;
 			setSelectedSpeakerId(selectedSpeakerIdLocal.value);
 			emit("device-changed", {
 				type: "speaker",
 				deviceId: selectedSpeakerIdLocal.value,
 			});
+			console.log("🔈 Auto-selected new speaker:", newSpeakers[0].label);
 		}
 	};
 
