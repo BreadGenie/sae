@@ -1,4 +1,5 @@
 import { computed, ref } from "vue";
+import { getInitials } from "../utils/text";
 
 let meetingStateInstance = null;
 
@@ -46,23 +47,9 @@ export function useMeetingState() {
 	const screenShareStreams = ref({});
 
 	const userInitials = computed(() => {
-		const raw =
+		const name =
 			currentUser.value?.full_name ?? currentUser.value?.name ?? "You";
-		const safe =
-			typeof raw === "string" ? raw : raw == null ? "You" : String(raw);
-		const name = safe.trim();
-		if (!name) return "";
-
-		// Split on whitespace, filter empty segments
-		const parts = name.split(/\s+/).filter(Boolean);
-
-		// If we have at least two parts, take first letter of first two parts
-		if (parts.length >= 2) {
-			return (parts[0][0] + parts[1][0]).toUpperCase().slice(0, 2);
-		}
-
-		// Single word: use first two characters
-		return name.slice(0, 2).toUpperCase();
+		return getInitials(name);
 	});
 
 	const userAvatar = computed(() => currentUser.value?.avatar || "");

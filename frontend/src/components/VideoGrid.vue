@@ -42,6 +42,7 @@
 <script setup>
 import { computed } from "vue";
 import { useVideoGridLayout } from "../composables/useVideoGridLayout.js";
+import { getInitials } from "../utils/text";
 import GroupTile from "./GroupTile.vue";
 import ParticipantTile from "./ParticipantTile.vue";
 
@@ -111,18 +112,4 @@ const {
 	visibleTileCount,
 	hiddenParticipantsTooltip,
 } = useVideoGridLayout(props.participants);
-
-function getInitials(name) {
-	const safe =
-		typeof name === "string" ? name : name == null ? "" : String(name);
-	if (!safe.trim()) return "UN";
-	return safe
-		.trim()
-		.split(/\s+/)
-		.filter(Boolean)
-		.map((n) => n[0])
-		.join("")
-		.toUpperCase()
-		.slice(0, 2);
-}
 </script>

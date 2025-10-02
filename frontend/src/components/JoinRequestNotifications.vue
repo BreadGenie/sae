@@ -69,6 +69,7 @@
 <script setup>
 import { Button } from "frappe-ui";
 import { computed, ref, watch } from "vue";
+import { getInitials } from "../utils/text";
 
 const props = defineProps({
 	waitingUsers: {
@@ -112,15 +113,6 @@ const forceHide = (userId) => {
 };
 
 defineExpose({ forceHide });
-
-function getInitials(name) {
-	return name
-		.split(" ")
-		.map((n) => n[0])
-		.join("")
-		.toUpperCase()
-		.slice(0, 2);
-}
 
 const previousWaitingUsers = ref([]);
 watch(
