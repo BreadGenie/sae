@@ -13,11 +13,11 @@ import type {
 	WorkerSettings,
 } from 'mediasoup/node/lib/WorkerTypes';
 import type { RtpCodecCapability } from 'mediasoup/node/lib/rtpParametersTypes';
-import { RtpCapabilities, RtpParameters } from 'mediasoup/node/lib/types';
+import type { RtpCapabilities, RtpParameters } from 'mediasoup/node/lib/types';
 import type { AppData } from 'mediasoup/node/lib/types';
 
 // Re-export mediasoup types
-export { RtpCapabilities, RtpParameters };
+export type { RtpCapabilities, RtpParameters };
 export type {
 	WebRtcTransport,
 	Producer,

@@ -1,11 +1,10 @@
 import type * as mediasoup from 'mediasoup';
 import type { AppData } from '../types';
-import {
-	type CloseProducerResult,
-	type ProducerData,
-	Room,
-	type RtpParameters,
-	type WebRtcTransport,
+import type {
+	CloseProducerResult,
+	ProducerData,
+	RtpParameters,
+	WebRtcTransport,
 } from '../types';
 import { loggers } from '../utils/logger';
 
@@ -70,7 +69,6 @@ export class ProducerManager {
 			);
 		}
 
-		// Clean up producer references
 		this.producers.delete(producerId);
 
 		loggers.producerManager.info(
@@ -79,7 +77,6 @@ export class ProducerManager {
 			isScreen ? ' (screen)' : '',
 		);
 
-		// Note: Consumer cleanup is handled by ConsumerManager
 		return { isScreen, removedConsumers: [] };
 	}
 
