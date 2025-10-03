@@ -65,9 +65,6 @@ export class TransportManager {
 
 		try {
 			await transportData.transport.connect({ dtlsParameters });
-
-			// TODO: Remove this workaround after mediasoup fixes DTLS state issue
-			await new Promise((resolve) => setTimeout(resolve, 100));
 		} catch (error) {
 			loggers.transportManager.error(
 				'Failed to connect transport %s: %s',
