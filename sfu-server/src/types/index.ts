@@ -35,6 +35,11 @@ export type {
 
 // Socket.IO types
 export interface ServerToClientEvents {
+	participant_joined: (data: {
+		roomId: string;
+		participantId: string;
+		userData: UserData;
+	}) => void;
 	participant_left: (data: { roomId: string; participantId: string }) => void;
 	producer_created: (data: {
 		roomId: string;
@@ -75,15 +80,15 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
 	get_router_rtp_capabilities: (
 		data: Record<string, never>,
-		callback: (response: SFUResponse<RtpCapabilities>) => void,
+		callback: (response: RouterRtpCapabilitiesResponse) => void,
 	) => void;
 	create_webrtc_transport: (
 		data: { direction: 'send' | 'recv' },
-		callback: (response: SFUResponse<WebRTCTransportParams>) => void,
+		callback: (response: WebRTCTransportResponse) => void,
 	) => void;
 	connect_webrtc_transport: (
 		data: { transportId: string; dtlsParameters: DtlsParameters },
-		callback: (response: SFUResponse<void>) => void,
+		callback: (response: SFUResponse) => void,
 	) => void;
 	create_producer: (
 		data: {
@@ -92,9 +97,7 @@ export interface ClientToServerEvents {
 			kind: 'audio' | 'video';
 			appData?: Record<string, unknown>;
 		},
-		callback: (
-			response: SFUResponse<ProducerInfo & { isScreen: boolean }>,
-		) => void,
+		callback: (response: ProducerResponse) => void,
 	) => void;
 	create_consumer: (
 		data: {
@@ -102,23 +105,23 @@ export interface ClientToServerEvents {
 			producerId: string;
 			rtpCapabilities: RtpCapabilities;
 		},
-		callback: (response: SFUResponse<ConsumerInfo>) => void,
+		callback: (response: ConsumerResponse) => void,
 	) => void;
 	close_producer: (
 		data: { producerId: string },
-		callback: (response: SFUResponse<CloseProducerResult>) => void,
+		callback: (response: CloseProducerResponse) => void,
 	) => void;
 	close_consumer: (
 		data: { consumerId: string },
-		callback: (response: SFUResponse<void>) => void,
+		callback: (response: SFUResponse) => void,
 	) => void;
 	get_existing_producers: (
 		data: Record<string, never>,
-		callback: (response: SFUResponse<ExistingProducer[]>) => void,
+		callback: (response: ExistingProducersResponse) => void,
 	) => void;
 	get_room_participants: (
 		data: Record<string, never>,
-		callback: (response: SFUResponse<ParticipantInfo[]>) => void,
+		callback: (response: RoomParticipantsResponse) => void,
 	) => void;
 	webrtc_offer: (data: WebRTCSignalData) => void;
 	webrtc_answer: (data: WebRTCSignalData) => void;
@@ -151,11 +154,38 @@ export interface UserData {
 	avatar?: string;
 }
 
-export interface SFUResponse<T = unknown> {
+export interface SFUResponse {
 	success: boolean;
-	data?: T;
 	error?: string;
-	[key: string]: unknown;
+}
+
+export interface RouterRtpCapabilitiesResponse extends SFUResponse {
+	rtpCapabilities: RtpCapabilities;
+}
+
+export interface WebRTCTransportResponse extends SFUResponse {
+	id: string;
+	iceParameters: IceParameters;
+	iceCandidates: IceCandidate[];
+	dtlsParameters: DtlsParameters;
+}
+
+export interface ProducerResponse extends SFUResponse, ProducerInfo {
+	isScreen: boolean;
+}
+
+export interface ConsumerResponse extends SFUResponse, ConsumerInfo {}
+
+export interface CloseProducerResponse
+	extends SFUResponse,
+		CloseProducerResult {}
+
+export interface ExistingProducersResponse extends SFUResponse {
+	producers: ExistingProducer[];
+}
+
+export interface RoomParticipantsResponse extends SFUResponse {
+	participants: ParticipantInfo[];
 }
 export interface WebRTCTransportParams {
 	id: string;

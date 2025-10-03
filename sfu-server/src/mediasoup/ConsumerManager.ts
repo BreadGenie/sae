@@ -85,7 +85,7 @@ export class ConsumerManager {
 				error: (consumeError as Error).message,
 				producerId,
 				transportId: transport.id,
-				transportState: 'unknown', // connectionState not available in type
+				transportState: transport.dtlsState,
 				producerKind: producer.kind,
 				producerClosed: producer.closed,
 			});
