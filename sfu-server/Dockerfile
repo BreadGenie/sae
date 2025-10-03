@@ -7,11 +7,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 build-essential python3-pip pkg-config libssl-dev git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
+COPY package*.json tsconfig.json ./
 ENV NODE_ENV=production
-RUN npm ci --omit=dev
-COPY . .
-# (If you have any build step for frontend assets, run it here)
+RUN npm ci
+COPY src ./src
+RUN npm run build
 
 # --- Runtime stage (minimal) ---
 FROM node:${NODE_VERSION} AS runtime
@@ -33,4 +33,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD curl -fsS http://127.0.0.1:3000/health || exit 1
 
 ENTRYPOINT ["/usr/bin/tini","--"]
-CMD ["node","server.js"]
+CMD ["node","dist/server.js"]

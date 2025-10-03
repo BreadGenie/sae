@@ -34,7 +34,7 @@ repos:
     rev: v2.1.1
     hooks:
       - id: biome-check
-        name: Biome Check
+        name: Biome Check (Frontend)
         entry: bash -c 'cd frontend && npx @biomejs/biome@1.9.4 check --write'
         language: system
         files: "frontend/.*\\.(js|ts|vue|json|jsx|tsx)$"
@@ -48,6 +48,17 @@ repos:
               .*boilerplate.*|
               sae/templates/includes/.*|
               sae/public/js/lib/.*
+          )$
+
+      - id: biome-check
+        name: Biome Check (SFU Server)
+        entry: bash -c 'cd sfu-server && npm run lint:fix'
+        language: system
+        files: "sfu-server/.*\\.(js|ts|json)$"
+        exclude: |
+          (?x)^(
+              .*node_modules.*|
+              sfu-server/dist/.*
           )$
 
 ci:

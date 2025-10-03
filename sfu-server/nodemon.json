@@ -1,0 +1,13 @@
+{
+	"watch": ["src"],
+	"ext": "ts,js,json",
+	"ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist"],
+	"exec": "ts-node src/server.ts",
+	"env": {
+		"NODE_ENV": "development"
+	},
+	"delay": 500,
+	"verbose": false,
+	"restartable": "rs",
+	"colours": true
+}

@@ -50,6 +50,11 @@ else
     echo -e "${GREEN}✅ Dependencies already installed${NC}"
 fi
 
+# Build TypeScript
+echo -e "${BLUE}🔨 Building TypeScript...${NC}"
+npm run build
+echo -e "${GREEN}✅ TypeScript built successfully${NC}"
+
 # Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}📝 Creating .env file...${NC}"
@@ -73,16 +78,12 @@ echo -e "${GREEN}✅ Port $PORT is available${NC}"
 echo -e "${BLUE}🎬 Starting SFU Server...${NC}"
 echo "================================"
 
-if [ "$1" = "dev" ]; then
-    # Development mode with nodemon
-    if command -v nodemon &> /dev/null; then
-        nodemon server.js
-    else
-        echo -e "${YELLOW}⚠️  nodemon not found, installing globally...${NC}"
-        npm install -g nodemon
-        nodemon server.js
-    fi
+if [ "$NODE_ENV" = "development" ]; then
+    echo -e "${BLUE}🚀 Starting server in development mode with hot reload...${NC}"
+    echo -e "${YELLOW}📁 Watching: src/**/*.{ts,js,json}${NC}"
+    echo -e "${YELLOW}🔄 Hot reload enabled - server will restart on file changes${NC}"
+    npx nodemon
 else
     # Production mode
-    node server.js
+    node dist/server.js
 fi

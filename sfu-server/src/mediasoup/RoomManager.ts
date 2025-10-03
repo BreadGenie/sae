@@ -1,0 +1,110 @@
+import type * as mediasoup from 'mediasoup';
+import type { Room, RoomStats, RtpCodecCapability } from '../types';
+import { loggers } from '../utils/logger';
+
+export class RoomManager {
+	private rooms = new Map<string, Room>();
+	private routers = new Map<string, mediasoup.types.Router>();
+
+	async createRoom(
+		roomId: string,
+		worker: mediasoup.types.Worker,
+		mediaCodecs: RtpCodecCapability[],
+	): Promise<Room> {
+		if (this.rooms.has(roomId)) {
+			return this.rooms.get(roomId)!;
+		}
+
+		loggers.roomManager.info('Creating room: %s', roomId);
+
+		const router = await worker.createRouter({
+			mediaCodecs,
+		});
+
+		const room: Room = {
+			id: roomId,
+			router,
+			peers: new Map(),
+			created: new Date(),
+		};
+
+		this.rooms.set(roomId, room);
+		this.routers.set(roomId, router);
+
+		loggers.roomManager.info('Room created: %s', roomId);
+		return room;
+	}
+
+	async closeRoom(roomId: string): Promise<void> {
+		const room = this.rooms.get(roomId);
+		if (!room) return;
+
+		loggers.roomManager.info('Closing room: %s', roomId);
+
+		// Close all peers in the room
+		for (const [_peerId] of room.peers) {
+			// Note: Peer cleanup is handled by PeerManager
+		}
+
+		// Close router
+		try {
+			room.router.close();
+			loggers.roomManager.info('Router closed for room: %s', roomId);
+		} catch (error) {
+			loggers.roomManager.warn(
+				'Error closing router for room %s: %s',
+				roomId,
+				(error as Error).message,
+			);
+		}
+
+		this.rooms.delete(roomId);
+		this.routers.delete(roomId);
+
+		loggers.roomManager.info('Room closed: %s', roomId);
+	}
+
+	getRoom(roomId: string): Room | undefined {
+		return this.rooms.get(roomId);
+	}
+
+	getRouter(roomId: string): mediasoup.types.Router | undefined {
+		return this.routers.get(roomId);
+	}
+
+	getAllRooms(): Room[] {
+		return Array.from(this.rooms.values());
+	}
+
+	getRoomStats(roomId: string): RoomStats | null {
+		const room = this.rooms.get(roomId);
+		if (!room) return null;
+
+		return {
+			id: roomId,
+			created: room.created,
+			peerCount: room.peers.size,
+			peers: Array.from(room.peers.keys()),
+		};
+	}
+
+	getAllRoomsStats(): RoomStats[] {
+		const stats: RoomStats[] = [];
+		for (const [roomId] of this.rooms) {
+			const stat = this.getRoomStats(roomId);
+			if (stat) stats.push(stat);
+		}
+		return stats;
+	}
+
+	getRoomCount(): number {
+		return this.rooms.size;
+	}
+
+	async cleanup(): Promise<void> {
+		loggers.roomManager.info('Closing %d rooms', this.rooms.size);
+		for (const roomId of this.rooms.keys()) {
+			await this.closeRoom(roomId);
+		}
+	}
+}
