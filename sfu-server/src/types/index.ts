@@ -1,3 +1,4 @@
+import type { AudioLevelObserver } from 'mediasoup/node/lib/AudioLevelObserverTypes';
 import type { Consumer } from 'mediasoup/node/lib/ConsumerTypes';
 import type { Producer } from 'mediasoup/node/lib/ProducerTypes';
 import type { Router } from 'mediasoup/node/lib/RouterTypes';
@@ -23,6 +24,7 @@ export type {
 	Producer,
 	Consumer,
 	Router,
+	AudioLevelObserver,
 	RtpCodecCapability,
 	IceParameters,
 	IceCandidate,
@@ -74,6 +76,7 @@ export interface ServerToClientEvents {
 	webrtc_offer: (data: WebRTCSignalData) => void;
 	webrtc_answer: (data: WebRTCSignalData) => void;
 	ice_candidate: (data: WebRTCSignalData) => void;
+	active_speaker: (data: { participantIds: string[] }) => void;
 	sfu_error: (data: { error: string; timestamp: string }) => void;
 	'auth:expired': (data: { timestamp: string; reason: string }) => void;
 }
@@ -272,6 +275,7 @@ export interface ChatMessage {
 export interface Room {
 	id: string;
 	router: Router;
+	audioLevelObserver: AudioLevelObserver;
 	peers: Map<string, Peer>;
 	created: Date;
 }

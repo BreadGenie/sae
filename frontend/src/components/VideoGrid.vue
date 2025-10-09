@@ -13,6 +13,7 @@
 			:isLocal="true"
 			:isVideoEnabled="isCameraOn"
 			:isAudioEnabled="isMicOn"
+			:isActiveSpeaker="activeSpeakerIds.includes(localParticipant.user_id)"
 			:videoRef="setLocalVideoRef"
 			:tileCount="visibleTileCount"
 		/>
@@ -25,6 +26,7 @@
 			:isLocal="false"
 			:isVideoEnabled="participant.video_enabled"
 			:isAudioEnabled="participant.audio_enabled"
+			:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
 			:videoRef="(el) => setRemoteVideoRef(participant.user_id, el)"
 			:tileCount="visibleTileCount"
 		/>
@@ -70,6 +72,10 @@ const props = defineProps({
 	setRemoteVideoRef: {
 		type: Function,
 		required: true,
+	},
+	activeSpeakerIds: {
+		type: Array,
+		default: () => [],
 	},
 });
 

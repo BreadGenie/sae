@@ -41,12 +41,16 @@ export class MediasoupManager {
 		loggers.mediasoupManager.info('Mediasoup initialized successfully');
 	}
 
-	async createRoom(roomId: string): Promise<Room> {
+	async createRoom(
+		roomId: string,
+		onActiveSpeaker?: (roomId: string, participantIds: string[]) => void,
+	): Promise<Room> {
 		const worker = this.workerManager.getNextWorker();
 		return this.roomManager.createRoom(
 			roomId,
 			worker,
 			mediasoupConfig.router.mediaCodecs,
+			onActiveSpeaker,
 		);
 	}
 
@@ -147,6 +151,11 @@ export class MediasoupManager {
 		);
 
 		peer.producers.set(result.id, this.producerManager.getProducer(result.id)!);
+
+		// Add audio producers to the audio level observer for active speaker detection
+		if (kind === 'audio') {
+			room.audioLevelObserver.addProducer({ producerId: result.id });
+		}
 
 		return result;
 	}

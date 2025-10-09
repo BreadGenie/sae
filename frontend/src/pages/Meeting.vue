@@ -63,6 +63,7 @@
 							:currentUser="meetingState.currentUser.value"
 							:isCameraOn="meetingState.isCameraOn.value"
 							:isMicOn="meetingState.isMicOn.value"
+							:activeSpeakerIds="meetingState.activeSpeakerIds.value"
 							:setScreenShareVideoRef="setScreenShareVideoRef"
 							:setLocalVideoRef="setLocalVideoRef"
 							:setRemoteVideoRef="setRemoteVideoRef"
@@ -76,6 +77,7 @@
 							:currentUser="meetingState.currentUser.value"
 							:isCameraOn="meetingState.isCameraOn.value"
 							:isMicOn="meetingState.isMicOn.value"
+							:activeSpeakerIds="meetingState.activeSpeakerIds.value"
 							:setLocalVideoRef="setLocalVideoRef"
 							:setRemoteVideoRef="setRemoteVideoRef"
 						/>

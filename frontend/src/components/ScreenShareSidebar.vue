@@ -2,7 +2,7 @@
 	<TransitionGroup
 		name="tile"
 		tag="div"
-		class="overflow-y-auto pr-1 grid gap-2 h-full"
+		class="overflow-y-auto p-1 grid gap-2 h-full"
 		:class="sidebarClass"
 		:style="sidebarStyle"
 	>
@@ -10,6 +10,7 @@
 		<div
 			key="local-camera-sidebar"
 			class="relative w-full bg-gray-800 rounded overflow-hidden flex"
+			:class="{ 'ring-2 ring-blue-400': activeSpeakerIds.includes(currentUser?.user_id) }"
 			:style="singleTileStyle"
 		>
 			<video
@@ -37,6 +38,7 @@
 			v-for="participant in sidebarDisplay.list"
 			:key="'side-' + participant.user_id"
 			class="relative w-full bg-gray-800 rounded overflow-hidden flex"
+			:class="{ 'ring-2 ring-blue-400': activeSpeakerIds.includes(participant.user_id) }"
 			:style="singleTileStyle"
 		>
 			<video
@@ -116,6 +118,10 @@ const props = defineProps({
 	setRemoteVideoRef: {
 		type: Function,
 		required: true,
+	},
+	activeSpeakerIds: {
+		type: Array,
+		default: () => [],
 	},
 });
 

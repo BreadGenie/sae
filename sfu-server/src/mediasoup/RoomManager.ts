@@ -1,5 +1,10 @@
 import type * as mediasoup from 'mediasoup';
-import type { Room, RoomStats, RtpCodecCapability } from '../types';
+import type {
+	AudioLevelObserver,
+	Room,
+	RoomStats,
+	RtpCodecCapability,
+} from '../types';
 import { loggers } from '../utils/logger';
 
 export class RoomManager {
@@ -10,6 +15,7 @@ export class RoomManager {
 		roomId: string,
 		worker: mediasoup.types.Worker,
 		mediaCodecs: RtpCodecCapability[],
+		onActiveSpeaker?: (roomId: string, participantIds: string[]) => void,
 	): Promise<Room> {
 		if (this.rooms.has(roomId)) {
 			return this.rooms.get(roomId)!;
@@ -21,9 +27,37 @@ export class RoomManager {
 			mediaCodecs,
 		});
 
+		const audioLevelObserver = await router.createAudioLevelObserver({
+			maxEntries: 1,
+			threshold: -70,
+			interval: 800,
+		});
+
+		if (onActiveSpeaker) {
+			audioLevelObserver.on('volumes', (volumes) => {
+				const activeSpeakerIds: string[] = [];
+
+				for (const { producer, volume } of volumes) {
+					if (volume > -70) {
+						const peer = Array.from(room.peers.values()).find((p) =>
+							Array.from(p.producers.values()).some(
+								(prod) => prod.id === producer.id,
+							),
+						);
+						if (peer && !activeSpeakerIds.includes(peer.id)) {
+							activeSpeakerIds.push(peer.id);
+						}
+					}
+				}
+
+				onActiveSpeaker(roomId, activeSpeakerIds);
+			});
+		}
+
 		const room: Room = {
 			id: roomId,
 			router,
+			audioLevelObserver,
 			peers: new Map(),
 			created: new Date(),
 		};

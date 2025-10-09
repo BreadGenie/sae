@@ -128,7 +128,12 @@ export class SocketHandlerManager {
 			let room = this.mediasoup.rooms.getRoom(roomId);
 			if (!room) {
 				loggers.socketHandler.info('Creating new room: %s', roomId);
-				room = await this.mediasoup.createRoom(roomId);
+				room = await this.mediasoup.createRoom(
+					roomId,
+					(roomId, participantIds) => {
+						this.io.to(roomId).emit('active_speaker', { participantIds });
+					},
+				);
 			} else {
 				loggers.socketHandler.info('Room %s already exists', roomId);
 			}

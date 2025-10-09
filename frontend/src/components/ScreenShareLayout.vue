@@ -31,6 +31,7 @@
 			:currentUser="currentUser"
 			:isCameraOn="isCameraOn"
 			:isMicOn="isMicOn"
+			:activeSpeakerIds="activeSpeakerIds"
 			:setLocalVideoRef="setLocalVideoRef"
 			:setRemoteVideoRef="setRemoteVideoRef"
 			class="ml-3"
@@ -78,6 +79,10 @@ const props = defineProps({
 	getParticipantName: {
 		type: Function,
 		required: true,
+	},
+	activeSpeakerIds: {
+		type: Array,
+		default: () => [],
 	},
 });
 </script>

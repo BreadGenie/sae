@@ -35,6 +35,7 @@ export function useMeetingState() {
 	const currentUser = ref({});
 	const participants = ref({});
 	const remoteVideos = ref({});
+	const activeSpeakerIds = ref([]);
 
 	// Waiting room states
 	const isWaitingForApproval = ref(false);
@@ -162,6 +163,7 @@ export function useMeetingState() {
 		currentUser,
 		participants,
 		remoteVideos,
+		activeSpeakerIds,
 		isWaitingForApproval,
 		isJoinRequestRejected,
 		waitingUsers,

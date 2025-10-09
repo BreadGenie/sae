@@ -31,6 +31,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 	const sfuManager = ref(null);
 	const screenShareVideoElements = new Map();
 	const realtimeListenersSetup = ref(false);
+	const activeSpeakerTimeout = ref(null);
 
 	// API Resources
 	const getMeetingInfo = createResource({
@@ -930,6 +931,21 @@ export function useMeetingLogic(meetingState, meetingId) {
 			onWaitingRoomUpdated: (waitingUsers) => {
 				meetingState.waitingUsers.value = waitingUsers;
 			},
+			onActiveSpeakerChanged: (participantIds) => {
+				if (activeSpeakerTimeout.value) {
+					clearTimeout(activeSpeakerTimeout.value);
+					activeSpeakerTimeout.value = null;
+				}
+
+				meetingState.activeSpeakerIds.value = participantIds;
+
+				if (participantIds.length > 0) {
+					activeSpeakerTimeout.value = setTimeout(() => {
+						meetingState.activeSpeakerIds.value = [];
+						activeSpeakerTimeout.value = null;
+					}, 1000);
+				}
+			},
 		};
 	};
 
@@ -938,6 +954,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 	 */
 	const endCall = async () => {
 		try {
+			if (activeSpeakerTimeout.value) {
+				clearTimeout(activeSpeakerTimeout.value);
+				activeSpeakerTimeout.value = null;
+			}
+
 			// Cleanup SFU manager
 			if (sfuManager.value) {
 				sfuManager.value.cleanup();
@@ -1169,6 +1190,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 	// ==================== CLEANUP ====================
 
 	onUnmounted(() => {
+		if (activeSpeakerTimeout.value) {
+			clearTimeout(activeSpeakerTimeout.value);
+			activeSpeakerTimeout.value = null;
+		}
+
 		// Cleanup SFU manager (disconnect and free resources)
 		try {
 			sfuManager.value?.cleanup?.();

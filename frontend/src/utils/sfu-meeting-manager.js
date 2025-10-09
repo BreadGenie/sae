@@ -637,6 +637,12 @@ export class SFUMeetingManager {
 				}
 			} catch (_) {}
 		});
+
+		this.sfuClient.on("active_speaker", (data) => {
+			if (this.eventHandlers.onActiveSpeakerChanged) {
+				this.eventHandlers.onActiveSpeakerChanged(data.participantIds);
+			}
+		});
 	}
 
 	registerVideoElement(participantId, element) {

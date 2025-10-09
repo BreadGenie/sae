@@ -1,5 +1,5 @@
 <template>
-	<div class="relative bg-gray-800 rounded-lg overflow-hidden min-h-0">
+	<div class="relative bg-gray-800 rounded-lg overflow-hidden min-h-0" :class="{ 'ring-2 ring-blue-400': isActiveSpeaker }">
 		<video
 			:ref="videoRef"
 			:participant-id="participant.user_id"
@@ -48,11 +48,15 @@ defineProps({
 	},
 	isVideoEnabled: {
 		type: Boolean,
-		default: false,
+		default: true,
 	},
 	isAudioEnabled: {
 		type: Boolean,
 		default: true,
+	},
+	isActiveSpeaker: {
+		type: Boolean,
+		default: false,
 	},
 	videoRef: {
 		type: Function,

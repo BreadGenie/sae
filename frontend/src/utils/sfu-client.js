@@ -353,6 +353,7 @@ class SFUClient {
 			webrtc_answer: () => {},
 			ice_candidate: () => {},
 			"chat:message": () => {},
+			active_speaker: () => {},
 		};
 
 		for (const [event, handler] of Object.entries(defaultHandlers)) {
