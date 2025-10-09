@@ -1,10 +1,5 @@
 import type * as mediasoup from 'mediasoup';
-import type {
-	AudioLevelObserver,
-	Room,
-	RoomStats,
-	RtpCodecCapability,
-} from '../types';
+import type { Room, RoomStats, RtpCodecCapability } from '../types';
 import { loggers } from '../utils/logger';
 
 export class RoomManager {

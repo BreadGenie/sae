@@ -4,7 +4,7 @@ import { computed } from "vue";
  * Composable for managing video grid layout logic
  * Handles participant display, grid sizing, and overflow grouping
  */
-export function useVideoGridLayout(participants) {
+export function useVideoGridLayout(participants, activeSpeakerIds) {
 	// Logic: cap visible tiles at 16 (4x4); extra participants are grouped
 	const displayParticipants = computed(() => {
 		const src =
@@ -24,17 +24,39 @@ export function useVideoGridLayout(participants) {
 		const total = remotes.length + 1;
 		const threshold = 16;
 
+		// Get active speaker IDs
+		const activeSpeakers = activeSpeakerIds?.value || [];
+		const activeSpeakerSet = new Set(activeSpeakers);
+
 		if (total <= threshold) {
 			return { list: remotes, hidden: [], extra: 0 };
 		}
 
 		const remoteCapacity = 14;
-		const videoOn = remotes.filter((p) => p.video_enabled);
-		const videoOff = remotes.filter((p) => !p.video_enabled);
+
+		// Separate participants by video state and active speaker status
+		const videoOnActiveSpeakers = remotes.filter(
+			(p) => p.video_enabled && activeSpeakerSet.has(p.user_id),
+		);
+		const videoOnNonSpeakers = remotes.filter(
+			(p) => p.video_enabled && !activeSpeakerSet.has(p.user_id),
+		);
+		const videoOffActiveSpeakers = remotes.filter(
+			(p) => !p.video_enabled && activeSpeakerSet.has(p.user_id),
+		);
+		const videoOffNonSpeakers = remotes.filter(
+			(p) => !p.video_enabled && !activeSpeakerSet.has(p.user_id),
+		);
+
 		const visibleRemotes = [];
 
-		// Fill video-on participants first
-		for (const p of videoOn) {
+		// Priority order:
+		// 1. Active speakers with video ON
+		// 2. Non-active speakers with video ON
+		// 3. Active speakers with video OFF (ensure they're visible)
+		// 4. Non-active speakers with video OFF
+
+		for (const p of videoOnActiveSpeakers) {
 			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			} else {
@@ -42,14 +64,27 @@ export function useVideoGridLayout(participants) {
 			}
 		}
 
-		// If capacity not filled, add video-off participants
-		if (visibleRemotes.length < remoteCapacity) {
-			for (const p of videoOff) {
-				if (visibleRemotes.length < remoteCapacity) {
-					visibleRemotes.push(p);
-				} else {
-					break;
-				}
+		for (const p of videoOnNonSpeakers) {
+			if (visibleRemotes.length < remoteCapacity) {
+				visibleRemotes.push(p);
+			} else {
+				break;
+			}
+		}
+
+		for (const p of videoOffActiveSpeakers) {
+			if (visibleRemotes.length < remoteCapacity) {
+				visibleRemotes.push(p);
+			} else {
+				break;
+			}
+		}
+
+		for (const p of videoOffNonSpeakers) {
+			if (visibleRemotes.length < remoteCapacity) {
+				visibleRemotes.push(p);
+			} else {
+				break;
 			}
 		}
 

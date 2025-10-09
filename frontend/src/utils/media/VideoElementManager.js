@@ -44,10 +44,6 @@ export class VideoElementManager {
 
 		if (this.deferredAttachments.has(participantId)) {
 			const { stream, isLocal } = this.deferredAttachments.get(participantId);
-			console.log("📺 Attaching deferred stream during registration", {
-				participantId,
-				streamId: stream?.id,
-			});
 			this.attachStream(participantId, stream, isLocal);
 			this.deferredAttachments.delete(participantId);
 		}
@@ -55,6 +51,12 @@ export class VideoElementManager {
 
 	async attachStream(participantId, stream, isLocal = false) {
 		const videoElement = this.videoElements.get(participantId);
+		const audioTracks = stream.getAudioTracks();
+
+		// Always attach audio for remote participants, even if no video element exists
+		if (!isLocal && audioTracks.length > 0) {
+			this.attachAudioStream(participantId, audioTracks);
+		}
 
 		if (!videoElement && !isLocal) {
 			this.deferredAttachments.set(participantId, { stream, isLocal });
@@ -63,7 +65,6 @@ export class VideoElementManager {
 
 		if (videoElement) {
 			const videoTracks = stream.getVideoTracks();
-			const audioTracks = stream.getAudioTracks();
 
 			if (videoTracks.length > 0) {
 				const newVideoTrack = videoTracks[0];
@@ -95,11 +96,6 @@ export class VideoElementManager {
 				}
 			} else if (!isLocal) {
 				videoElement.srcObject = null;
-			}
-
-			// attach audio separately for remote participants
-			if (!isLocal && audioTracks.length > 0) {
-				this.attachAudioStream(participantId, audioTracks);
 			}
 		}
 	}

@@ -136,6 +136,7 @@ const userInitials = computed(() => {
 });
 
 const userAvatar = computed(() => props.currentUser?.avatar || "");
+const activeSpeakerIds = computed(() => props.activeSpeakerIds);
 
 const {
 	sidebarDisplay,
@@ -144,7 +145,7 @@ const {
 	singleTileStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useScreenShareSidebar(props.participants);
+} = useScreenShareSidebar(props.participants, activeSpeakerIds);
 </script>
 
 <style scoped>

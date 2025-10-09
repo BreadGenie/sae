@@ -4,7 +4,7 @@ import { computed } from "vue";
  * Composable for managing screen share sidebar layout
  * Handles participant display in sidebar during screen sharing
  */
-export function useScreenShareSidebar(participants) {
+export function useScreenShareSidebar(participants, activeSpeakerIds = []) {
 	const sidebarDisplay = computed(() => {
 		const participantData = participants.value || participants;
 
@@ -45,17 +45,59 @@ export function useScreenShareSidebar(participants) {
 			return { list: remotes, hidden: [], extra: 0 };
 		}
 
-		// Prioritize participants with video enabled so they are never grouped
-		const videoOn = remotes.filter((p) => p.video_enabled);
-		const videoOff = remotes.filter((p) => !p.video_enabled);
+		// Get active speaker IDs
+		const activeSpeakers = activeSpeakerIds?.value || [];
+		const activeSpeakerSet = new Set(activeSpeakers);
+
+		// Separate participants by video state and active speaker status
+		const videoOnActiveSpeakers = remotes.filter(
+			(p) => p.video_enabled && activeSpeakerSet.has(p.user_id),
+		);
+		const videoOnNonSpeakers = remotes.filter(
+			(p) => p.video_enabled && !activeSpeakerSet.has(p.user_id),
+		);
+		const videoOffActiveSpeakers = remotes.filter(
+			(p) => !p.video_enabled && activeSpeakerSet.has(p.user_id),
+		);
+		const videoOffNonSpeakers = remotes.filter(
+			(p) => !p.video_enabled && !activeSpeakerSet.has(p.user_id),
+		);
 
 		const baseCapacity = 6;
-		const capacity = Math.max(baseCapacity, videoOn.length);
-		const visibleRemotes = [
-			...videoOn,
-			...videoOff.slice(0, Math.max(0, capacity - videoOn.length)),
-		];
-		const hidden = videoOff.slice(Math.max(0, capacity - videoOn.length));
+		const visibleRemotes = [];
+
+		// Priority order:
+		// 1. Active speakers with video ON
+		// 2. Non-active speakers with video ON
+		// 3. Active speakers with video OFF (ensure they're visible)
+		// 4. Non-active speakers with video OFF
+
+		for (const p of videoOnActiveSpeakers) {
+			if (visibleRemotes.length < baseCapacity) {
+				visibleRemotes.push(p);
+			}
+		}
+
+		for (const p of videoOnNonSpeakers) {
+			if (visibleRemotes.length < baseCapacity) {
+				visibleRemotes.push(p);
+			}
+		}
+
+		for (const p of videoOffActiveSpeakers) {
+			if (visibleRemotes.length < baseCapacity) {
+				visibleRemotes.push(p);
+			}
+		}
+
+		for (const p of videoOffNonSpeakers) {
+			if (visibleRemotes.length < baseCapacity) {
+				visibleRemotes.push(p);
+			}
+		}
+
+		const visibleIds = new Set(visibleRemotes.map((p) => p.user_id));
+		const hidden = remotes.filter((p) => !visibleIds.has(p.user_id));
 
 		return { list: visibleRemotes, hidden, extra: hidden.length };
 	});

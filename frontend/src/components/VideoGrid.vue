@@ -42,7 +42,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useVideoGridLayout } from "../composables/useVideoGridLayout.js";
 import { getInitials } from "../utils/text";
 import GroupTile from "./GroupTile.vue";
@@ -111,11 +111,14 @@ const localParticipant = computed(() => {
 	};
 });
 
+// to ensure reactivity, else the grid doesn't update when activeSpeakerIds changes
+const activeSpeakerIdsComputed = computed(() => props.activeSpeakerIds);
+
 const {
 	displayParticipants,
 	gridClass,
 	gridStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useVideoGridLayout(props.participants);
+} = useVideoGridLayout(props.participants, activeSpeakerIdsComputed);
 </script>
