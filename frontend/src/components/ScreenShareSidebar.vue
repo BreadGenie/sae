@@ -69,21 +69,16 @@
 		</div>
 
 		<!-- Grouping tile -->
-		<Tooltip
+		<div
 			v-if="sidebarDisplay.extra > 0"
 			key="sidebar-group"
-			:label="hiddenParticipantsTooltip"
-			:text="hiddenParticipantsTooltip"
-			placement="top"
-		>
-			<div
+			:title="hiddenParticipantsTooltip"
 				class="relative w-full bg-gray-800/70 rounded overflow-hidden flex items-center justify-center cursor-pointer"
-			>
-				<div class="text-xs text-white text-center px-2 leading-snug">
-					and {{ sidebarDisplay.extra }} others
-				</div>
+		>
+			<div class="text-xs text-white text-center px-2 leading-snug">
+				and {{ sidebarDisplay.extra }} others
 			</div>
-		</Tooltip>
+		</div>
 	</TransitionGroup>
 </template>
 
