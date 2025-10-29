@@ -1,7 +1,30 @@
+import fs from "node:fs";
 import path from "node:path";
+import { basename } from "node:path";
 import vue from "@vitejs/plugin-vue";
 import frappeui from "frappe-ui/vite";
 import { defineConfig } from "vite";
+
+/**
+ * MediaPipe workaround for Vite/Rollup bundling issues
+ * MediaPipe packages are obfuscated and Rollup can't properly analyze them
+ * This adds an explicit CommonJS export so Rollup can understand it
+ * See: https://github.com/vitejs/vite/issues/4680
+ * See: https://github.com/tensorflow/tfjs/issues/7165
+ */
+function mediapipe_workaround() {
+	return {
+		name: "mediapipe_workaround",
+		load(id) {
+			if (basename(id) === "selfie_segmentation.js") {
+				let code = fs.readFileSync(id, "utf-8");
+				code += "exports.SelfieSegmentation = SelfieSegmentation;";
+				return { code };
+			}
+			return null;
+		},
+	};
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -24,6 +47,9 @@ export default defineConfig({
 		emptyOutDir: true,
 		target: "es2015",
 		sourcemap: true,
+		rollupOptions: {
+			plugins: [mediapipe_workaround()],
+		},
 	},
 	resolve: {
 		alias: {
