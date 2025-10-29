@@ -40,17 +40,16 @@ declare module "vue" {
 			"~icons/lucide/alert-triangle",
 		)["default"];
 		LucideArrowLeft: typeof import("~icons/lucide/arrow-left")["default"];
-		LucideCamera: typeof import("~icons/lucide/camera")["default"];
 		LucideCheck: typeof import("~icons/lucide/check")["default"];
-		LucideChevronDown: typeof import("~icons/lucide/chevron-down")["default"];
-		LucideCircle: typeof import("~icons/lucide/circle")["default"];
 		LucideCircleUserRound: typeof import(
 			"~icons/lucide/circle-user-round",
 		)["default"];
 		LucideClock: typeof import("~icons/lucide/clock")["default"];
-		LucideCode: typeof import("~icons/lucide/code")["default"];
 		LucideInfo: typeof import("~icons/lucide/info")["default"];
 		LucideLoader: typeof import("~icons/lucide/loader")["default"];
+		LucideMessageCircle: typeof import(
+			"~icons/lucide/message-circle",
+		)["default"];
 		LucideMessageSquare: typeof import(
 			"~icons/lucide/message-square",
 		)["default"];
@@ -62,7 +61,6 @@ declare module "vue" {
 		)["default"];
 		LucideMic: typeof import("~icons/lucide/mic")["default"];
 		LucideMicOff: typeof import("~icons/lucide/mic-off")["default"];
-		LucideMinus: typeof import("~icons/lucide/minus")["default"];
 		LucideMonitorPause: typeof import("~icons/lucide/monitor-pause")["default"];
 		LucideMonitorUp: typeof import("~icons/lucide/monitor-up")["default"];
 		LucideMoreHorizontal: typeof import(
@@ -74,7 +72,6 @@ declare module "vue" {
 		LucidePlus: typeof import("~icons/lucide/plus")["default"];
 		LucideRefreshCw: typeof import("~icons/lucide/refresh-cw")["default"];
 		LucideSettings: typeof import("~icons/lucide/settings")["default"];
-		LucideSpeaker: typeof import("~icons/lucide/speaker")["default"];
 		LucideUserCheck: typeof import("~icons/lucide/user-check")["default"];
 		LucideUserMinus: typeof import("~icons/lucide/user-minus")["default"];
 		LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"];
