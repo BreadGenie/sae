@@ -11,6 +11,9 @@ declare module "vue" {
 		AudioIndicator: typeof import(
 			"./src/components/AudioIndicator.vue",
 		)["default"];
+		BackgroundSettingsTab: typeof import(
+			"./src/components/BackgroundSettingsTab.vue",
+		)["default"];
 		ChatNotification: typeof import(
 			"./src/components/ChatNotification.vue",
 		)["default"];
@@ -21,8 +24,8 @@ declare module "vue" {
 		ClickToCopyField: typeof import(
 			"./src/components/ClickToCopyField.vue",
 		)["default"];
-		DeviceSettingsDialog: typeof import(
-			"./src/components/DeviceSettingsDialog.vue",
+		DeviceSettingsTab: typeof import(
+			"./src/components/DeviceSettingsTab.vue",
 		)["default"];
 		EmojiPicker: typeof import("./src/components/EmojiPicker.vue")["default"];
 		FloatingControls: typeof import(
@@ -33,12 +36,21 @@ declare module "vue" {
 			"./src/components/JoinRequestNotifications.vue",
 		)["default"];
 		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
+		LucideAlertTriangle: typeof import(
+			"~icons/lucide/alert-triangle",
+		)["default"];
 		LucideArrowLeft: typeof import("~icons/lucide/arrow-left")["default"];
 		LucideCamera: typeof import("~icons/lucide/camera")["default"];
 		LucideCheck: typeof import("~icons/lucide/check")["default"];
+		LucideChevronDown: typeof import("~icons/lucide/chevron-down")["default"];
+		LucideCircle: typeof import("~icons/lucide/circle")["default"];
+		LucideCircleUserRound: typeof import(
+			"~icons/lucide/circle-user-round",
+		)["default"];
 		LucideClock: typeof import("~icons/lucide/clock")["default"];
-		LucideCopy: typeof import("~icons/lucide/copy")["default"];
+		LucideCode: typeof import("~icons/lucide/code")["default"];
 		LucideInfo: typeof import("~icons/lucide/info")["default"];
+		LucideLoader: typeof import("~icons/lucide/loader")["default"];
 		LucideMessageSquare: typeof import(
 			"~icons/lucide/message-square",
 		)["default"];
@@ -50,6 +62,7 @@ declare module "vue" {
 		)["default"];
 		LucideMic: typeof import("~icons/lucide/mic")["default"];
 		LucideMicOff: typeof import("~icons/lucide/mic-off")["default"];
+		LucideMinus: typeof import("~icons/lucide/minus")["default"];
 		LucideMonitorPause: typeof import("~icons/lucide/monitor-pause")["default"];
 		LucideMonitorUp: typeof import("~icons/lucide/monitor-up")["default"];
 		LucideMoreHorizontal: typeof import(
@@ -68,8 +81,6 @@ declare module "vue" {
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
-		LucideVolume2: typeof import("~icons/lucide/volume2")["default"];
-		LucideVolumeX: typeof import("~icons/lucide/volume-x")["default"];
 		LucideX: typeof import("~icons/lucide/x")["default"];
 		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
 		MeetingAvatar: typeof import(
@@ -92,6 +103,9 @@ declare module "vue" {
 		)["default"];
 		ScreenShareSidebar: typeof import(
 			"./src/components/ScreenShareSidebar.vue",
+		)["default"];
+		SettingsDialog: typeof import(
+			"./src/components/SettingsDialog.vue",
 		)["default"];
 		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
 		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];

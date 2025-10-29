@@ -103,15 +103,15 @@
 					/>
 				</div>
 
-				<!-- Device Settings -->
+				<!-- Settings -->
 				<Button
 					v-if="isPreview && (cameraPermissionGranted || microphonePermissionGranted)"
-					@click="showDeviceSettingsDialog = true"
+					@click="showSettingsDialog = true"
 					variant="solid"
 					theme="gray"
 					size="2xl"
 					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
-					title="Device Settings"
+					title="Settings"
 				>
 					<template #icon>
 						<lucide-settings class="w-5 h-5 text-white" />
@@ -166,8 +166,8 @@
 		:meetingTitle="meetingTitle"
 	/>
 
-	<DeviceSettingsDialog
-		v-model="showDeviceSettingsDialog"
+	<SettingsDialog
+		v-model="showSettingsDialog"
 		@device-changed="$emit('device-changed', $event)"
 	/>
 </template>
@@ -175,8 +175,8 @@
 <script setup>
 import { Button, Dropdown } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
-import DeviceSettingsDialog from "./DeviceSettingsDialog.vue";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
+import SettingsDialog from "./SettingsDialog.vue";
 
 const props = defineProps({
 	isChatOpen: {
@@ -235,11 +235,11 @@ const emit = defineEmits([
 const moreOptions = computed(() => [
 	{
 		icon: "settings",
-		label: "Device settings",
+		label: "Settings",
 		condition: () =>
 			props.cameraPermissionGranted || props.microphonePermissionGranted,
 		onClick: () => {
-			showDeviceSettingsDialog.value = true;
+			showSettingsDialog.value = true;
 			resetHideTimer();
 		},
 	},
@@ -258,7 +258,7 @@ const isHovering = ref(false);
 const isDropdownOpen = ref(false);
 const dropdownContainer = ref(null);
 const showMeetingInfoDialog = ref(false);
-const showDeviceSettingsDialog = ref(false);
+const showSettingsDialog = ref(false);
 let hideTimeout = null;
 
 const showControls = () => {

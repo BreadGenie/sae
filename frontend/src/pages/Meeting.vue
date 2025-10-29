@@ -159,6 +159,7 @@ import ScreenShareLayout from "../components/ScreenShareLayout.vue";
 // Components
 import VideoGrid from "../components/VideoGrid.vue";
 
+import { provideMeetingContext } from "../composables/useMeetingContext.js";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
 // Composables and utilities
 import { useMeetingState } from "../composables/useMeetingState.js";
@@ -196,7 +197,16 @@ const {
 	handleKeyDown,
 	sfuManager,
 	applySpeakerDevice,
+	processedStream,
+	applyBackgroundEffectsToLocalStream,
 } = useMeetingLogic(meetingState, meetingId.value);
+
+// Provide meeting context for child components
+provideMeetingContext({
+	processedStream,
+	isInMeeting: computed(() => true),
+	onBackgroundEffectsChanged: applyBackgroundEffectsToLocalStream,
+});
 
 // Computed properties
 const isConnecting = computed(() => meetingState.isConnecting.value);

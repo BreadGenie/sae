@@ -42,10 +42,23 @@ import {
 	setCameraEnabled,
 	setMicEnabled,
 } from "@/data/mediaPreferences.js";
-import { Button } from "frappe-ui";
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
+import { useBackgroundEffects } from "../composables/useBackgroundEffects";
+import {
+	backgroundBlurEnabled,
+	backgroundImageEnabled,
+	blurIntensity,
+	selectedBackgroundImage,
+} from "../data/backgroundEffects";
 import FloatingControls from "./FloatingControls.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
+
+const props = defineProps({
+	cameraDeviceId: {
+		type: String,
+		default: null,
+	},
+});
 
 const videoElement = ref(null);
 const isMuted = ref(!micEnabled.value);
@@ -61,31 +74,107 @@ const userAvatar = ref("");
 // When preview is shown in different layouts this helps scale placeholder
 const videoPreviewTiles = 1;
 
-function rebuildStream() {
+// Background effects
+const { applyBackgroundEffects, stopProcessing } = useBackgroundEffects();
+let currentSession = null;
+let currentSourceTrackId = null;
+
+async function rebuildStream() {
 	const tracks = [];
 	if (videoTrack.value) tracks.push(videoTrack.value);
 	if (audioTrack.value) tracks.push(audioTrack.value);
-	if (tracks.length) {
-		composedStream.value = new MediaStream(tracks);
+	if (!tracks.length) {
+		stopProcessing();
+		if (currentSession) {
+			currentSession.cleanup();
+			currentSession = null;
+			currentSourceTrackId = null;
+		}
+		composedStream.value = null;
 		if (videoElement.value) {
-			// Re-attach only if changed
+			videoElement.value.srcObject = null;
+		}
+		return;
+	}
+
+	const shouldUseBackground =
+		(backgroundBlurEnabled.value || backgroundImageEnabled.value) &&
+		videoTrack.value;
+	const blurOptions = {
+		backgroundBlurEnabled: backgroundBlurEnabled.value,
+		backgroundImageEnabled: backgroundImageEnabled.value,
+		selectedBackgroundImage: selectedBackgroundImage.value || null,
+		blurIntensity: blurIntensity.value,
+	};
+
+	if (shouldUseBackground && videoTrack.value) {
+		const sourceTrackId = videoTrack.value.id;
+
+		if (currentSession && currentSourceTrackId === sourceTrackId) {
+			try {
+				await currentSession.updateOptions(blurOptions);
+			} catch (error) {
+				console.error("Failed to update existing background session:", error);
+				stopProcessing();
+				currentSession.cleanup();
+				currentSession = null;
+				currentSourceTrackId = null;
+			}
+		}
+
+		if (!currentSession) {
+			stopProcessing();
+
+			const originalStream = new MediaStream(tracks);
+
+			try {
+				currentSession = await applyBackgroundEffects(
+					originalStream,
+					blurOptions,
+				);
+				currentSourceTrackId = sourceTrackId;
+				composedStream.value = currentSession.stream;
+			} catch (error) {
+				console.error("Failed to apply background effects:", error);
+				currentSession = null;
+				currentSourceTrackId = null;
+				composedStream.value = originalStream;
+			}
+		} else {
+			composedStream.value = currentSession.stream;
+		}
+	} else {
+		stopProcessing();
+		if (currentSession) {
+			currentSession.cleanup();
+			currentSession = null;
+		}
+		currentSourceTrackId = videoTrack.value ? videoTrack.value.id : null;
+		const originalStream = new MediaStream(tracks);
+		composedStream.value = originalStream;
+	}
+
+	if (videoElement.value) {
+		if (composedStream.value) {
 			if (videoElement.value.srcObject !== composedStream.value) {
 				videoElement.value.srcObject = composedStream.value;
 			}
+		} else {
+			videoElement.value.srcObject = null;
 		}
-	} else {
-		composedStream.value = null;
-		if (videoElement.value) videoElement.value.srcObject = null;
 	}
 }
 
 async function acquire(kind) {
 	try {
 		if (kind === "video" && !videoTrack.value) {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				video: true,
+			const constraints = {
+				video: props.cameraDeviceId
+					? { deviceId: { exact: props.cameraDeviceId } }
+					: true,
 				audio: false,
-			});
+			};
+			const stream = await navigator.mediaDevices.getUserMedia(constraints);
 			videoTrack.value = stream.getVideoTracks()[0] || null;
 			if (videoTrack.value)
 				videoTrack.value.onended = () => {
@@ -115,10 +204,13 @@ async function acquire(kind) {
 
 async function acquireBoth() {
 	try {
-		const stream = await navigator.mediaDevices.getUserMedia({
+		const constraints = {
 			audio: true,
-			video: true,
-		});
+			video: props.cameraDeviceId
+				? { deviceId: { exact: props.cameraDeviceId } }
+				: true,
+		};
+		const stream = await navigator.mediaDevices.getUserMedia(constraints);
 		videoTrack.value = stream.getVideoTracks()[0] || null;
 		audioTrack.value = stream.getAudioTracks()[0] || null;
 		if (videoTrack.value)
@@ -202,6 +294,38 @@ onMounted(() => {
 onUnmounted(() => {
 	stopTrack("video");
 	stopTrack("audio");
+	if (currentSession) {
+		currentSession.cleanup();
+		currentSession = null;
+	}
+	stopProcessing();
 	window.removeEventListener("keydown", handleKeyDown);
 });
+
+// Watch for camera device changes
+watch(
+	() => props.cameraDeviceId,
+	(newDeviceId, oldDeviceId) => {
+		if (newDeviceId !== oldDeviceId && videoTrack.value) {
+			// Stop current video track
+			stopTrack("video");
+			// Acquire new video track with new device
+			if (!isVideoOff.value) {
+				acquire("video");
+			}
+		}
+	},
+);
+
+watch(
+	[
+		backgroundBlurEnabled,
+		backgroundImageEnabled,
+		selectedBackgroundImage,
+		blurIntensity,
+	],
+	() => {
+		rebuildStream();
+	},
+);
 </script>

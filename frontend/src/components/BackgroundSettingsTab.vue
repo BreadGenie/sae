@@ -1,0 +1,524 @@
+<template>
+	<div class="space-y-6 mt-6">
+		<div class="">
+			<p class="text-sm text-gray-600">
+				Customize your video background with blur effects or virtual backgrounds
+			</p>
+		</div>
+
+		<!-- Video Preview -->
+		<div class="flex justify-center mb-4">
+			<div class="w-full h-auto aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-sm relative">
+				<video
+					ref="videoPreviewRef"
+					autoplay
+					muted
+					playsinline
+					class="w-full h-full object-cover transform scale-x-[-1]"
+				/>
+				<div v-if="!previewStream"
+					class="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+					<div v-if="isLoadingPreview" class="text-white text-center">
+						<lucide-loader class="mx-auto mb-2 w-8 h-8 animate-spin" />
+						<p class="text-sm">
+							Loading preview...
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="space-y-4">
+			<!-- Image picker -->
+			<input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="handleFileSelect" />
+
+			<!-- Background Options -->
+			<div class="grid grid-cols-4 gap-3">
+				<div v-for="option in allBackgroundOptions" :key="option.name"
+					@click="handleBackgroundOptionClick(option)"
+					class="relative cursor-pointer rounded-lg border overflow-hidden transition-all duration-200 hover:shadow-sm group"
+					:class="[
+						selectedBackgroundOption === option.name
+							? 'border-gray-900 ring-gray-300'
+							: 'border-gray-200 hover:border-gray-300',
+					]">
+					<div class="aspect-video bg-gray-100 relative">
+						<!-- For blur option -->
+						<div v-if="option.type === 'blur'" class="absolute inset-0 flex items-center justify-center"
+							:class="option.name === 'blur-low'
+								? 'bg-[radial-gradient(circle_at_center,theme(colors.blue.200),theme(colors.blue.300),theme(colors.blue.500))]'
+								: 'bg-[radial-gradient(circle_at_center,theme(colors.blue.300),theme(colors.blue.400),theme(colors.blue.600))]'">
+							<lucide-circle-user-round class="w-8 h-8 text-gray-50" />
+						</div>
+
+						<!-- For add custom option -->
+						<div v-else-if="option.isAddButton"
+							class="absolute inset-0 bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
+							<lucide-plus class="w-8 h-8 text-gray-400" />
+						</div>
+
+						<!-- For image options -->
+						<img v-else-if="option.url" :src="option.url" :alt="option.label"
+							class="w-full h-full object-cover" @error="handleImageError" />
+
+						<!-- For none option -->
+						<div v-else class="absolute inset-0 bg-gray-50 flex items-center justify-center">
+							<lucide-circle-user-round class="w-8 h-8 text-gray-400" />
+						</div>
+
+						<!-- Selected indicator -->
+						<div v-if="selectedBackgroundOption === option.name"
+							class="absolute top-1 right-1 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
+							<lucide-check class="w-3 h-3 text-white" />
+						</div>
+
+						<!-- Delete button for custom images -->
+						<div v-if="option.isCustom" @click.stop="handleDeleteCustomImage(option.name)"
+							class="absolute top-1 right-1 w-5 h-5 bg-gray-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-gray-600">
+							<lucide-x class="w-3 h-3 text-white" />
+						</div>
+					</div>
+
+					<!-- Label -->
+					<div class="p-2 bg-white">
+						<p class="text-sm font-medium text-center text-gray-900 truncate">
+							{{ option.label }}
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+			<div class="flex">
+				<div class="flex-shrink-0">
+					<lucide-alert-triangle class="h-5 w-5 text-yellow-400" />
+				</div>
+				<div class="ml-3">
+					<p class="text-sm text-yellow-800">
+						<strong>Performance Warning:</strong> Enabling background effects may slow down your computer,
+						especially on older devices.
+					</p>
+				</div>
+			</div>
+		</div>
+	</div>
+</template>
+
+<script setup>
+import { toast } from "frappe-ui";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useBackgroundEffects } from "../composables/useBackgroundEffects";
+import { useMeetingContext } from "../composables/useMeetingContext.js";
+import {
+	addCustomBackgroundImage,
+	allBackgroundOptions,
+	availableBackgroundImages,
+	backgroundBlurEnabled,
+	backgroundImageEnabled,
+	blurIntensity,
+	customBackgroundImages,
+	removeCustomBackgroundImage,
+	selectedBackgroundImage,
+	setBackgroundBlurEnabled,
+	setBackgroundImageEnabled,
+	setBlurIntensity,
+	setSelectedBackgroundImage,
+} from "../data/backgroundEffects";
+import { selectedCameraId } from "../data/mediaPreferences.js";
+
+const meetingContext = useMeetingContext();
+const isInMeeting = computed(() => !!meetingContext?.isInMeeting?.value);
+const processedStream = computed(
+	() => meetingContext?.processedStream?.value || null,
+);
+const onBackgroundEffectsChanged = meetingContext?.onBackgroundEffectsChanged;
+
+// Video preview
+const videoPreviewRef = ref(null);
+const previewStream = ref(null);
+const isLoadingPreview = ref(false);
+const fileInputRef = ref(null);
+let previewSession = null;
+
+// Background effects
+const backgroundBlurEnabledLocal = ref(backgroundBlurEnabled.value);
+const backgroundImageEnabledLocal = ref(backgroundImageEnabled.value);
+const selectedBackgroundImageLocal = ref(selectedBackgroundImage.value);
+const blurIntensityLocal = ref(blurIntensity.value);
+
+// Background effects composable
+const { applyBackgroundEffects, stopProcessing: stopBackgroundProcessing } =
+	useBackgroundEffects();
+
+const backgroundImageOptions = computed(() =>
+	availableBackgroundImages.map((image) => ({
+		label: image.label,
+		value: image.name,
+	})),
+);
+
+// Selected background option
+const selectedBackgroundOption = computed({
+	get() {
+		if (backgroundBlurEnabledLocal.value) {
+			return blurIntensityLocal.value <= 11 ? "blur-low" : "blur-high";
+		}
+		if (
+			backgroundImageEnabledLocal.value &&
+			selectedBackgroundImageLocal.value
+		) {
+			return (
+				selectedBackgroundImageLocal.value.value ||
+				selectedBackgroundImageLocal.value
+			);
+		}
+		return "none";
+	},
+	set(value) {
+		if (value === "none") {
+			handleBackgroundBlurToggle(false);
+			handleBackgroundImageToggle(false);
+		} else if (value === "blur-low") {
+			blurIntensityLocal.value = 9;
+			setBlurIntensity(9);
+			handleBackgroundBlurToggle(true);
+		} else if (value === "blur-high") {
+			blurIntensityLocal.value = 20;
+			setBlurIntensity(20);
+			handleBackgroundBlurToggle(true);
+		} else {
+			// Select background image (predefined or custom)
+			const predefinedImage = backgroundImageOptions.value.find(
+				(opt) => opt.value === value,
+			);
+			if (predefinedImage) {
+				selectedBackgroundImageLocal.value = predefinedImage;
+				setSelectedBackgroundImage(predefinedImage.value);
+				handleBackgroundImageToggle(true);
+			} else {
+				const customImage = customBackgroundImages.value.find(
+					(img) => img.name === value,
+				);
+				if (customImage) {
+					selectedBackgroundImageLocal.value = {
+						label: customImage.label,
+						value: customImage.name,
+					};
+					setSelectedBackgroundImage(customImage.name);
+					handleBackgroundImageToggle(true);
+				}
+			}
+		}
+	},
+});
+
+function handleBackgroundOptionClick(option) {
+	if (option.isAddButton) {
+		fileInputRef.value?.click();
+	} else {
+		selectedBackgroundOption.value = option.name;
+	}
+}
+
+async function handleFileSelect(event) {
+	const file = event.target.files[0];
+	if (!file) return;
+
+	try {
+		const customImage = await addCustomBackgroundImage(file);
+		selectedBackgroundOption.value = customImage.name;
+		toast.success(`Added custom background: ${file.name}`);
+	} catch (error) {
+		console.error("Failed to add custom image:", error);
+		toast.error(error.message || "Failed to add custom background image");
+	}
+
+	event.target.value = "";
+}
+
+async function handleDeleteCustomImage(imageId) {
+	try {
+		await removeCustomBackgroundImage(imageId);
+		toast.success("Custom background removed");
+	} catch (error) {
+		console.error("Failed to remove custom image:", error);
+		toast.error("Failed to remove custom background");
+	}
+}
+
+async function startVideoPreview(deviceId) {
+	try {
+		isLoadingPreview.value = true;
+
+		// If in a meeting, don't create a new stream
+		// Reuse processedStream to avoid breaking
+		if (isInMeeting.value && processedStream.value) {
+			previewStream.value = processedStream.value;
+			if (videoPreviewRef.value) {
+				videoPreviewRef.value.srcObject = previewStream.value;
+			}
+			isLoadingPreview.value = false;
+			return;
+		}
+
+		// Stop any existing processing before creating a new preview session
+		stopBackgroundProcessing();
+
+		if (previewSession) {
+			previewSession.cleanup();
+			previewSession = null;
+		}
+
+		if (previewStream.value) {
+			for (const track of previewStream.value.getTracks()) {
+				track.stop();
+			}
+		}
+
+		const constraints = {
+			video: deviceId ? { deviceId: { exact: deviceId } } : true,
+			audio: false,
+		};
+
+		const rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+		const hasBackgroundEffects =
+			backgroundBlurEnabledLocal.value || backgroundImageEnabledLocal.value;
+
+		if (hasBackgroundEffects) {
+			try {
+				previewSession = await applyBackgroundEffects(rawStream, {
+					backgroundBlurEnabled: backgroundBlurEnabledLocal.value,
+					backgroundImageEnabled: backgroundImageEnabledLocal.value,
+					selectedBackgroundImage:
+						selectedBackgroundImageLocal.value?.value ||
+						selectedBackgroundImageLocal.value ||
+						null,
+					blurIntensity: blurIntensityLocal.value,
+				});
+				previewStream.value = previewSession.stream;
+			} catch (error) {
+				console.error("Failed to apply background effects to preview:", error);
+				previewSession = null;
+				previewStream.value = rawStream;
+			}
+		} else {
+			previewStream.value = rawStream;
+		}
+
+		if (videoPreviewRef.value) {
+			videoPreviewRef.value.srcObject = previewStream.value;
+		}
+
+		isLoadingPreview.value = false;
+	} catch (error) {
+		console.error("Failed to start video preview:", error);
+		previewStream.value = null;
+		previewSession = null;
+		isLoadingPreview.value = false;
+	}
+}
+
+function stopVideoPreview() {
+	isLoadingPreview.value = false;
+	stopBackgroundProcessing();
+
+	if (previewSession) {
+		previewSession.cleanup();
+		previewSession = null;
+	}
+
+	if (previewStream.value) {
+		for (const track of previewStream.value.getTracks()) {
+			track.stop();
+		}
+		previewStream.value = null;
+	}
+
+	if (videoPreviewRef.value) {
+		videoPreviewRef.value.srcObject = null;
+	}
+}
+
+async function applyPreviewOptions() {
+	// the meeting logic will handle it
+	// via the localStorage watcher in useMeetingLogic
+	if (isInMeeting.value) {
+		return;
+	}
+
+	if (!previewSession || typeof previewSession.updateOptions !== "function") {
+		if (selectedCameraId.value) {
+			await startVideoPreview(selectedCameraId.value);
+		}
+		return;
+	}
+
+	const selectedImageValue =
+		selectedBackgroundImageLocal.value?.value ||
+		selectedBackgroundImageLocal.value ||
+		null;
+
+	try {
+		await previewSession.updateOptions({
+			backgroundBlurEnabled: backgroundBlurEnabledLocal.value,
+			backgroundImageEnabled: backgroundImageEnabledLocal.value,
+			selectedBackgroundImage: selectedImageValue,
+			blurIntensity: blurIntensityLocal.value,
+		});
+	} catch (error) {
+		console.error("Failed to update preview background options:", error);
+		if (selectedCameraId.value) {
+			await startVideoPreview(selectedCameraId.value);
+		}
+	}
+}
+
+function handleImageError(event) {
+	// Replace broken image with a placeholder
+	event.target.style.display = "none";
+	const parent = event.target.parentElement;
+	if (parent) {
+		const placeholder =
+			parent.querySelector(".image-placeholder") ||
+			document.createElement("div");
+		placeholder.className =
+			"image-placeholder absolute inset-0 bg-gray-200 flex items-center justify-center";
+		placeholder.innerHTML =
+			'<svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>';
+		if (!parent.contains(placeholder)) {
+			parent.appendChild(placeholder);
+		}
+	}
+}
+
+function handleBackgroundBlurToggle(enabled) {
+	backgroundBlurEnabledLocal.value = enabled;
+
+	if (enabled && backgroundImageEnabledLocal.value) {
+		backgroundImageEnabledLocal.value = false;
+		setBackgroundImageEnabled(false);
+	}
+
+	setBackgroundBlurEnabled(enabled);
+}
+
+function handleBackgroundImageToggle(enabled) {
+	backgroundImageEnabledLocal.value = enabled;
+
+	if (enabled && backgroundBlurEnabledLocal.value) {
+		backgroundBlurEnabledLocal.value = false;
+		setBackgroundBlurEnabled(false);
+	}
+
+	setBackgroundImageEnabled(enabled);
+
+	// Auto-select first image if enabling and none selected
+	if (
+		enabled &&
+		!selectedBackgroundImageLocal.value &&
+		availableBackgroundImages.length > 0
+	) {
+		const firstImage = availableBackgroundImages[0];
+		const firstOption = backgroundImageOptions.value.find(
+			(option) => option.value === firstImage.name,
+		);
+		selectedBackgroundImageLocal.value = firstOption || null;
+		setSelectedBackgroundImage(firstImage.name);
+	}
+}
+
+// Watch for background effects changes to update preview
+watch(
+	[
+		backgroundBlurEnabledLocal,
+		backgroundImageEnabledLocal,
+		selectedBackgroundImageLocal,
+		blurIntensityLocal,
+	],
+	() => {
+		if (isLoadingPreview.value) {
+			return;
+		}
+
+		if (isInMeeting.value && onBackgroundEffectsChanged) {
+			onBackgroundEffectsChanged();
+		} else {
+			void applyPreviewOptions();
+		}
+	},
+);
+
+watch(backgroundBlurEnabled, (newVal) => {
+	backgroundBlurEnabledLocal.value = newVal;
+});
+
+watch(backgroundImageEnabled, (newVal) => {
+	backgroundImageEnabledLocal.value = newVal;
+});
+
+watch(selectedBackgroundImage, (newVal) => {
+	// for autocomplete
+	const matchingOption = backgroundImageOptions.value.find(
+		(option) => option.value === newVal,
+	);
+
+	if (matchingOption) {
+		selectedBackgroundImageLocal.value = matchingOption;
+	} else if (newVal) {
+		// if custom image, create a local option object
+		const customImage = customBackgroundImages.value.find(
+			(img) => img.name === newVal,
+		);
+		if (customImage) {
+			selectedBackgroundImageLocal.value = {
+				label: customImage.label,
+				value: customImage.name,
+			};
+		} else {
+			// no custom image found
+			selectedBackgroundImageLocal.value = null;
+		}
+	} else {
+		// No selection
+		selectedBackgroundImageLocal.value = null;
+	}
+});
+
+watch(selectedBackgroundImageLocal, (newImageOption) => {
+	const imageValue = newImageOption?.value || "";
+	if (imageValue && imageValue !== selectedBackgroundImage.value) {
+		setSelectedBackgroundImage(imageValue);
+		setBackgroundImageEnabled(true);
+	} else if (
+		!imageValue &&
+		selectedBackgroundImage.value &&
+		!selectedBackgroundImage.value.startsWith("custom_")
+	) {
+		setBackgroundImageEnabled(false);
+		setSelectedBackgroundImage("");
+	}
+});
+
+watch(processedStream, (newStream) => {
+	if (isInMeeting.value && newStream && videoPreviewRef.value) {
+		previewStream.value = newStream;
+		videoPreviewRef.value.srcObject = newStream;
+	}
+});
+
+onMounted(() => {
+	if (selectedCameraId.value) {
+		startVideoPreview(selectedCameraId.value);
+	}
+});
+
+onUnmounted(() => {
+	// Only stop preview if not in a meeting
+	if (!isInMeeting.value) {
+		stopVideoPreview();
+		stopBackgroundProcessing();
+	}
+});
+</script>

@@ -1,5 +1,5 @@
 import { createResource, toast } from "frappe-ui";
-import { onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
 	cameraEnabled as prefCameraEnabled,
@@ -22,6 +22,26 @@ import {
 	getSFUMeetingManager,
 	resetSFUMeetingManager,
 } from "../utils/sfu-meeting-manager.js";
+import { useBackgroundEffects } from "./useBackgroundEffects";
+
+function getBackgroundEffectsFromStorage() {
+	const blurEnabled = localStorage.getItem("backgroundEffects.blur") === "1";
+	const imageEnabled = localStorage.getItem("backgroundEffects.image") === "1";
+	const selectedImage =
+		localStorage.getItem("backgroundEffects.imageName") || "";
+	const blurIntensity = Number.parseInt(
+		localStorage.getItem("backgroundEffects.blurIntensity") || "12",
+	);
+	const anyEnabled = blurEnabled || imageEnabled;
+
+	return {
+		blurEnabled,
+		imageEnabled,
+		selectedImage,
+		blurIntensity,
+		anyEnabled,
+	};
+}
 
 /**
  * Meeting Logic Composable
@@ -37,6 +57,118 @@ export function useMeetingLogic(meetingState, meetingId) {
 	const screenShareVideoElements = new Map();
 	const realtimeListenersSetup = ref(false);
 	const activeSpeakerTimeout = ref(null);
+
+	// Background effects
+	const { applyBackgroundEffects, stopProcessing, processedStream } =
+		useBackgroundEffects();
+
+	let backgroundSession = null;
+
+	const replacePublishedVideoTrack = async (
+		stream,
+		reason = "background-effect",
+	) => {
+		const manager = sfuManager.value;
+		const mediaHandler = manager?.mediaHandler;
+		if (!mediaHandler?.videoProducer || meetingState.isScreenSharing.value) {
+			return;
+		}
+
+		const targetStream = stream || meetingState.localStream.value;
+		if (!targetStream) {
+			return;
+		}
+
+		const [track] = targetStream.getVideoTracks();
+		if (!track) {
+			console.warn(
+				`🔄 Skipped video track swap (${reason}) - no video track available`,
+			);
+			return;
+		}
+		if (track.readyState === "ended") {
+			console.warn(
+				`🔄 Skipped video track swap (${reason}) - track already ended`,
+			);
+			return;
+		}
+
+		try {
+			await mediaHandler.videoProducer.replaceTrack({ track });
+			track.enabled = true;
+			console.log(`🔄 Replaced video track (${reason})`);
+
+			// Update local video element after track replacement
+			if (localVideo.value) {
+				setLocalVideoRef(localVideo.value);
+			}
+		} catch (error) {
+			console.warn(`⚠️ Failed to replace video track (${reason}):`, error);
+		}
+	};
+
+	/**
+	 * Apply background effects to local stream and update processedStream
+	 * This is called when background effects settings change
+	 */
+	const applyBackgroundEffectsToLocalStream = async () => {
+		const bgEffects = getBackgroundEffectsFromStorage();
+
+		if (!meetingState.localStream.value) {
+			if (backgroundSession) {
+				backgroundSession.cleanup?.();
+				backgroundSession = null;
+			}
+			if (processedStream.value) {
+				stopProcessing();
+				processedStream.value = null;
+			}
+			return;
+		}
+
+		try {
+			if (backgroundSession) {
+				await backgroundSession.updateOptions({
+					blurIntensity: bgEffects.blurIntensity,
+					backgroundBlurEnabled: bgEffects.blurEnabled,
+					backgroundImageEnabled: bgEffects.imageEnabled,
+					selectedBackgroundImage: bgEffects.selectedImage,
+				});
+				return;
+			}
+
+			const result = await applyBackgroundEffects(
+				meetingState.localStream.value,
+				{
+					blurIntensity: bgEffects.blurIntensity,
+					backgroundBlurEnabled: bgEffects.blurEnabled,
+					backgroundImageEnabled: bgEffects.imageEnabled,
+					selectedBackgroundImage: bgEffects.selectedImage,
+				},
+			);
+			backgroundSession = result;
+			processedStream.value = result.stream;
+			await replacePublishedVideoTrack(result.stream, "background-enabled");
+		} catch (error) {
+			console.warn(
+				"⚠️ Failed to apply background effects to local stream:",
+				error,
+			);
+			// Fallback to original stream
+			await replacePublishedVideoTrack(
+				meetingState.localStream.value,
+				"background-error",
+			);
+			if (backgroundSession) {
+				backgroundSession.cleanup?.();
+				backgroundSession = null;
+			}
+			if (processedStream.value) {
+				processedStream.value = null;
+				stopProcessing();
+			}
+		}
+	};
 
 	// API Resources
 	const getMeetingInfo = createResource({
@@ -187,6 +319,10 @@ export function useMeetingLogic(meetingState, meetingId) {
 				}
 				if (meetingState.isCameraOn.value) {
 					meetingState.cameraPermissionGranted.value = true;
+
+					// Always apply background effects to avoid
+					// recreation issues when effects are enabled from no effects
+					await applyBackgroundEffectsToLocalStream();
 				}
 				if (meetingState.isMicOn.value) {
 					meetingState.microphonePermissionGranted.value = true;
@@ -508,6 +644,12 @@ export function useMeetingLogic(meetingState, meetingId) {
 					}
 				}
 
+				// Apply background effects to local stream for preview if enabled
+				const bgEffects = getBackgroundEffectsFromStorage();
+				if (bgEffects.anyEnabled) {
+					await applyBackgroundEffectsToLocalStream();
+				}
+
 				// Publish or resume producer
 				const track = stream.getVideoTracks()[0];
 				if (mh?.videoProducer) {
@@ -522,17 +664,73 @@ export function useMeetingLogic(meetingState, meetingId) {
 							}
 						} catch (_) {}
 					} else {
+						// Use processed stream if available
+						// otherwise apply effects
+						let trackToPublish = track;
+						if (processedStream.value) {
+							trackToPublish = processedStream.value.getVideoTracks()[0];
+						} else {
+							const bgEffects = getBackgroundEffectsFromStorage();
+							if (bgEffects.anyEnabled) {
+								try {
+									const processedResult = await applyBackgroundEffects(stream, {
+										blurIntensity: bgEffects.blurIntensity,
+										backgroundBlurEnabled: bgEffects.blurEnabled,
+										backgroundImageEnabled: bgEffects.imageEnabled,
+										selectedBackgroundImage: bgEffects.selectedImage,
+									});
+									const processedVideoTrack =
+										processedResult.stream.getVideoTracks()[0];
+									if (processedVideoTrack) {
+										trackToPublish = processedVideoTrack;
+									}
+								} catch (error) {
+									console.warn(
+										"⚠️ Failed to apply background effects, using original track:",
+										error,
+									);
+								}
+							}
+						}
+
 						const producer =
-							await sfuManager.value.transportManager.createProducer(track, {
-								type: "camera",
-							});
+							await sfuManager.value.transportManager.createProducer(
+								trackToPublish,
+								{
+									type: "camera",
+								},
+							);
 						mh?.setProducers({ videoProducer: producer });
 					}
 				} else if (track && sfuManager.value?.transportManager) {
+					// Apply background effects if enabled before publishing
+					let trackToPublish = track;
+					const bgEffects = getBackgroundEffectsFromStorage();
+					if (bgEffects.anyEnabled) {
+						try {
+							const processedResult = await applyBackgroundEffects(stream, {
+								blurIntensity: bgEffects.blurIntensity,
+							});
+							const processedVideoTrack =
+								processedResult.stream.getVideoTracks()[0];
+							if (processedVideoTrack) {
+								trackToPublish = processedVideoTrack;
+							}
+						} catch (error) {
+							console.warn(
+								"⚠️ Failed to apply background effects, using original track:",
+								error,
+							);
+						}
+					}
+
 					const producer =
-						await sfuManager.value.transportManager.createProducer(track, {
-							type: "camera",
-						});
+						await sfuManager.value.transportManager.createProducer(
+							trackToPublish,
+							{
+								type: "camera",
+							},
+						);
 					mh?.setProducers({ videoProducer: producer });
 				}
 			} else {
@@ -862,7 +1060,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 			// Publish local media if available
 			if (meetingState.localStream.value) {
 				try {
-					await sfuManager.value.publishMedia(meetingState.localStream.value, {
+					// Use processed stream for publishing if background effects are enabled
+					const streamToPublish =
+						processedStream.value || meetingState.localStream.value;
+
+					await sfuManager.value.publishMedia(streamToPublish, {
 						publishVideo: meetingState.isCameraOn.value,
 						publishAudio: meetingState.isMicOn.value,
 					});
@@ -1118,22 +1320,26 @@ export function useMeetingLogic(meetingState, meetingId) {
 	/**
 	 * Set local video element reference
 	 */
-	const setLocalVideoRef = (el) => {
+	function setLocalVideoRef(el) {
 		localVideo.value = el;
 		if (el && meetingState.localStream.value) {
+			// Use processed stream if background effects are enabled, otherwise use original
+			const streamToUse =
+				processedStream.value || meetingState.localStream.value;
+
 			// we are tracking the stream ID to detect real changes
 			// to prevent flashing when re-rendering
-			const currentStreamId = meetingState.localStream.value.id;
+			const currentStreamId = streamToUse.id;
 			const trackedStreamId = el.dataset.sourceStreamId;
 
 			if (!el.srcObject || trackedStreamId !== currentStreamId) {
 				// only attach video tracks since it's local
-				const videoTracks = meetingState.localStream.value.getVideoTracks();
+				const videoTracks = streamToUse.getVideoTracks();
 				if (videoTracks.length > 0) {
 					el.srcObject = new MediaStream(videoTracks);
 					el.dataset.sourceStreamId = currentStreamId;
 				} else {
-					el.srcObject = meetingState.localStream.value;
+					el.srcObject = streamToUse;
 					el.dataset.sourceStreamId = currentStreamId;
 				}
 				// muted since it's local
@@ -1142,7 +1348,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 		}
 		// Expose on meetingState for external watchers that auto-play
 		meetingState.localVideo = el;
-	};
+	}
 
 	/**
 	 * Set remote video element reference
@@ -1306,6 +1512,15 @@ export function useMeetingLogic(meetingState, meetingId) {
 			resetSFUMeetingManager();
 		} catch (_) {}
 
+		// Cleanup background effects
+		try {
+			if (backgroundSession) {
+				backgroundSession.cleanup?.();
+				backgroundSession = null;
+			}
+			stopProcessing();
+		} catch (_) {}
+
 		// Cleanup local streams
 		if (meetingState.localStream.value) {
 			for (const track of meetingState.localStream.value.getTracks()) {
@@ -1320,10 +1535,19 @@ export function useMeetingLogic(meetingState, meetingId) {
 		}
 	});
 
+	// Watch for processed stream changes and update producer track
+	watch(processedStream, async (newStream) => {
+		const reason = newStream
+			? "processed-stream-change"
+			: "processed-stream-removed";
+		await replacePublishedVideoTrack(newStream, reason);
+	});
+
 	return {
 		// Refs
 		sfuManager,
 		localVideo,
+		processedStream,
 
 		// Methods - Media
 		initializeCamera,
@@ -1331,6 +1555,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 		toggleCamera,
 		toggleScreenShare,
 		applySpeakerDevice,
+		applyBackgroundEffectsToLocalStream,
 
 		// Methods - Meeting
 		joinMeetingRoom,

@@ -140,33 +140,6 @@ export class MediaStreamHandler {
 		}
 	}
 
-	// Create a tiny blank video track (black frame) via an offscreen canvas.
-	// This is used to replace the camera track on the Producer so we can stop
-	// the real camera track and release the hardware LED while keeping the
-	// Producer instance alive.
-	createBlankVideoTrack() {
-		try {
-			if (this._blankVideoTrack && this._blankVideoTrack.readyState === "live")
-				return this._blankVideoTrack;
-
-			const canvas = document.createElement("canvas");
-			canvas.width = 2;
-			canvas.height = 2;
-			const ctx = canvas.getContext("2d");
-			ctx.fillStyle = "black";
-			ctx.fillRect(0, 0, canvas.width, canvas.height);
-			const stream = canvas.captureStream(1);
-			const [track] = stream.getVideoTracks();
-			// Mark as muted/inactive visually
-			track.enabled = false;
-			this._blankVideoTrack = track;
-			return track;
-		} catch (err) {
-			console.warn("⚠️ Failed to create blank video track", err);
-			return null;
-		}
-	}
-
 	stopScreenShare() {
 		if (this.screenShareStream) {
 			for (const track of this.screenShareStream.getTracks()) {
