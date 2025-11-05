@@ -73,6 +73,7 @@ export interface ServerToClientEvents {
 		timestamp: string;
 	}) => void;
 	'chat:message': (data: ChatMessage) => void;
+	'reaction:message': (data: ReactionMessage) => void;
 	webrtc_offer: (data: WebRTCSignalData) => void;
 	webrtc_answer: (data: WebRTCSignalData) => void;
 	ice_candidate: (data: WebRTCSignalData) => void;
@@ -148,6 +149,7 @@ export interface ClientToServerEvents {
 		shareData?: ScreenShareData;
 	}) => void;
 	'chat:send': (data: { message: string; clientId?: string }) => void;
+	'reaction:send': (data: { reaction: string; clientId?: string }) => void;
 	leave_room: (data?: { roomId?: string }) => void;
 }
 
@@ -279,6 +281,14 @@ export interface ChatMessage {
 	fromName: string;
 	timestamp: string;
 	clientId?: string;
+}
+
+export interface ReactionMessage {
+	roomId: string;
+	reaction: string;
+	fromUser: string;
+	fromName: string;
+	timestamp: string;
 }
 
 // Mediasoup Manager types

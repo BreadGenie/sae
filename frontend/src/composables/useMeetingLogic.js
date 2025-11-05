@@ -1436,6 +1436,76 @@ export function useMeetingLogic(meetingState, meetingId) {
 		}
 	};
 
+	// ==================== REACTIONS ===================
+
+	const showReactionForUser = (userId, emoji, duration = 5000) => {
+		const now = Date.now();
+		const expiresAt = now + duration;
+
+		const existing = meetingState.reactions.value[userId];
+		if (existing?.timeoutId) {
+			clearTimeout(existing.timeoutId);
+		}
+
+		const timeoutId = window.setTimeout(() => {
+			if (meetingState.reactions.value[userId]) {
+				delete meetingState.reactions.value[userId];
+			}
+		}, duration);
+
+		meetingState.reactions.value = {
+			...meetingState.reactions.value,
+			[userId]: { emoji, expiresAt, timeoutId },
+		};
+	};
+
+	const setupReactionEvents = () => {
+		try {
+			const sfuClient = getSFUClient();
+
+			sfuClient.on("reaction:message", (data) => {
+				const userId = data.fromUser;
+				const emoji = data.message || data.reaction;
+				const duration = data.duration || 5000;
+
+				if (userId && emoji) {
+					showReactionForUser(userId, emoji, duration);
+				}
+			});
+		} catch (error) {
+			console.error("❌ Failed to setup reaction events:", error);
+		}
+	};
+
+	const onSendReaction = (reactionType) => {
+		try {
+			const userId = meetingState.currentUser.value?.user_id;
+			if (userId) {
+				showReactionForUser(userId, reactionType, 5000);
+			}
+
+			const reaction = {
+				id: Date.now() + Math.random(),
+				user_id: meetingState.currentUser.value?.user_id,
+				user_name:
+					meetingState.currentUser.value?.full_name ||
+					meetingState.currentUser.value?.name ||
+					meetingState.currentUser.value?.user_id,
+				reaction: reactionType,
+				timestamp: new Date().toISOString(),
+			};
+
+			const sfuClient = getSFUClient();
+			if (sfuClient.isConnected()) {
+				sfuClient.sendReaction(reactionType, {
+					clientId: meetingState.currentUser.value?.user_id,
+				});
+			}
+		} catch (error) {
+			console.error("❌ Failed to send reaction message:", error);
+		}
+	};
+
 	// ==================== KEYBOARD SHORTCUTS ====================
 
 	/**
@@ -1532,6 +1602,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 		// Methods - Chat
 		setupChatEvents,
 		onSendChat,
+
+		// Methods - Reactions
+		setupReactionEvents,
+		onSendReaction,
+		showReactionForUser,
 
 		// Methods - Keyboard
 		handleKeyDown,

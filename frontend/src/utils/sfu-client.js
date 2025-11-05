@@ -524,6 +524,18 @@ class SFUClient {
 		this.sendEvent("chat:send", payload);
 	}
 
+	// ==================== REACTION OPERATIONS ====================
+
+	sendReaction(reactionType) {
+		if (!this.connected) {
+			throw new Error("Not connected to SFU");
+		}
+
+		this.sendEvent("reaction:send", { reaction: reactionType });
+	}
+
+	// ==================== UTILITY METHODS ====================
+
 	async sendRequest(event, data) {
 		return new Promise((resolve, reject) => {
 			if (!this.connected) {

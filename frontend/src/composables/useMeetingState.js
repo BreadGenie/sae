@@ -49,6 +49,9 @@ export function useMeetingState() {
 	const chatMessages = ref([]);
 	const hasUnreadMessages = ref(false);
 
+	// Reactions states
+	const reactions = ref({});
+
 	// Screen sharing states
 	const screenShareStream = ref(null);
 	const activeScreenShareConsumers = ref([]);
@@ -98,6 +101,7 @@ export function useMeetingState() {
 		isChatOpen.value = false;
 		chatMessages.value = [];
 		hasUnreadMessages.value = false;
+		reactions.value = {};
 		isScreenSharing.value = false;
 		screenShareStream.value = null;
 		activeScreenShareConsumers.value = [];
@@ -172,6 +176,7 @@ export function useMeetingState() {
 		isChatOpen,
 		chatMessages,
 		hasUnreadMessages,
+		reactions,
 		screenShareStream,
 		activeScreenShareConsumers,
 		localScreenShareStartedAt,

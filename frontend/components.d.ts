@@ -31,6 +31,9 @@ declare module "vue" {
 		FloatingControls: typeof import(
 			"./src/components/FloatingControls.vue",
 		)["default"];
+		FloatingReactions: typeof import(
+			"./src/components/FloatingReactions.vue",
+		)["default"];
 		GroupTile: typeof import("./src/components/GroupTile.vue")["default"];
 		JoinRequestNotifications: typeof import(
 			"./src/components/JoinRequestNotifications.vue",
@@ -70,6 +73,7 @@ declare module "vue" {
 		LucidePlus: typeof import("~icons/lucide/plus")["default"];
 		LucideRefreshCw: typeof import("~icons/lucide/refresh-cw")["default"];
 		LucideSettings: typeof import("~icons/lucide/settings")["default"];
+		LucideSmile: typeof import("~icons/lucide/smile")["default"];
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
@@ -87,6 +91,9 @@ declare module "vue" {
 		NamePill: typeof import("./src/components/NamePill.vue")["default"];
 		ParticipantTile: typeof import(
 			"./src/components/ParticipantTile.vue",
+		)["default"];
+		ReactionPicker: typeof import(
+			"./src/components/ReactionPicker.vue",
 		)["default"];
 		RouterLink: typeof import("vue-router")["RouterLink"];
 		RouterView: typeof import("vue-router")["RouterView"];

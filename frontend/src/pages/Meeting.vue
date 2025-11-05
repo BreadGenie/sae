@@ -83,11 +83,14 @@
 					:isMicOn="meetingState.isMicOn.value"
 					:isCameraOn="meetingState.isCameraOn.value"
 					:isScreenSharing="meetingState.isScreenSharing.value"
+					:isReactionPickerOpen="isReactionPickerOpen"
+					@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 					:meetingId="meetingId"
 					:meetingTitle="meetingDoc?.value?.data?.title"
 					:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
 					:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
 					@toggle-chat="toggleChat"
+					@toggle-reactions="toggleReactions($event)"
 					@toggle-microphone="toggleMicrophone"
 					@toggle-camera="toggleCamera"
 					@toggle-screen-share="toggleScreenShare"
@@ -163,11 +166,13 @@ const {
 	setScreenShareVideoRef,
 	onSendChat,
 	setupChatEvents,
+	setupReactionEvents,
 	handleKeyDown,
 	sfuManager,
 	applySpeakerDevice,
 	processedStream,
 	applyBackgroundEffectsToLocalStream,
+	onSendReaction,
 } = useMeetingLogic(meetingState, meetingId.value);
 
 // Provide meeting context for child components
@@ -206,6 +211,7 @@ const meetingDoc = getCachedDocumentResource("Sae Meeting", meetingId.value);
 
 // Refs
 const chatNotificationQueue = ref(null);
+const isReactionPickerOpen = ref(false);
 
 // Methods
 const resetToPreview = () => {
@@ -228,6 +234,11 @@ const leaveWaitingRoom = () => {
 const tryJoinAgain = async () => {
 	meetingState.isJoinRequestRejected.value = false;
 	await joinMeetingRoom();
+};
+
+const toggleReactions = (payload) => {
+	onSendReaction(payload);
+	isReactionPickerOpen.value = false;
 };
 
 const toggleChat = () => {
@@ -385,6 +396,9 @@ onMounted(async () => {
 
 	// Setup chat events
 	setupChatEvents(chatNotificationQueue.value);
+
+	// Setup reaction events
+	setupReactionEvents();
 
 	// Auto-join if just created
 	const wasJustCreated = route.query.created === "true";

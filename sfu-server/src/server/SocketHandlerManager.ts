@@ -3,7 +3,7 @@ import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type {
 	ChatMessage,
 	ClientToServerEvents,
-	PeerInfo,
+	ReactionMessage,
 	ServerToClientEvents,
 	UserData,
 } from '../types';
@@ -57,6 +57,7 @@ export class SocketHandlerManager {
 			this.setupMediaControlHandlers(socket);
 			this.setupScreenShareHandlers(socket);
 			this.setupChatHandlers(socket);
+			this.setupReactionHandlers(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);
 		});
@@ -485,6 +486,35 @@ export class SocketHandlerManager {
 			} catch (e) {
 				loggers.socketHandler.warn(
 					'chat:send handling failed: %s',
+					(e as Error).message || e,
+				);
+			}
+		});
+	}
+
+	private setupReactionHandlers(socket: Socket): void {
+		socket.on('reaction:send', (data = {}) => {
+			try {
+				const roomId = socket.roomId;
+				const reaction =
+					typeof data.reaction === 'string' ? data.reaction : null;
+
+				if (!roomId || !reaction || !socket.participantId) {
+					return;
+				}
+
+				const payload: ReactionMessage = {
+					roomId,
+					reaction,
+					fromUser: socket.participantId,
+					fromName: socket.userName,
+					timestamp: new Date().toISOString(),
+				};
+
+				socket.to(roomId).emit('reaction:message', payload);
+			} catch (e) {
+				loggers.socketHandler.warn(
+					'reaction:send handling failed: %s',
 					(e as Error).message || e,
 				);
 			}

@@ -27,6 +27,16 @@
 			position="bottom-left"
 		/>
 
+		<!-- Reaction -->
+		<div
+			v-if="currentReaction"
+			class="absolute top-2 left-2 px-2 py-1 rounded-md text-xl pointer-events-none animate-pop"
+			:aria-label="`Reaction ${currentReaction.emoji} from ${participant.user_name || participant.user_id}`"
+			role="img"
+		>
+			<span class="text-2xl">{{ currentReaction.emoji }}</span>
+		</div>
+
 		<div v-if="isAudioEnabled && stream" class="absolute top-2 right-2 rounded-full bg-gray-700 p-1.5">
 			<AudioIndicator
 				:mediaStream="stream"
@@ -44,10 +54,13 @@
 </template>
 
 <script setup>
+import { computed, inject } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import AudioIndicator from "./AudioIndicator.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 import NamePill from "./NamePill.vue";
+
+const meetingState = inject("meetingState");
 
 const props = defineProps({
 	participant: {
@@ -81,6 +94,11 @@ const props = defineProps({
 });
 
 const { stream } = useAudioStream(props.participant.user_id);
+
+const currentReaction = computed(() => {
+	if (!meetingState?.reactions?.value) return null;
+	return meetingState.reactions.value[props.participant.user_id] || null;
+});
 </script>
 
 <style scoped>
@@ -100,5 +118,15 @@ const { stream } = useAudioStream(props.participant.user_id);
 
 video.remote-video::-moz-focus-inner {
 	border: 0;
+}
+
+/* Reaction animation */
+.animate-pop {
+	animation: pop 360ms cubic-bezier(.2,.9,.3,1);
+}
+@keyframes pop {
+	0% { transform: scale(0.75); opacity: 0 }
+	60% { transform: scale(1.08); opacity: 1 }
+	100% { transform: scale(1); opacity: 1 }
 }
 </style>

@@ -73,6 +73,30 @@
 					</template>
 				</Button>
 
+				<!-- Reactions -->
+				<ReactionPicker
+					:is-open="isReactionPickerOpen"
+					@select="handleReactionSelect"
+					@update:open="updateReactionPickerOpen"
+				>
+					<template #trigger>
+						<Button
+							v-if="!isPreview"
+							variant="solid"
+							theme="gray"
+							size="2xl"
+							class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
+							:class="{
+								'!bg-gray-800 hover:!bg-gray-800': isReactionPickerOpen,
+							}"
+							title="Reactions"
+						>
+							<template #icon>
+								<lucide-smile class="w-5 h-5 text-white" />
+							</template>
+						</Button>
+					</template>
+				</ReactionPicker>
 
 				<!-- Chat -->
 				<div v-if="!isPreview" class="relative">
@@ -176,6 +200,7 @@
 import { Button, Dropdown } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
+import ReactionPicker from "./ReactionPicker.vue";
 import SettingsDialog from "./SettingsDialog.vue";
 
 const props = defineProps({
@@ -198,6 +223,10 @@ const props = defineProps({
 	isScreenSharing: {
 		type: Boolean,
 		required: true,
+	},
+	isReactionPickerOpen: {
+		type: Boolean,
+		default: false,
 	},
 	isPreview: {
 		type: Boolean,
@@ -225,11 +254,13 @@ const { isPreview } = toRefs(props);
 
 const emit = defineEmits([
 	"toggle-chat",
+	"toggle-reactions",
 	"toggle-microphone",
 	"toggle-camera",
 	"toggle-screen-share",
 	"end-call",
 	"device-changed",
+	"update:isReactionPickerOpen",
 ]);
 
 const moreOptions = computed(() => [
@@ -266,11 +297,14 @@ const showControls = () => {
 	resetHideTimer();
 };
 
-const resetHideTimer = () => {
+const resetHideTimer = (force = false) => {
 	if (hideTimeout) {
 		clearTimeout(hideTimeout);
 	}
-	if (isDropdownOpen.value || isHovering.value) {
+	if (
+		!force &&
+		(isDropdownOpen.value || isHovering.value || props.isReactionPickerOpen)
+	) {
 		return;
 	}
 
@@ -331,6 +365,18 @@ const handleDocumentClick = (event) => {
 			resetHideTimer();
 		}
 	}
+};
+
+const handleReactionSelect = (emoji) => {
+	emit("toggle-reactions", emoji);
+
+	isHovering.value = false;
+	updateReactionPickerOpen(false);
+	resetHideTimer(true);
+};
+
+const updateReactionPickerOpen = (value) => {
+	emit("update:isReactionPickerOpen", value);
 };
 
 onMounted(() => {
