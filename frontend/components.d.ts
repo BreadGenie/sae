@@ -77,6 +77,7 @@ declare module "vue" {
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
+		LucideWifiOff: typeof import("~icons/lucide/wifi-off")["default"];
 		LucideX: typeof import("~icons/lucide/x")["default"];
 		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
 		MeetingAvatar: typeof import(

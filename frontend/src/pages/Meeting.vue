@@ -128,12 +128,10 @@ import FloatingControls from "../components/FloatingControls.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import MeetingPreview from "../components/MeetingPreview.vue";
 import ScreenShareLayout from "../components/ScreenShareLayout.vue";
-// Components
 import VideoGrid from "../components/VideoGrid.vue";
 
 import { provideMeetingContext } from "../composables/useMeetingContext.js";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
-// Composables and utilities
 import { useMeetingState } from "../composables/useMeetingState.js";
 import {
 	selectedCameraId,
@@ -141,6 +139,7 @@ import {
 	selectedSpeakerId,
 } from "../data/mediaPreferences.js";
 import { session } from "../data/session.js";
+import { useSocket } from "../socket.js";
 import { deviceManager } from "../utils/media/DeviceManager.js";
 
 // Router access
@@ -150,6 +149,7 @@ const meetingId = computed(() => route.params.meetingId);
 
 // Meeting state management
 const meetingState = useMeetingState();
+const socket = useSocket();
 
 // Meeting logic composable
 const {
@@ -188,6 +188,8 @@ provide("setScreenShareVideoRef", setScreenShareVideoRef);
 provide("getParticipantName", meetingState.getParticipantName);
 provide("meetingState", meetingState);
 provide("meetingId", meetingId.value);
+provide("sfuManager", sfuManager);
+provide("socket", socket);
 provide(
 	"meetingTitle",
 	computed(() => meetingDoc?.value?.data?.title || ""),

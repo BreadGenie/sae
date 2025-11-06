@@ -23,6 +23,10 @@ export function useMeetingState() {
 	const isInPreview = ref(true);
 	const isSetupComplete = ref(false);
 
+	// Network quality states
+	const networkQuality = ref("good");
+	const connectionIssues = ref([]);
+
 	// Media states
 	const isMicOn = ref(false);
 	const isCameraOn = ref(false);
@@ -96,6 +100,8 @@ export function useMeetingState() {
 		isConnecting.value = false;
 		isInPreview.value = true;
 		isSetupComplete.value = false;
+		networkQuality.value = "good";
+		connectionIssues.value = [];
 		participants.value = {};
 		remoteVideos.value = {};
 		isChatOpen.value = false;
@@ -158,6 +164,8 @@ export function useMeetingState() {
 		connectionError,
 		isInPreview,
 		isSetupComplete,
+		networkQuality,
+		connectionIssues,
 		isMicOn,
 		isCameraOn,
 		isScreenSharing,

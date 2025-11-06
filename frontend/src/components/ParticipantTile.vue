@@ -47,6 +47,14 @@
 			/>
 		</div>
 
+		<div
+			v-if="showNetworkIndicator"
+			class="absolute top-2 right-12 bg-gray-700 rounded-full p-1.5"
+			:title="networkQualityMessage"
+		>
+			<lucide-wifi-off class="w-4 h-4 text-white" />
+		</div>
+
 		<div v-if="!isAudioEnabled" class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5">
 			<lucide-mic-off class="w-4 h-4 text-white" />
 		</div>
@@ -56,6 +64,7 @@
 <script setup>
 import { computed, inject } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
+import { useNetworkQuality } from "../composables/useNetworkQuality";
 import AudioIndicator from "./AudioIndicator.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 import NamePill from "./NamePill.vue";
@@ -94,6 +103,57 @@ const props = defineProps({
 });
 
 const { stream } = useAudioStream(props.participant.user_id);
+
+const { networkConnectionInfo } = useNetworkQuality();
+
+const showNetworkIndicator = computed(() => {
+	if (!props.isLocal) return false;
+
+	if (!navigator.onLine) {
+		return true;
+	}
+
+	const connectionInfo = networkConnectionInfo.value;
+	if (!connectionInfo) {
+		return false;
+	}
+
+	const { downlink, effectiveType } = connectionInfo;
+
+	// Show indicator for poor connections:
+	// below 2 Mbps or poor effective types
+	const isPoorConnection =
+		(downlink !== undefined && downlink < 2) ||
+		effectiveType === "slow-2g" ||
+		effectiveType === "2g";
+
+	return isPoorConnection;
+});
+
+const networkQualityMessage = computed(() => {
+	if (!navigator.onLine) {
+		return "Connection lost - attempting to reconnect";
+	}
+
+	if (!networkConnectionInfo.value) return "";
+
+	const { downlink, effectiveType } = networkConnectionInfo.value;
+
+	// Critical conditions: very slow, or slow-2g
+	if (
+		(downlink !== undefined && downlink < 0.5) ||
+		effectiveType === "slow-2g"
+	) {
+		return "Connection lost - attempting to reconnect";
+	}
+
+	// Poor conditions: below 2 Mbps or 2g
+	if ((downlink !== undefined && downlink < 2) || effectiveType === "2g") {
+		return "Poor connection - you may experience issues with audio/video";
+	}
+
+	return "";
+});
 
 const currentReaction = computed(() => {
 	if (!meetingState?.reactions?.value) return null;
