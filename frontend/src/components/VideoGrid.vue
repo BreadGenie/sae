@@ -28,7 +28,7 @@
 				:isVideoEnabled="participant.video_enabled"
 				:isAudioEnabled="participant.audio_enabled"
 				:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
-				:videoRef="(el) => setRemoteVideoRef(participant.user_id, el)"
+				:videoRef="(el) => handleRemoteVideoRef(participant.user_id, el)"
 				:tileCount="visibleTileCount"
 			/>
 
@@ -51,6 +51,7 @@
 
 <script setup>
 import { computed, inject, ref } from "vue";
+import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
 import { useVideoGridLayout } from "../composables/useVideoGridLayout.js";
 import { getInitials } from "../utils/text";
 import FloatingReactions from "./FloatingReactions.vue";
@@ -60,6 +61,12 @@ import ParticipantTile from "./ParticipantTile.vue";
 const meetingState = inject("meetingState");
 const setLocalVideoRef = inject("setLocalVideoRef");
 const setRemoteVideoRef = inject("setRemoteVideoRef");
+const { registerTile } = useTileAdaptiveStreaming();
+
+const handleRemoteVideoRef = (participantId, el) => {
+	setRemoteVideoRef(participantId, el);
+	registerTile(participantId, el);
+};
 
 const gridContainer = ref(null);
 

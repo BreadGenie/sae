@@ -4,6 +4,7 @@
  */
 
 import { getSFUClient } from "../sfu-client.js";
+import { videoCodecOptions, videoEncodings } from "./encodings.js";
 
 export class TransportManager {
 	constructor() {
@@ -134,10 +135,17 @@ export class TransportManager {
 			});
 		} catch (_) {}
 
-		const producer = await this.sendTransport.produce({
+		const produceOptions = {
 			track,
 			appData: safeAppData,
-		});
+		};
+
+		if (track?.kind === "video") {
+			produceOptions.encodings = videoEncodings;
+			produceOptions.codecOptions = videoCodecOptions;
+		}
+
+		const producer = await this.sendTransport.produce(produceOptions);
 
 		return producer;
 	}
@@ -176,7 +184,7 @@ export class TransportManager {
 
 		if (!consumer && firstError) throw firstError;
 		if (isScreen)
-			console.info("🖥️ Screen share consumer created", {
+			console.info("Screen share consumer created", {
 				consumerId: consumer.id,
 			});
 		return consumer;

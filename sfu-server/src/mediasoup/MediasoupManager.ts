@@ -1,4 +1,4 @@
-import type { AppData } from '../types';
+import type { AppData, Consumer } from '../types';
 import type {
 	CloseProducerResult,
 	DtlsParameters,
@@ -269,6 +269,241 @@ export class MediasoupManager {
 
 	closeConsumer(consumerId: string): void {
 		this.consumerManager.closeConsumer(consumerId);
+	}
+
+	async updateConsumerPreferences(options: {
+		consumerId: string;
+		visible: boolean;
+		width: number;
+		height: number;
+	}): Promise<{
+		appliedLayers?: {
+			spatialLayer: number | null;
+			temporalLayer: number | null;
+		};
+		paused: boolean;
+	}> {
+		const consumerData = this.consumerManager.getConsumerData(
+			options.consumerId,
+		);
+		if (!consumerData) {
+			throw new Error(`Consumer ${options.consumerId} not found`);
+		}
+
+		const { consumer } = consumerData;
+		const wasPaused = consumer.paused;
+
+		loggers.mediasoupManager.debug(
+			'Updating consumer preferences: consumerId=%s, visible=%s, width=%s, height=%s, wasPaused=%s',
+			options.consumerId,
+			options.visible,
+			options.width,
+			options.height,
+			wasPaused,
+		);
+
+		if (!options.visible) {
+			await this.consumerManager.pauseConsumer(options.consumerId);
+			loggers.mediasoupManager.debug(
+				'Paused consumer %s (not visible)',
+				options.consumerId,
+			);
+			return { paused: true };
+		}
+
+		await this.consumerManager.resumeConsumer(options.consumerId);
+		loggers.mediasoupManager.debug('Resumed consumer %s', options.consumerId);
+
+		let appliedLayers:
+			| { spatialLayer: number | null; temporalLayer: number | null }
+			| undefined;
+
+		if (consumer.kind === 'video') {
+			const spatialLayer = this.estimateSpatialLayer(
+				consumer,
+				options.width,
+				options.height,
+			);
+			const preferredLayers = (
+				consumer as unknown as {
+					preferredLayers?: {
+						spatialLayer: number;
+						temporalLayer: number;
+					} | null;
+				}
+			).preferredLayers;
+			const currentlyPreferred = preferredLayers?.spatialLayer ?? null;
+			const currentTemporalLayer = preferredLayers?.temporalLayer ?? null;
+
+			loggers.mediasoupManager.debug(
+				'Spatial layer estimation: consumerId=%s, estimated=%s, current=%s, width=%s, height=%s',
+				options.consumerId,
+				spatialLayer,
+				currentlyPreferred,
+				options.width,
+				options.height,
+			);
+
+			// Only update layers if spatialLayer is valid and different
+			if (spatialLayer !== null && spatialLayer !== currentlyPreferred) {
+				const layerResult =
+					await this.consumerManager.setConsumerPreferredLayers(
+						options.consumerId,
+						spatialLayer,
+					);
+				if (layerResult) {
+					appliedLayers = layerResult;
+					loggers.mediasoupManager.debug(
+						'Applied spatial layer: consumerId=%s, spatialLayer=%s, temporalLayer=%s',
+						options.consumerId,
+						layerResult.spatialLayer,
+						layerResult.temporalLayer,
+					);
+					const currentLayers = (
+						consumer as unknown as {
+							currentLayers?: {
+								spatialLayer: number | null;
+								temporalLayer: number | null;
+							} | null;
+						}
+					).currentLayers;
+					const previousSpatial = currentLayers?.spatialLayer ?? null;
+					if (
+						layerResult.spatialLayer !== null &&
+						typeof (
+							consumer as unknown as { requestKeyFrame?: () => Promise<void> }
+						).requestKeyFrame === 'function' &&
+						((previousSpatial !== null &&
+							layerResult.spatialLayer > previousSpatial) ||
+							wasPaused)
+					) {
+						try {
+							await consumer.requestKeyFrame();
+						} catch (error) {
+							loggers.mediasoupManager.warn(
+								'Failed to request key frame for consumer %s: %s',
+								consumer.id,
+								(error as Error).message,
+							);
+						}
+					}
+				}
+			} else {
+				// Even if we didn't change layers, return the current state
+				// This happens when spatialLayer is null (single layer) or matches current
+				if (spatialLayer !== null || currentlyPreferred !== null) {
+					appliedLayers = {
+						spatialLayer: spatialLayer ?? currentlyPreferred,
+						temporalLayer: currentTemporalLayer,
+					};
+					loggers.mediasoupManager.debug(
+						'No layer change needed: consumerId=%s, spatialLayer=%s, temporalLayer=%s',
+						options.consumerId,
+						appliedLayers.spatialLayer,
+						appliedLayers.temporalLayer,
+					);
+				}
+			}
+		}
+
+		return {
+			paused: consumer.paused,
+			appliedLayers,
+		};
+	}
+
+	private estimateSpatialLayer(
+		consumer: Consumer,
+		width: number,
+		height: number,
+	): number | null {
+		const availableLayers = this.getAvailableSpatialLayers(consumer);
+		loggers.mediasoupManager.debug(
+			'Estimating spatial layer: consumerId=%s, availableLayers=%s, width=%s, height=%s',
+			consumer.id,
+			availableLayers,
+			width,
+			height,
+		);
+
+		if (availableLayers <= 1) {
+			loggers.mediasoupManager.debug(
+				'Single layer detected for consumer %s, skipping layer selection',
+				consumer.id,
+			);
+			return null;
+		}
+
+		const safeWidth = Math.max(width, 0);
+
+		// Use width as the primary dimension for layer selection
+		// (videos are typically landscape, so width is more meaningful)
+		const primaryDimension = safeWidth;
+
+		if (primaryDimension <= 0) {
+			return 0;
+		}
+
+		// Layer 2 (high): >= 640px
+		// Layer 1 (mid): 480-639px
+		// Layer 0 (low): < 480px
+		let desiredLayer = 0;
+		if (primaryDimension >= 640) {
+			desiredLayer = 2;
+		} else if (primaryDimension >= 480) {
+			desiredLayer = 1;
+		} else {
+			desiredLayer = 0;
+		}
+
+		const finalLayer = Math.min(desiredLayer, availableLayers - 1);
+		loggers.mediasoupManager.debug(
+			'Selected spatial layer: consumerId=%s, primaryDimension=%s (width), desiredLayer=%s, finalLayer=%s',
+			consumer.id,
+			primaryDimension,
+			desiredLayer,
+			finalLayer,
+		);
+
+		return finalLayer;
+	}
+
+	private getAvailableSpatialLayers(consumer: Consumer): number {
+		const encodings = Array.isArray(consumer.rtpParameters?.encodings)
+			? consumer.rtpParameters.encodings
+			: [];
+
+		if (encodings.length > 1) {
+			loggers.mediasoupManager.debug(
+				'Multiple encodings detected for consumer %s: count=%s',
+				consumer.id,
+				encodings.length,
+			);
+			return encodings.length;
+		}
+
+		const scalabilityMode = encodings[0]?.scalabilityMode;
+		if (typeof scalabilityMode === 'string') {
+			const match = /^L(\d+)/.exec(scalabilityMode);
+			if (match) {
+				const layers = Number.parseInt(match[1], 10);
+				if (Number.isFinite(layers) && layers > 0) {
+					loggers.mediasoupManager.debug(
+						'Scalability mode detected for consumer %s: mode=%s, layers=%s',
+						consumer.id,
+						scalabilityMode,
+						layers,
+					);
+					return layers;
+				}
+			}
+		}
+
+		loggers.mediasoupManager.debug(
+			'Single layer stream for consumer %s (no simulcast/SVC)',
+			consumer.id,
+		);
+		return 1;
 	}
 
 	getRouterRtpCapabilities(roomId: string): RtpCapabilities {

@@ -138,6 +138,84 @@ export class ConsumerManager {
 		return this.consumers.size;
 	}
 
+	async pauseConsumer(consumerId: string): Promise<boolean> {
+		const consumerData = this.consumers.get(consumerId);
+		if (!consumerData) {
+			return false;
+		}
+
+		const { consumer } = consumerData;
+		if (consumer.paused) {
+			return false;
+		}
+
+		try {
+			await consumer.pause();
+			return true;
+		} catch (error) {
+			loggers.consumerManager.warn(
+				'Failed to pause consumer %s: %s',
+				consumerId,
+				(error as Error).message,
+			);
+			return false;
+		}
+	}
+
+	async resumeConsumer(consumerId: string): Promise<boolean> {
+		const consumerData = this.consumers.get(consumerId);
+		if (!consumerData) {
+			return false;
+		}
+
+		const { consumer } = consumerData;
+		if (!consumer.paused) {
+			return false;
+		}
+
+		try {
+			await consumer.resume();
+			return true;
+		} catch (error) {
+			loggers.consumerManager.warn(
+				'Failed to resume consumer %s: %s',
+				consumerId,
+				(error as Error).message,
+			);
+			return false;
+		}
+	}
+
+	async setConsumerPreferredLayers(
+		consumerId: string,
+		spatialLayer: number,
+		temporalLayer?: number | null,
+	): Promise<{
+		spatialLayer: number;
+		temporalLayer: number;
+	} | null> {
+		const consumerData = this.consumers.get(consumerId);
+		if (!consumerData) {
+			return null;
+		}
+
+		const { consumer } = consumerData;
+
+		const currentPreferred = consumer.preferredLayers || null;
+		const temporalValue =
+			temporalLayer || (currentPreferred?.temporalLayer ?? 2);
+
+		await consumer.setPreferredLayers({
+			spatialLayer,
+			temporalLayer: temporalValue,
+		});
+
+		return {
+			spatialLayer,
+			temporalLayer: temporalValue,
+		};
+	}
+
 	cleanup(): void {
 		for (const [consumerId, consumerData] of this.consumers) {
 			try {

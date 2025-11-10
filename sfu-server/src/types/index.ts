@@ -150,6 +150,15 @@ export interface ClientToServerEvents {
 	}) => void;
 	'chat:send': (data: { message: string; clientId?: string }) => void;
 	'reaction:send': (data: { reaction: string; clientId?: string }) => void;
+	'consumer:update_preferences': (
+		data: {
+			consumerId: string;
+			visible: boolean;
+			width?: number;
+			height?: number;
+		},
+		callback: (response: ConsumerPreferenceResponse) => void,
+	) => void;
 	leave_room: (data?: { roomId?: string }) => void;
 }
 
@@ -199,6 +208,15 @@ export interface ConsumerResponse extends SFUResponse, ConsumerInfo {}
 export interface CloseProducerResponse
 	extends SFUResponse,
 		CloseProducerResult {}
+
+export interface ConsumerPreferenceResponse extends SFUResponse {
+	appliedLayers?: {
+		spatialLayer: number | null;
+		temporalLayer: number | null;
+	};
+	paused?: boolean;
+	visible?: boolean;
+}
 
 export interface ExistingProducersResponse extends SFUResponse {
 	producers: ExistingProducer[];

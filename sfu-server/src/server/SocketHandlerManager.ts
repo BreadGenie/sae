@@ -408,6 +408,35 @@ export class SocketHandlerManager {
 				callback({ success: false, error: (error as Error).message });
 			}
 		});
+
+		socket.on('consumer:update_preferences', async (data, callback) => {
+			try {
+				const consumerId = data?.consumerId;
+				if (!consumerId) {
+					callback({ success: false, error: 'Missing consumerId' });
+					return;
+				}
+
+				const visible = Boolean(data.visible);
+				const width = Math.round(data.width);
+				const height = Math.round(data.height);
+
+				const result = await this.mediasoup.updateConsumerPreferences({
+					consumerId,
+					visible,
+					width,
+					height,
+				});
+
+				callback({ success: true, ...result, visible });
+			} catch (error) {
+				loggers.socketHandler.warn(
+					'Error updating consumer preferences: %s',
+					(error as Error).message,
+				);
+				callback({ success: false, error: (error as Error).message });
+			}
+		});
 	}
 
 	private setupMediaControlHandlers(socket: Socket): void {

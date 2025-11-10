@@ -31,6 +31,8 @@ export class SFUMeetingManager {
 
 		this.sfuClient = null;
 		this.eventHandlers = {};
+
+		this.eventTarget = new EventTarget();
 	}
 
 	initialize(options) {
@@ -303,6 +305,19 @@ export class SFUMeetingManager {
 				consumer,
 				participantId,
 			);
+
+			// for adaptive streaming
+			if (enhancedConsumer && enhancedConsumer.kind === "video") {
+				this.eventTarget.dispatchEvent(
+					new CustomEvent("consumerReady", {
+						detail: {
+							consumerId: enhancedConsumer.id,
+							participantId,
+							kind: enhancedConsumer.kind,
+						},
+					}),
+				);
+			}
 
 			return enhancedConsumer;
 		} catch (error) {
@@ -661,6 +676,32 @@ export class SFUMeetingManager {
 
 	registerVideoElement(participantId, element) {
 		this.videoManager.registerVideoElement(participantId, element);
+	}
+
+	getVideoConsumerEntry(participantId) {
+		return this.consumerManager.getVideoConsumer(participantId);
+	}
+
+	async updateConsumerStreamPreferences(consumerId, preferences) {
+		if (!this.sfuClient || !this.sfuClient.isConnected()) {
+			return null;
+		}
+
+		try {
+			return await this.sfuClient.updateConsumerPreferences({
+				consumerId,
+				visible: preferences.visible,
+				width: preferences.width,
+				height: preferences.height,
+			});
+		} catch (error) {
+			console.warn(
+				"⚠️ Failed to update consumer preferences",
+				consumerId,
+				error?.message || error,
+			);
+			return null;
+		}
 	}
 
 	async disconnect() {

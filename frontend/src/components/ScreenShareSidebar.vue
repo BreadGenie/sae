@@ -56,7 +56,7 @@
 			:style="singleTileStyle"
 		>
 			<video
-				:ref="(el) => setRemoteVideoRef(participant.user_id, el)"
+				:ref="(el) => handleRemoteVideoRef(participant.user_id, el)"
 				:participant-id="participant.user_id"
 				class="w-full h-full object-cover flex-1 remote-video"
 				autoplay
@@ -110,6 +110,7 @@
 import { computed, inject } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import { useScreenShareSidebar } from "../composables/useScreenShareSidebar.js";
+import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
 import { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
 import AudioIndicator from "./AudioIndicator.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
@@ -119,6 +120,12 @@ import NamePill from "./NamePill.vue";
 const meetingState = inject("meetingState");
 const setLocalVideoRef = inject("setLocalVideoRef");
 const setRemoteVideoRef = inject("setRemoteVideoRef");
+const { registerTile } = useTileAdaptiveStreaming();
+
+const handleRemoteVideoRef = (participantId, el) => {
+	setRemoteVideoRef(participantId, el);
+	registerTile(participantId, el);
+};
 
 const participants = computed(() => meetingState.participants.value);
 const currentUser = computed(() => meetingState.currentUser.value);

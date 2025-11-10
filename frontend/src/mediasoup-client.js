@@ -1,4 +1,9 @@
 import { Device } from "mediasoup-client";
+import {
+	screenEncodings,
+	videoCodecOptions,
+	videoEncodings,
+} from "./utils/media/encodings.js";
 import { getSFUClient } from "./utils/sfu-client.js";
 
 // MediaSoup state management
@@ -432,14 +437,8 @@ export async function publishVideo(meetingId, stream) {
 
 		const producer = await sendTransport.produce({
 			track: videoTrack,
-			encodings: [
-				{ maxBitrate: 100000 },
-				{ maxBitrate: 300000 },
-				{ maxBitrate: 900000 },
-			],
-			codecOptions: {
-				videoGoogleStartBitrate: 1000,
-			},
+			encodings: videoEncodings,
+			codecOptions: videoCodecOptions,
 		});
 
 		producers.set(producer.id, producer);
@@ -476,10 +475,8 @@ export async function publishScreenShare(meetingId, stream) {
 		const producer = await sendTransport.produce({
 			track: videoTrack,
 			appData: { type: "screen" },
-			encodings: [{ maxBitrate: 800000 }, { maxBitrate: 1500000 }],
-			codecOptions: {
-				videoGoogleStartBitrate: 1200,
-			},
+			encodings: screenEncodings,
+			codecOptions: videoCodecOptions,
 		});
 
 		producers.set(producer.id, producer);

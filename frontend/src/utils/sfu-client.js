@@ -459,6 +459,15 @@ class SFUClient {
 		return this.sendRequest("close_consumer", { consumerId });
 	}
 
+	async updateConsumerPreferences({ consumerId, visible, width, height }) {
+		return this.sendRequest("consumer:update_preferences", {
+			consumerId,
+			visible: Boolean(visible),
+			width: Math.round(width),
+			height: Math.round(height),
+		});
+	}
+
 	// ==================== ROOM OPERATIONS ====================
 
 	async getExistingProducers(roomId = null) {
