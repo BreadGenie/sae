@@ -42,11 +42,14 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"User", frappe.session.user, ["full_name", "user_image"]
 		) or (frappe.session.user, None)
 
+		is_host = meeting.owner == frappe.session.user
+
 		auth_payload = {
 			"user_id": frappe.session.user,
 			"meeting_id": meeting_id,
 			"user_name": user_fullname,
 			"user_avatar": user_avatar,
+			"is_host": is_host,
 			"exp": int(time.time()) + 3600,  # 1 hour expiry
 			"iat": int(time.time()),
 		}
@@ -255,11 +258,14 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 			"User", frappe.session.user, ["full_name", "user_image"]
 		) or (frappe.session.user, None)
 
+		is_host = meeting.owner == frappe.session.user
+
 		auth_payload = {
 			"user_id": frappe.session.user,
 			"meeting_id": meeting_id,
 			"user_name": user_fullname,
 			"user_avatar": user_avatar,
+			"is_host": is_host,
 			"exp": int(time.time()) + 3600,  # 1 hour expiry
 			"iat": int(time.time()),
 		}

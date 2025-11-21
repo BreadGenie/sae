@@ -5,10 +5,18 @@ import type {
 	ClientToServerEvents,
 	ReactionMessage,
 	ServerToClientEvents,
+	SocketData,
 	UserData,
 } from '../types';
 import { loggers } from '../utils/logger';
 import type { AuthManager } from './AuthManager';
+
+type TypedSocket = Socket<
+	ClientToServerEvents,
+	ServerToClientEvents,
+	Record<string, never>,
+	SocketData
+>;
 
 export class SocketHandlerManager {
 	private io: Server<ClientToServerEvents, ServerToClientEvents>;
@@ -23,6 +31,25 @@ export class SocketHandlerManager {
 		this.io = io;
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
+	}
+
+	private findSocketByParticipantId(
+		roomId: string,
+		participantId: string,
+	): TypedSocket | null {
+		const socketsInRoom = this.io.sockets.adapter.rooms.get(roomId);
+		if (!socketsInRoom) return null;
+
+		for (const socketId of socketsInRoom) {
+			const socket = this.io.sockets.sockets.get(socketId) as
+				| TypedSocket
+				| undefined;
+			if (socket && socket.participantId === participantId) {
+				return socket;
+			}
+		}
+
+		return null;
 	}
 
 	setupSocketHandlers(): void {
@@ -55,6 +82,7 @@ export class SocketHandlerManager {
 			this.setupRoomHandlers(socket);
 			this.setupWebRTCHandlers(socket);
 			this.setupMediaControlHandlers(socket);
+			this.setupHostControlHandlers(socket);
 			this.setupScreenShareHandlers(socket);
 			this.setupChatHandlers(socket);
 			this.setupReactionHandlers(socket);
@@ -460,6 +488,90 @@ export class SocketHandlerManager {
 				action,
 				timestamp: new Date().toISOString(),
 			});
+		});
+	}
+
+	private setupHostControlHandlers(socket: TypedSocket): void {
+		socket.on('host_control', async (data) => {
+			const { action, targetParticipantId } = data;
+			const roomId = socket.roomId;
+
+			if (!roomId || !socket.participantId) {
+				socket.emit('sfu_error', {
+					error: 'Not in a room',
+					timestamp: new Date().toISOString(),
+				});
+				return;
+			}
+
+			if (!socket.isHost) {
+				socket.emit('sfu_error', {
+					error: 'Only host can control participants',
+					timestamp: new Date().toISOString(),
+				});
+				loggers.socketHandler.warn(
+					'Non-host %s attempted host control in room %s',
+					socket.participantId,
+					roomId,
+				);
+				return;
+			}
+
+			if (!this.mediasoup.peerExistsInRoom(roomId, targetParticipantId)) {
+				socket.emit('sfu_error', {
+					error: 'Target participant not found',
+					timestamp: new Date().toISOString(),
+				});
+				return;
+			}
+
+			const targetSocket = this.findSocketByParticipantId(
+				roomId,
+				targetParticipantId,
+			);
+
+			if (!targetSocket) {
+				socket.emit('sfu_error', {
+					error: 'Target participant socket not found',
+					timestamp: new Date().toISOString(),
+				});
+				return;
+			}
+
+			switch (action) {
+				case 'mute_participant':
+					targetSocket.emit('host_control_update', {
+						action,
+						targetParticipantId,
+						hostId: socket.participantId,
+						timestamp: new Date().toISOString(),
+					});
+					loggers.socketHandler.info(
+						'Host %s sent mute command to participant %s in room %s',
+						socket.participantId,
+						targetParticipantId,
+						roomId,
+					);
+					break;
+				case 'kick_participant':
+					// TODO: Implement kick functionality
+					loggers.socketHandler.info(
+						'Kick functionality not yet implemented for %s by host %s',
+						targetParticipantId,
+						socket.participantId,
+					);
+					socket.emit('sfu_error', {
+						error: 'Kick functionality coming soon',
+						timestamp: new Date().toISOString(),
+					});
+					break;
+				default:
+					socket.emit('sfu_error', {
+						error: 'Invalid host control action',
+						timestamp: new Date().toISOString(),
+					});
+					break;
+			}
 		});
 	}
 

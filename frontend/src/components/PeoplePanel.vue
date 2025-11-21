@@ -40,21 +40,22 @@
 						<PeopleParticipantTile
 							:participant="currentUserData"
 							:isCurrentUser="true"
-							:isHost="isCreator"
-							:isAudioEnabled="isMicOn"
-							:isVideoEnabled="isCameraOn"
+							:showHostBadge="isCreator"
+							:canControlParticipant="false"
 						/>
 					</div>
 
 					<!-- Remote Participants -->
-					<div v-if="filteredParticipants.length > 0" class="">
+					<div v-if="filteredParticipants.length > 0">
 						<PeopleParticipantTile
 							v-for="participant in filteredParticipants"
 							:key="participant.user_id"
 							:participant="participant"
-							:isHost="participant.user_id === creatorUserId"
-							:isAudioEnabled="!!participant.audio_enabled"
-							:isVideoEnabled="!!participant.video_enabled"
+							:isCurrentUser="false"
+							:showHostBadge="participant.user_id === creatorUserId"
+							:canControlParticipant="isCreator"
+							@muteParticipant="handleMuteParticipant"
+							@kickParticipant="handleKickParticipant"
 						/>
 					</div>
 
@@ -99,7 +100,6 @@ interface Props {
 	participants: Record<string, Participant>;
 	isMicOn: boolean;
 	isCameraOn: boolean;
-	isCreator: boolean;
 	creatorUserId: string;
 }
 
@@ -109,15 +109,20 @@ const props = withDefaults(defineProps<Props>(), {
 	participants: () => ({}),
 	isMicOn: false,
 	isCameraOn: false,
-	isCreator: false,
 	creatorUserId: "",
 });
 
 const emit = defineEmits<{
 	close: [];
+	muteParticipant: [participantId: string];
+	kickParticipant: [participantId: string];
 }>();
 
 const searchQuery = ref<string>("");
+
+const isCreator = computed(() => {
+	return props.currentUser.user_id === props.creatorUserId;
+});
 
 const participantsList = computed(() => {
 	return Object.values(props.participants).sort((a, b) => {
@@ -164,9 +169,19 @@ const currentUserData = computed<Participant>(() => ({
 	initials: getInitials(
 		props.currentUser?.full_name || props.currentUser?.name || "You",
 	),
+	audio_enabled: props.isMicOn,
+	video_enabled: props.isCameraOn,
 }));
 
 const totalParticipantCount = computed(() => {
 	return Object.keys(props.participants).length + 1;
 });
+
+const handleMuteParticipant = (participantId: string) => {
+	emit("muteParticipant", participantId);
+};
+
+const handleKickParticipant = (participantId: string) => {
+	emit("kickParticipant", participantId);
+};
 </script>

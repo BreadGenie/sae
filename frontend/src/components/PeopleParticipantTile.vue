@@ -1,6 +1,6 @@
 <template>
 	<div
-		class="flex items-center gap-3 p-3 hover:bg-surface-gray-1 rounded-lg transition-colors"
+		class="flex items-center gap-3 p-3 rounded-lg transition-colors"
 	>
 		<div class="flex-shrink-0">
 			<div
@@ -25,14 +25,14 @@
 					{{ participant.user_name }}
 				</span>
 				<span v-if="isCurrentUser" class="text-xs text-ink-gray-5">(You)</span>
-				<Badge v-if="isHost" theme="gray" size="sm">Host</Badge>
+				<Badge v-if="showHostBadge" theme="gray" size="sm">Host</Badge>
 			</div>
 		</div>
 
 		<div class="flex items-center gap-2 flex-shrink-0">
 			<!-- Audio Indicator -->
 			<div class="w-8 h-8 flex items-center justify-center">
-				<lucide-mic-off v-if="!isAudioEnabled" class="w-4 h-4 text-ink-gray-4" />
+				<lucide-mic-off v-if="!participant.audio_enabled" class="w-4 h-4 text-ink-gray-4" />
                 <AudioIndicator
                     v-else-if="stream"
                     :mediaStream="stream"
@@ -45,15 +45,33 @@
 
 			<!-- Video Indicator -->
 			<div class="w-8 h-8 flex items-center justify-center">
-				<lucide-video v-if="isVideoEnabled" class="w-4 h-4 text-ink-gray-7" />
+				<lucide-video v-if="participant.video_enabled" class="w-4 h-4 text-ink-gray-7" />
 				<lucide-video-off v-else class="w-4 h-4 text-ink-gray-4" />
 			</div>
+
+			<div v-if="showHostControls" class="relative">
+				<Dropdown :options="hostOptions" placement="bottom-end">
+					<template #default>
+						<Button
+							variant="ghost"
+							size="sm"
+							class="w-8 h-8"
+						>
+							<template #icon>
+								<lucide-more-vertical class="w-4 h-4 text-ink-gray-6" />
+							</template>
+						</Button>
+					</template>
+				</Dropdown>
+			</div>
+            <div v-else class="w-8 h-8"/>
 		</div>
 	</div>
 </template>
 
 <script setup lang="ts">
-import { Badge } from "frappe-ui";
+import { Badge, Button, Dropdown } from "frappe-ui";
+import { computed } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import AudioIndicator from "./AudioIndicator.vue";
 
@@ -62,22 +80,59 @@ interface Participant {
 	user_name?: string;
 	avatar?: string;
 	initials?: string;
+	audio_enabled?: boolean;
+	video_enabled?: boolean;
 }
 
 interface Props {
 	participant: Participant;
 	isCurrentUser?: boolean;
-	isHost?: boolean;
-	isAudioEnabled?: boolean;
-	isVideoEnabled?: boolean;
+	showHostBadge?: boolean;
+	canControlParticipant?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
 	isCurrentUser: false,
-	isHost: false,
-	isAudioEnabled: true,
-	isVideoEnabled: true,
+	showHostBadge: false,
+	canControlParticipant: false,
 });
 
+const emit = defineEmits<{
+	muteParticipant: [participantId: string];
+	kickParticipant: [participantId: string];
+}>();
+
 const { stream } = useAudioStream(props.participant.user_id);
+
+const showHostControls = computed(() => {
+	return props.canControlParticipant;
+});
+
+const hostOptions = computed(() => {
+	const options = [];
+
+	if (props.participant.audio_enabled) {
+		options.push({
+			icon: "mic-off",
+			label: "Mute",
+			onClick: () => emit("muteParticipant", props.participant.user_id),
+		});
+	}
+
+	options.push({
+		icon: "user-x",
+		label: "Remove",
+		onClick: () => {
+			if (
+				confirm(
+					`Are you sure you want to remove ${props.participant.user_name} from the meeting?`,
+				)
+			) {
+				emit("kickParticipant", props.participant.user_id);
+			}
+		},
+	});
+
+	return options;
+});
 </script>

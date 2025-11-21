@@ -351,6 +351,7 @@ class SFUClient {
 			consumer_created: () => {},
 			consumer_closed: () => {},
 			media_control_update: () => {},
+			host_control_update: () => {},
 			screen_share_started: () => {},
 			screen_share_stopped: () => {},
 			webrtc_offer: () => {},

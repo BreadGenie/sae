@@ -25,6 +25,7 @@ export class AuthManager {
 			socket.userId = decoded.user_id;
 			socket.userName = decoded.user_name;
 			socket.meetingId = decoded.meeting_id;
+			socket.isHost = decoded.is_host || false;
 			socket.currentToken = token;
 			socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
 			this.scheduleTokenExpiry(socket);

@@ -588,6 +588,11 @@ export class MediasoupManager {
 		}
 	}
 
+	peerExistsInRoom(roomId: string, peerId: string): boolean {
+		const room = this.roomManager.getRoom(roomId);
+		return room?.peers.has(peerId) || false;
+	}
+
 	get rooms() {
 		return this.roomManager;
 	}

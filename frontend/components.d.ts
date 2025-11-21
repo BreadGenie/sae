@@ -66,6 +66,7 @@ declare module "vue" {
 		LucideMoreHorizontal: typeof import(
 			"~icons/lucide/more-horizontal",
 		)["default"];
+		LucideMoreVertical: typeof import("~icons/lucide/more-vertical")["default"];
 		LucidePhoneOff: typeof import("~icons/lucide/phone-off")["default"];
 		LucidePlay: typeof import("~icons/lucide/play")["default"];
 		LucidePlayCircle: typeof import("~icons/lucide/play-circle")["default"];
@@ -78,6 +79,7 @@ declare module "vue" {
 		LucideUserMinus: typeof import("~icons/lucide/user-minus")["default"];
 		LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"];
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
+		LucideUserX: typeof import("~icons/lucide/user-x")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
 		LucideWifiOff: typeof import("~icons/lucide/wifi-off")["default"];

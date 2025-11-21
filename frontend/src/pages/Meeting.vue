@@ -80,9 +80,10 @@
 							:participants="meetingState.participants.value"
 							:isMicOn="meetingState.isMicOn.value"
 							:isCameraOn="meetingState.isCameraOn.value"
-							:isCreator="meetingState.isCreator.value"
 							:creatorUserId="creatorUserId"
 							@close="togglePeople"
+							@muteParticipant="handleMuteParticipant"
+							@kickParticipant="handleKickParticipant"
 						/>
 					</div>
 				</div>
@@ -131,7 +132,7 @@
 </template>
 
 <script setup>
-import { Button, Spinner, getCachedDocumentResource } from "frappe-ui";
+import { Button, Spinner, createDocumentResource } from "frappe-ui";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -225,9 +226,15 @@ const panelWidth = computed(() =>
 		: "0rem",
 );
 
-const meetingDoc = getCachedDocumentResource("Sae Meeting", meetingId.value);
+const meetingDoc = createDocumentResource({
+	doctype: "Sae Meeting",
+	name: meetingId.value,
+	auto: true,
+});
 
 const creatorUserId = computed(() => {
+	console.log(meetingDoc?.doc);
+
 	return meetingDoc?.doc?.owner || meetingDoc?.data?.owner || "";
 });
 
@@ -277,6 +284,36 @@ const togglePeople = () => {
 	if (meetingState.isPeopleOpen.value) {
 		// Close chat when opening people panel
 		meetingState.isChatOpen.value = false;
+	}
+};
+
+const handleMuteParticipant = async (participantId) => {
+	try {
+		console.log("Muting participant:", participantId);
+
+		if (sfuManager.value?.sfuClient) {
+			sfuManager.value.sfuClient.sendEvent("host_control", {
+				action: "mute_participant",
+				targetParticipantId: participantId,
+			});
+		} else {
+			console.error("SFU client not available");
+		}
+
+		// Note: the remote participant will receive `host_control_update` event
+		// and that will handle muting their microphone
+	} catch (error) {
+		console.error("Failed to mute participant:", error);
+	}
+};
+
+const handleKickParticipant = async (participantId) => {
+	try {
+		// TODO: Implement kick functionality
+		// This will need a new API endpoint in the backend
+		console.log("Kick participant:", participantId);
+	} catch (error) {
+		console.error("Failed to kick participant:", error);
 	}
 };
 
@@ -444,21 +481,6 @@ onUnmounted(() => {
 
 	// Cleanup will be handled by the meeting logic composable
 });
-
-// Watch for meetingId and initialize meetingDoc
-watch(
-	meetingId,
-	async (newMeetingId) => {
-		if (newMeetingId && meetingDoc) {
-			try {
-				await meetingDoc.submit();
-			} catch (error) {
-				console.error("Failed to load meeting document:", error);
-			}
-		}
-	},
-	{ immediate: true },
-);
 
 // Watch for localVideo element and localStream connection
 // Check the data attribute to avoid unnecessary updates when ref callback already handled it

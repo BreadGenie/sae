@@ -63,6 +63,12 @@ export interface ServerToClientEvents {
 		action: MediaControlAction;
 		timestamp: string;
 	}) => void;
+	host_control_update: (data: {
+		action: HostControlAction;
+		targetParticipantId: string;
+		hostId: string;
+		timestamp: string;
+	}) => void;
 	screen_share_started: (data: {
 		participantId: string;
 		shareData: ScreenShareData;
@@ -144,6 +150,10 @@ export interface ClientToServerEvents {
 	webrtc_answer: (data: WebRTCSignalData) => void;
 	ice_candidate: (data: WebRTCSignalData) => void;
 	media_control: (data: { action: MediaControlAction }) => void;
+	host_control: (data: {
+		action: HostControlAction;
+		targetParticipantId: string;
+	}) => void;
 	screen_share: (data: {
 		action: 'start_share' | 'stop_share';
 		shareData?: ScreenShareData;
@@ -170,6 +180,7 @@ export interface SocketData {
 	userId: string;
 	userName: string;
 	meetingId: string;
+	isHost: boolean;
 	roomId?: string;
 	participantId?: string;
 }
@@ -276,6 +287,8 @@ export interface ParticipantInfo {
 }
 
 export type MediaControlAction = 'mute' | 'unmute' | 'video_off' | 'video_on';
+
+export type HostControlAction = 'mute_participant' | 'kick_participant';
 
 // Screen share data interface
 export interface ScreenShareData {
@@ -385,6 +398,7 @@ export interface JWTPayload {
 	user_name: string;
 	meeting_id: string;
 	user_avatar?: string;
+	is_host: boolean;
 	exp?: number;
 	iat?: number;
 }
@@ -410,6 +424,7 @@ declare module 'socket.io' {
 		userId: string;
 		userName: string;
 		meetingId: string;
+		isHost: boolean;
 		roomId?: string;
 		participantId?: string;
 		currentToken?: string;

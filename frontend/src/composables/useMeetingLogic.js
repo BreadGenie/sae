@@ -1206,6 +1206,11 @@ export function useMeetingLogic(meetingState, meetingId) {
 					}, 1000);
 				}
 			},
+			onHostMutedYou: () => {
+				if (meetingState.isMicOn.value) {
+					toggleMicrophone();
+				}
+			},
 		};
 	};
 
