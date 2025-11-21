@@ -71,6 +71,7 @@ declare module "vue" {
 		LucidePlayCircle: typeof import("~icons/lucide/play-circle")["default"];
 		LucidePlus: typeof import("~icons/lucide/plus")["default"];
 		LucideRefreshCw: typeof import("~icons/lucide/refresh-cw")["default"];
+		LucideSearch: typeof import("~icons/lucide/search")["default"];
 		LucideSettings: typeof import("~icons/lucide/settings")["default"];
 		LucideSmile: typeof import("~icons/lucide/smile")["default"];
 		LucideUserCheck: typeof import("~icons/lucide/user-check")["default"];
@@ -94,6 +95,10 @@ declare module "vue" {
 		NamePill: typeof import("./src/components/NamePill.vue")["default"];
 		ParticipantTile: typeof import(
 			"./src/components/ParticipantTile.vue",
+		)["default"];
+		PeoplePanel: typeof import("./src/components/PeoplePanel.vue")["default"];
+		PeopleParticipantTile: typeof import(
+			"./src/components/PeopleParticipantTile.vue",
 		)["default"];
 		ReactionPicker: typeof import(
 			"./src/components/ReactionPicker.vue",

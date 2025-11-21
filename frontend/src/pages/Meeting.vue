@@ -37,8 +37,8 @@
 				<div
 					class="grid flex-1 min-h-0 transition-[grid-template-columns] duration-300 ease-out"
 					:style="{
-						'--chat-width': chatWidth,
-						gridTemplateColumns: 'minmax(0, 1fr) var(--chat-width)',
+						'--panel-width': panelWidth,
+						gridTemplateColumns: 'minmax(0, 1fr) var(--panel-width)',
 					}"
 				>
 					<!-- Video area -->
@@ -52,16 +52,14 @@
 						<VideoGrid v-else />
 					</div>
 
-					<!-- Chat Panel -->
+					<!-- Panel Container -->
 					<div
-						class="h-full overflow-hidden transition-opacity duration-300 ease-out"
-						:style="{ width: chatWidth }"
-						:class="{
-							'pointer-events-auto opacity-100': meetingState.isChatOpen.value,
-							'pointer-events-none opacity-0': !meetingState.isChatOpen.value,
-						}"
+						class="h-full overflow-hidden transition-opacity duration-300 ease-out relative"
+						:style="{ width: panelWidth }"
 					>
+						<!-- Chat Panel -->
 						<ChatPanel
+							v-show="meetingState.isChatOpen.value"
 							:open="meetingState.isChatOpen.value"
 							:messages="meetingState.chatMessages.value"
 							:user-id="meetingState.currentUser.value?.user_id || ''"
@@ -73,12 +71,26 @@
 							@close="toggleChat"
 							@send="onSendChat"
 						/>
+
+						<!-- People Panel -->
+						<PeoplePanel
+							v-show="meetingState.isPeopleOpen.value"
+							:open="meetingState.isPeopleOpen.value"
+							:currentUser="meetingState.currentUser.value"
+							:participants="meetingState.participants.value"
+							:isMicOn="meetingState.isMicOn.value"
+							:isCameraOn="meetingState.isCameraOn.value"
+							:isCreator="meetingState.isCreator.value"
+							:creatorUserId="creatorUserId"
+							@close="togglePeople"
+						/>
 					</div>
 				</div>
 
 				<!-- Floating controls -->
 				<FloatingControls
 					:isChatOpen="meetingState.isChatOpen.value"
+					:isPeopleOpen="meetingState.isPeopleOpen.value"
 					:hasUnread="meetingState.hasUnreadMessages.value"
 					:isMicOn="meetingState.isMicOn.value"
 					:isCameraOn="meetingState.isCameraOn.value"
@@ -90,6 +102,7 @@
 					:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
 					:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
 					@toggle-chat="toggleChat"
+					@toggle-people="togglePeople"
 					@toggle-reactions="toggleReactions($event)"
 					@toggle-microphone="toggleMicrophone"
 					@toggle-camera="toggleCamera"
@@ -127,6 +140,7 @@ import ChatPanel from "../components/ChatPanel.vue";
 import FloatingControls from "../components/FloatingControls.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import MeetingPreview from "../components/MeetingPreview.vue";
+import PeoplePanel from "../components/PeoplePanel.vue";
 import ScreenShareLayout from "../components/ScreenShareLayout.vue";
 import VideoGrid from "../components/VideoGrid.vue";
 
@@ -205,11 +219,17 @@ const showPreview = computed(() => {
 	return inPreview || waitingForApproval || joinRequestRejected;
 });
 
-const chatWidth = computed(() =>
-	meetingState.isChatOpen.value ? "24rem" : "0rem",
+const panelWidth = computed(() =>
+	meetingState.isChatOpen.value || meetingState.isPeopleOpen.value
+		? "24rem"
+		: "0rem",
 );
 
 const meetingDoc = getCachedDocumentResource("Sae Meeting", meetingId.value);
+
+const creatorUserId = computed(() => {
+	return meetingDoc?.doc?.owner || meetingDoc?.data?.owner || "";
+});
 
 // Refs
 const chatNotificationQueue = ref(null);
@@ -247,6 +267,16 @@ const toggleChat = () => {
 	meetingState.isChatOpen.value = !meetingState.isChatOpen.value;
 	if (meetingState.isChatOpen.value) {
 		meetingState.hasUnreadMessages.value = false;
+		// Close people panel when opening chat
+		meetingState.isPeopleOpen.value = false;
+	}
+};
+
+const togglePeople = () => {
+	meetingState.isPeopleOpen.value = !meetingState.isPeopleOpen.value;
+	if (meetingState.isPeopleOpen.value) {
+		// Close chat when opening people panel
+		meetingState.isChatOpen.value = false;
 	}
 };
 

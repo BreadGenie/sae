@@ -10,12 +10,12 @@
 				maxHeight: (props.maxHeight || 80) + 'px',
 				transition: 'height 0.1s ease-out',
 			}"
-		></div>
+		/>
 	</div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 const props = defineProps({
 	deviceId: {
