@@ -6,6 +6,7 @@ import time
 
 import frappe
 import jwt
+from frappe import _
 from frappe.rate_limiter import rate_limit
 
 
@@ -32,10 +33,10 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 
 		if meeting.is_user_banned(frappe.session.user):
-			frappe.throw("You are banned from this meeting", frappe.PermissionError)
+			frappe.throw(_("You are banned from this meeting"), frappe.PermissionError)
 
 		if not meeting.can_join(frappe.session.user):
-			frappe.throw("Access denied", frappe.PermissionError)
+			frappe.throw(_("Access denied"), frappe.PermissionError)
 
 		from sae.utils.sfu_config import get_sfu_config
 
@@ -85,7 +86,7 @@ def join_meeting(meeting_id: str) -> dict:
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 
 		if meeting.is_user_banned(frappe.session.user):
-			frappe.throw("You are banned from this meeting", frappe.PermissionError)
+			frappe.throw(_("You are banned from this meeting"), frappe.PermissionError)
 
 		if meeting.can_join(frappe.session.user):
 			result = meeting.join(frappe.session.user)
