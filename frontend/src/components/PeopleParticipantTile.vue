@@ -67,13 +67,21 @@
             <div v-else class="w-8 h-8"/>
 		</div>
 	</div>
+
+	<!-- Kick Confirmation Dialog -->
+	<KickParticipantDialog
+		v-model="showKickDialog"
+		:participant-name="participant.user_name || 'this participant'"
+		@confirm="handleKickConfirm"
+	/>
 </template>
 
 <script setup lang="ts">
 import { Badge, Button, Dropdown } from "frappe-ui";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import AudioIndicator from "./AudioIndicator.vue";
+import KickParticipantDialog from "./KickParticipantDialog.vue";
 
 interface Participant {
 	user_id: string;
@@ -99,14 +107,21 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
 	muteParticipant: [participantId: string];
-	kickParticipant: [participantId: string];
+	kickParticipant: [participantId: string, ban: boolean];
 }>();
 
 const { stream } = useAudioStream(props.participant.user_id);
 
+const showKickDialog = ref(false);
+
 const showHostControls = computed(() => {
 	return props.canControlParticipant;
 });
+
+const handleKickConfirm = (ban: boolean) => {
+	emit("kickParticipant", props.participant.user_id, ban);
+	showKickDialog.value = false;
+};
 
 const hostOptions = computed(() => {
 	const options = [];
@@ -123,13 +138,7 @@ const hostOptions = computed(() => {
 		icon: "user-x",
 		label: "Remove",
 		onClick: () => {
-			if (
-				confirm(
-					`Are you sure you want to remove ${props.participant.user_name} from the meeting?`,
-				)
-			) {
-				emit("kickParticipant", props.participant.user_id);
-			}
+			showKickDialog.value = true;
 		},
 	});
 

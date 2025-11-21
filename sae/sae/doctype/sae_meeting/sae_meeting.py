@@ -115,6 +115,9 @@ class SaeMeeting(Document):
 		if not user:
 			user = frappe.session.user
 
+		if self.is_user_banned(user):
+			return False
+
 		# Check if meeting is active
 		# if not self.get("is_active", True):
 		# 	return False
@@ -238,6 +241,14 @@ class SaeMeeting(Document):
 
 		members = self.get_members()
 		return user in members
+
+	def is_user_banned(self, user):
+		"""Check if user is banned from this meeting"""
+		if not self.get("banned_users"):
+			return False
+
+		banned_user_emails = [row.user for row in self.banned_users]
+		return user in banned_user_emails
 
 
 def generate(segment_length=4, num_segments=3, separator="-"):

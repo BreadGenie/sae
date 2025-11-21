@@ -115,7 +115,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
 	close: [];
 	muteParticipant: [participantId: string];
-	kickParticipant: [participantId: string];
+	kickParticipant: [participantId: string, ban: boolean];
 }>();
 
 const searchQuery = ref<string>("");
@@ -181,7 +181,7 @@ const handleMuteParticipant = (participantId: string) => {
 	emit("muteParticipant", participantId);
 };
 
-const handleKickParticipant = (participantId: string) => {
-	emit("kickParticipant", participantId);
+const handleKickParticipant = (participantId: string, ban: boolean) => {
+	emit("kickParticipant", participantId, ban);
 };
 </script>

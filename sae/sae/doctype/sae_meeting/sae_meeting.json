@@ -10,6 +10,7 @@
   "meeting_type",
   "members",
   "waiting_room",
+  "banned_users",
   "column_break_1",
   "started_at"
  ],
@@ -48,6 +49,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "banned_users",
+   "fieldtype": "Table",
+   "label": "Banned Users",
+   "options": "Sae Meeting User"
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -61,7 +68,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-10-30 11:50:40.834906",
+ "modified": "2025-11-21 18:45:49.951052",
  "modified_by": "Administrator",
  "module": "Sae",
  "name": "Sae Meeting",

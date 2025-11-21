@@ -1211,6 +1211,13 @@ export function useMeetingLogic(meetingState, meetingId) {
 					toggleMicrophone();
 				}
 			},
+			onHostKickedYou: (data) => {
+				toast.error("You have been removed from the meeting by the host");
+
+				setTimeout(() => {
+					endCall();
+				}, 1000);
+			},
 		};
 	};
 

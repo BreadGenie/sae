@@ -554,16 +554,29 @@ export class SocketHandlerManager {
 					);
 					break;
 				case 'kick_participant':
-					// TODO: Implement kick functionality
-					loggers.socketHandler.info(
-						'Kick functionality not yet implemented for %s by host %s',
+					targetSocket.emit('host_control_update', {
+						action,
 						targetParticipantId,
-						socket.participantId,
-					);
-					socket.emit('sfu_error', {
-						error: 'Kick functionality coming soon',
+						hostId: socket.participantId,
 						timestamp: new Date().toISOString(),
 					});
+
+					loggers.socketHandler.info(
+						'Host %s kicked participant %s from room %s',
+						socket.participantId,
+						targetParticipantId,
+						roomId,
+					);
+
+					setTimeout(() => {
+						if (targetSocket.connected) {
+							targetSocket.disconnect(true);
+							loggers.socketHandler.info(
+								'Forcefully disconnected kicked participant %s',
+								targetParticipantId,
+							);
+						}
+					}, 1000);
 					break;
 				default:
 					socket.emit('sfu_error', {

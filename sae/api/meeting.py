@@ -31,8 +31,11 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 	try:
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 
+		if meeting.is_user_banned(frappe.session.user):
+			frappe.throw("You are banned from this meeting", frappe.PermissionError)
+
 		if not meeting.can_join(frappe.session.user):
-			return {"success": False, "error": "Access denied"}
+			frappe.throw("Access denied", frappe.PermissionError)
 
 		from sae.utils.sfu_config import get_sfu_config
 
@@ -80,6 +83,9 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 def join_meeting(meeting_id: str) -> dict:
 	try:
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+		if meeting.is_user_banned(frappe.session.user):
+			frappe.throw("You are banned from this meeting", frappe.PermissionError)
 
 		if meeting.can_join(frappe.session.user):
 			result = meeting.join(frappe.session.user)

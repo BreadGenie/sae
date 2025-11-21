@@ -38,6 +38,9 @@ declare module "vue" {
 		JoinRequestNotifications: typeof import(
 			"./src/components/JoinRequestNotifications.vue",
 		)["default"];
+		KickParticipantDialog: typeof import(
+			"./src/components/KickParticipantDialog.vue",
+		)["default"];
 		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
 		LucideAlertTriangle: typeof import(
 			"~icons/lucide/alert-triangle",

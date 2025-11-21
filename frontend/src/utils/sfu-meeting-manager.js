@@ -642,8 +642,9 @@ export class SFUMeetingManager {
 					break;
 				case "kick_participant":
 					if (isForMe) {
-						// TODO: Handle being kicked from the meeting
-						console.log("🚪 Host kicked me from the meeting");
+						if (this.eventHandlers.onHostKickedYou) {
+							this.eventHandlers.onHostKickedYou({ hostId });
+						}
 					}
 					break;
 				default:

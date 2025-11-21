@@ -307,11 +307,29 @@ const handleMuteParticipant = async (participantId) => {
 	}
 };
 
-const handleKickParticipant = async (participantId) => {
+const handleKickParticipant = async (participantId, ban = false) => {
 	try {
-		// TODO: Implement kick functionality
-		// This will need a new API endpoint in the backend
-		console.log("Kick participant:", participantId);
+		if (ban) {
+			try {
+				await meetingDoc.setValue.submit({
+					banned_users: [
+						...(meetingDoc.doc?.banned_users || []),
+						{ user: participantId },
+					],
+				});
+			} catch (error) {
+				console.error("Failed to ban user:", error);
+			}
+		}
+
+		if (sfuManager.value?.sfuClient) {
+			sfuManager.value.sfuClient.sendEvent("host_control", {
+				action: "kick_participant",
+				targetParticipantId: participantId,
+			});
+		} else {
+			console.error("SFU client not available");
+		}
 	} catch (error) {
 		console.error("Failed to kick participant:", error);
 	}
