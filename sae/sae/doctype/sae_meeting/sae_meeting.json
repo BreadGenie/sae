@@ -36,23 +36,24 @@
   },
   {
    "fieldname": "members",
-   "fieldtype": "Long Text",
-   "hidden": 1,
+   "fieldtype": "Table MultiSelect",
    "label": "Members",
+   "options": "Sae Meeting User",
    "read_only": 1
   },
   {
    "fieldname": "waiting_room",
-   "fieldtype": "Long Text",
-   "hidden": 1,
+   "fieldtype": "Table MultiSelect",
    "label": "Waiting Room",
+   "options": "Sae Meeting User",
    "read_only": 1
   },
   {
    "fieldname": "banned_users",
-   "fieldtype": "Table",
+   "fieldtype": "Table MultiSelect",
    "label": "Banned Users",
-   "options": "Sae Meeting User"
+   "options": "Sae Meeting User",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_1",
@@ -68,7 +69,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-11-21 18:45:49.951052",
+ "modified": "2025-11-23 10:35:59.240356",
  "modified_by": "Administrator",
  "module": "Sae",
  "name": "Sae Meeting",

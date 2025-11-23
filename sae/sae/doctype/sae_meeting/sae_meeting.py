@@ -18,11 +18,14 @@ class SaeMeeting(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		from sae.sae.doctype.sae_meeting_user.sae_meeting_user import SaeMeetingUser
+
+		banned_users: DF.TableMultiSelect[SaeMeetingUser]
 		is_active: DF.Check
 		meeting_type: DF.Literal["open", "restricted"]
-		members: DF.LongText | None
+		members: DF.TableMultiSelect[SaeMeetingUser]
 		started_at: DF.Datetime | None
-		waiting_room: DF.LongText | None
+		waiting_room: DF.TableMultiSelect[SaeMeetingUser]
 	# end: auto-generated types
 
 	def autoname(self):
@@ -32,10 +35,6 @@ class SaeMeeting(Document):
 
 	def before_insert(self):
 		"""Initialize meeting room"""
-		if not hasattr(self, "members") or not self.members:
-			self.members = json.dumps([])
-		if not hasattr(self, "waiting_room") or not self.waiting_room:
-			self.waiting_room = json.dumps([])
 		if not hasattr(self, "is_active"):
 			self.is_active = 1
 
@@ -97,10 +96,7 @@ class SaeMeeting(Document):
 
 	def get_members(self):
 		"""Get list of current members"""
-		try:
-			return json.loads(self.members or "[]")
-		except (json.JSONDecodeError, AttributeError):
-			return []
+		return [row.user for row in self.members] if self.members else []
 
 	def can_join(self, user=None):
 		"""
@@ -130,15 +126,16 @@ class SaeMeeting(Document):
 
 	def update_members(self, members_list):
 		"""Update members list and save"""
-		self.members = json.dumps(members_list)
+		self.members = []
+
+		for user in members_list:
+			self.append("members", {"user": user})
+
 		self.save(ignore_permissions=True)
 
 	def get_waiting_room(self):
 		"""Get list of users waiting for approval"""
-		try:
-			return json.loads(self.waiting_room or "[]")
-		except (json.JSONDecodeError, AttributeError):
-			return []
+		return [row.user for row in self.waiting_room] if self.waiting_room else []
 
 	def add_to_waiting_room(self, user):
 		"""Add user to waiting room"""
@@ -147,8 +144,7 @@ class SaeMeeting(Document):
 
 		waiting_users = self.get_waiting_room()
 		if user not in waiting_users:
-			waiting_users.append(user)
-			self.waiting_room = json.dumps(waiting_users)
+			self.append("waiting_room", {"user": user})
 			self.save(ignore_permissions=True)
 
 		user_doc = frappe.db.get_value("User", user, ["full_name", "user_image"], as_dict=True)
@@ -160,17 +156,14 @@ class SaeMeeting(Document):
 				"user": user,
 				"user_name": user_doc.full_name,
 				"user_image": user_doc.user_image,
-				"waiting_count": len(waiting_users),
+				"waiting_count": len(waiting_users) + 1,
 			},
 		)
 
 	def remove_from_waiting_room(self, user):
 		"""Remove user from waiting room"""
-		waiting_users = self.get_waiting_room()
-		if user in waiting_users:
-			waiting_users.remove(user)
-			self.waiting_room = json.dumps(waiting_users)
-			self.save(ignore_permissions=True)
+		self.waiting_room = [row for row in self.waiting_room if row.user != user]
+		self.save(ignore_permissions=True)
 
 	def approve_user(self, user):
 		"""Approve a user from waiting room to join the meeting"""
