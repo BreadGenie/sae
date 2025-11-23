@@ -53,39 +53,49 @@
 					</div>
 
 					<!-- Panel Container -->
-					<div
-						class="h-full overflow-hidden transition-opacity duration-300 ease-out relative"
-						:style="{ width: panelWidth }"
+					<Transition
+						enter-active-class="transition-all duration-300 ease-out"
+						enter-from-class="opacity-0 transform translate-x-full w-0"
+						enter-to-class="opacity-100 transform translate-x-0"
+						leave-active-class="transition-all duration-300 ease-in"
+						leave-from-class="opacity-100 transform translate-x-0"
+						leave-to-class="opacity-0 transform translate-x-full"
 					>
-						<!-- Chat Panel -->
-						<ChatPanel
-							v-show="meetingState.isChatOpen.value"
-							:open="meetingState.isChatOpen.value"
-							:messages="meetingState.chatMessages.value"
-							:user-id="meetingState.currentUser.value?.user_id || ''"
-							:user-name="
-								meetingState.currentUser.value?.full_name ||
-								meetingState.currentUser.value?.name ||
-								'You'
-							"
-							@close="toggleChat"
-							@send="onSendChat"
-						/>
+						<div
+							v-if="activePanel"
+							class="h-full overflow-hidden relative"
+							:style="{ width: '24rem' }"
+						>
+							<!-- Chat Panel -->
+							<ChatPanel
+								v-if="activePanel === 'chat'"
+								:open="true"
+								:messages="meetingState.chatMessages.value"
+								:user-id="meetingState.currentUser.value?.user_id || ''"
+								:user-name="
+									meetingState.currentUser.value?.full_name ||
+									meetingState.currentUser.value?.name ||
+									'You'
+								"
+								@close="toggleChat"
+								@send="onSendChat"
+							/>
 
-						<!-- People Panel -->
-						<PeoplePanel
-							v-show="meetingState.isPeopleOpen.value"
-							:open="meetingState.isPeopleOpen.value"
-							:currentUser="meetingState.currentUser.value"
-							:participants="meetingState.participants.value"
-							:isMicOn="meetingState.isMicOn.value"
-							:isCameraOn="meetingState.isCameraOn.value"
-							:creatorUserId="creatorUserId"
-							@close="togglePeople"
-							@muteParticipant="handleMuteParticipant"
-							@kickParticipant="handleKickParticipant"
-						/>
-					</div>
+							<!-- People Panel -->
+							<PeoplePanel
+								v-if="activePanel === 'people'"
+								:open="true"
+								:currentUser="meetingState.currentUser.value"
+								:participants="meetingState.participants.value"
+								:isMicOn="meetingState.isMicOn.value"
+								:isCameraOn="meetingState.isCameraOn.value"
+								:creatorUserId="creatorUserId"
+								@close="togglePeople"
+								@muteParticipant="handleMuteParticipant"
+								@kickParticipant="handleKickParticipant"
+							/>
+						</div>
+					</Transition>
 				</div>
 
 				<!-- Floating controls -->
@@ -220,11 +230,13 @@ const showPreview = computed(() => {
 	return inPreview || waitingForApproval || joinRequestRejected;
 });
 
-const panelWidth = computed(() =>
-	meetingState.isChatOpen.value || meetingState.isPeopleOpen.value
-		? "24rem"
-		: "0rem",
-);
+const activePanel = computed(() => {
+	if (meetingState.isChatOpen.value) return "chat";
+	if (meetingState.isPeopleOpen.value) return "people";
+	return null;
+});
+
+const panelWidth = computed(() => (activePanel.value ? "24rem" : "0rem"));
 
 const meetingDoc = createDocumentResource({
 	doctype: "Sae Meeting",
