@@ -245,8 +245,6 @@ const meetingDoc = createDocumentResource({
 });
 
 const creatorUserId = computed(() => {
-	console.log(meetingDoc?.doc);
-
 	return meetingDoc?.doc?.owner || meetingDoc?.data?.owner || "";
 });
 
