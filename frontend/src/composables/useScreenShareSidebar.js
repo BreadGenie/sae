@@ -4,7 +4,11 @@ import { computed } from "vue";
  * Composable for managing screen share sidebar layout
  * Handles participant display in sidebar during screen sharing
  */
-export function useScreenShareSidebar(participants, activeSpeakerIds = []) {
+export function useScreenShareSidebar(
+	participants,
+	activeSpeakerIds,
+	meetingState,
+) {
 	const sidebarDisplay = computed(() => {
 		const participantData = participants.value || participants;
 
@@ -48,6 +52,7 @@ export function useScreenShareSidebar(participants, activeSpeakerIds = []) {
 		// Get active speaker IDs
 		const activeSpeakers = activeSpeakerIds?.value || [];
 		const activeSpeakerSet = new Set(activeSpeakers);
+		const raisedHands = meetingState?.raisedHands?.value || {};
 
 		// Separate participants by video state and active speaker status
 		const videoOnActiveSpeakers = remotes.filter(
@@ -59,8 +64,18 @@ export function useScreenShareSidebar(participants, activeSpeakerIds = []) {
 		const videoOffActiveSpeakers = remotes.filter(
 			(p) => !p.video_enabled && activeSpeakerSet.has(p.user_id),
 		);
+		const raisedHandsParticipants = remotes
+			.filter((p) => raisedHands[p.user_id] && !activeSpeakerSet.has(p.user_id))
+			.sort((a, b) => {
+				const aTime = new Date(raisedHands[a.user_id]).getTime();
+				const bTime = new Date(raisedHands[b.user_id]).getTime();
+				return aTime - bTime; // Earliest first
+			});
 		const videoOffNonSpeakers = remotes.filter(
-			(p) => !p.video_enabled && !activeSpeakerSet.has(p.user_id),
+			(p) =>
+				!p.video_enabled &&
+				!activeSpeakerSet.has(p.user_id) &&
+				!raisedHands[p.user_id],
 		);
 
 		const baseCapacity = 6;
@@ -70,7 +85,8 @@ export function useScreenShareSidebar(participants, activeSpeakerIds = []) {
 		// 1. Active speakers with video ON
 		// 2. Non-active speakers with video ON
 		// 3. Active speakers with video OFF (ensure they're visible)
-		// 4. Non-active speakers with video OFF
+		// 4. Raised hands (sorted by timestamp)
+		// 5. Non-active speakers with video OFF
 
 		for (const p of videoOnActiveSpeakers) {
 			if (visibleRemotes.length < baseCapacity) {
@@ -85,6 +101,12 @@ export function useScreenShareSidebar(participants, activeSpeakerIds = []) {
 		}
 
 		for (const p of videoOffActiveSpeakers) {
+			if (visibleRemotes.length < baseCapacity) {
+				visibleRemotes.push(p);
+			}
+		}
+
+		for (const p of raisedHandsParticipants) {
 			if (visibleRemotes.length < baseCapacity) {
 				visibleRemotes.push(p);
 			}

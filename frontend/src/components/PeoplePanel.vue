@@ -56,6 +56,7 @@
 							:canControlParticipant="isCreator"
 							@muteParticipant="handleMuteParticipant"
 							@kickParticipant="handleKickParticipant"
+							@lowerHand="handleLowerHand"
 						/>
 					</div>
 
@@ -73,9 +74,13 @@
 
 <script setup lang="ts">
 import { FormControl } from "frappe-ui";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import { getInitials } from "../utils/text.ts";
 import PeopleParticipantTile from "./PeopleParticipantTile.vue";
+
+const meetingState = inject("meetingState") as {
+	raisedHands?: { value: Record<string, string> };
+};
 
 interface Participant {
 	user_id: string;
@@ -116,6 +121,7 @@ const emit = defineEmits<{
 	close: [];
 	muteParticipant: [participantId: string];
 	kickParticipant: [participantId: string, ban: boolean];
+	lowerHand: [participantId: string];
 }>();
 
 const searchQuery = ref<string>("");
@@ -125,7 +131,23 @@ const isCreator = computed(() => {
 });
 
 const participantsList = computed(() => {
+	const raisedHands = meetingState?.raisedHands?.value || {};
+
 	return Object.values(props.participants).sort((a, b) => {
+		// 1. Raised hands first
+		const aRaised = raisedHands[a.user_id];
+		const bRaised = raisedHands[b.user_id];
+		if (aRaised && !bRaised) return -1;
+		if (!aRaised && bRaised) return 1;
+
+		// 2. Among raised hands, sort by timestamp (earliest first)
+		if (aRaised && bRaised) {
+			const aTime = new Date(aRaised).getTime();
+			const bTime = new Date(bRaised).getTime();
+			return aTime - bTime;
+		}
+
+		// 3. Alphabetical by name for everyone else
 		const nameA = (a.user_name || a.user_id || "").toLowerCase();
 		const nameB = (b.user_name || b.user_id || "").toLowerCase();
 		return nameA.localeCompare(nameB);
@@ -183,5 +205,9 @@ const handleMuteParticipant = (participantId: string) => {
 
 const handleKickParticipant = (participantId: string, ban: boolean) => {
 	emit("kickParticipant", participantId, ban);
+};
+
+const handleLowerHand = (participantId: string) => {
+	emit("lowerHand", participantId);
 };
 </script>

@@ -511,6 +511,21 @@ export function useMeetingLogic(meetingState, meetingId) {
 			meetingState.isMicOn.value = enable;
 			setMicEnabled(enable);
 
+			if (
+				enable &&
+				meetingState.raisedHands.value?.[getSFUClient().getUserId()]
+			) {
+				try {
+					await getSFUClient().sendRaiseHand(false);
+					const currentHands = meetingState.raisedHands.value || {};
+					const newHands = { ...currentHands };
+					delete newHands[getSFUClient().getUserId()];
+					meetingState.raisedHands.value = newHands;
+				} catch (error) {
+					console.error("❌ Failed to lower hand on unmute:", error);
+				}
+			}
+
 			// Send media control update (server expects string actions as well)
 			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
@@ -1574,6 +1589,96 @@ export function useMeetingLogic(meetingState, meetingId) {
 		}
 	};
 
+	/**
+	 * Setup raise hand events
+	 */
+	const setupRaiseHandEvents = () => {
+		try {
+			const sfuClient = getSFUClient();
+
+			sfuClient.on("hand_raised", (data) => {
+				const participantId = data.participantId;
+				const raised = data.raised;
+
+				const currentHands = meetingState.raisedHands.value || {};
+				const newHands = { ...currentHands };
+
+				if (raised) {
+					newHands[participantId] = data.timestamp || new Date().toISOString();
+				} else {
+					delete newHands[participantId];
+				}
+
+				meetingState.raisedHands.value = newHands;
+
+				if (raised) {
+					audioNotificationManager.playRaiseHandNotification();
+				}
+			});
+
+			sfuClient.on("existing_raised_hands", (data) => {
+				meetingState.raisedHands.value = data.hands || {};
+			});
+		} catch (error) {
+			console.error("❌ Failed to setup raise hand events:", error);
+		}
+	};
+
+	/**
+	 * Toggle raise hand
+	 */
+	const toggleRaiseHand = async () => {
+		try {
+			const currentUserId = meetingState.currentUser.value?.user_id;
+			if (!currentUserId) return;
+
+			const isCurrentlyRaised =
+				!!meetingState.raisedHands.value?.[currentUserId];
+			const newRaisedState = !isCurrentlyRaised;
+
+			const currentHands = meetingState.raisedHands.value || {};
+			const optimisticHands = { ...currentHands };
+			if (newRaisedState) {
+				optimisticHands[currentUserId] = new Date().toISOString();
+			} else {
+				delete optimisticHands[currentUserId];
+			}
+			meetingState.raisedHands.value = optimisticHands;
+
+			const sfuClient = getSFUClient();
+			if (sfuClient.isConnected()) {
+				try {
+					await sfuClient.sendRaiseHand(newRaisedState);
+				} catch (serverError) {
+					const currentHands = meetingState.raisedHands.value || {};
+					const revertedHands = { ...currentHands };
+					if (isCurrentlyRaised) {
+						revertedHands[currentUserId] = new Date().toISOString();
+					} else {
+						delete revertedHands[currentUserId];
+					}
+					meetingState.raisedHands.value = revertedHands;
+					console.error(
+						"❌ Failed to toggle raise hand on server:",
+						serverError,
+					);
+				}
+			} else {
+				const currentHands = meetingState.raisedHands.value || {};
+				const revertedHands = { ...currentHands };
+				if (isCurrentlyRaised) {
+					revertedHands[currentUserId] = new Date().toISOString();
+				} else {
+					delete revertedHands[currentUserId];
+				}
+				meetingState.raisedHands.value = revertedHands;
+				console.error("❌ Cannot toggle raise hand: not connected to SFU");
+			}
+		} catch (error) {
+			console.error("❌ Failed to toggle raise hand:", error);
+		}
+	};
+
 	// ==================== KEYBOARD SHORTCUTS ====================
 
 	/**
@@ -1693,6 +1798,10 @@ export function useMeetingLogic(meetingState, meetingId) {
 		setupReactionEvents,
 		onSendReaction,
 		showReactionForUser,
+
+		// Methods - Raise Hand
+		setupRaiseHandEvents,
+		toggleRaiseHand,
 
 		// Methods - Keyboard
 		handleKeyDown,

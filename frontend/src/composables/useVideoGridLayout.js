@@ -4,7 +4,11 @@ import { computed } from "vue";
  * Composable for managing video grid layout logic
  * Handles participant display, grid sizing, and overflow grouping
  */
-export function useVideoGridLayout(participants, activeSpeakerIds) {
+export function useVideoGridLayout(
+	participants,
+	activeSpeakerIds,
+	meetingState,
+) {
 	// Logic: cap visible tiles at 16 (4x4); extra participants are grouped
 	const displayParticipants = computed(() => {
 		const src =
@@ -27,6 +31,7 @@ export function useVideoGridLayout(participants, activeSpeakerIds) {
 		// Get active speaker IDs
 		const activeSpeakers = activeSpeakerIds?.value || [];
 		const activeSpeakerSet = new Set(activeSpeakers);
+		const raisedHands = meetingState?.raisedHands?.value || {};
 
 		if (total <= threshold) {
 			return { list: remotes, hidden: [], extra: 0 };
@@ -44,8 +49,18 @@ export function useVideoGridLayout(participants, activeSpeakerIds) {
 		const videoOffActiveSpeakers = remotes.filter(
 			(p) => !p.video_enabled && activeSpeakerSet.has(p.user_id),
 		);
+		const raisedHandsParticipants = remotes
+			.filter((p) => raisedHands[p.user_id] && !activeSpeakerSet.has(p.user_id))
+			.sort((a, b) => {
+				const aTime = new Date(raisedHands[a.user_id]).getTime();
+				const bTime = new Date(raisedHands[b.user_id]).getTime();
+				return aTime - bTime; // Earliest first
+			});
 		const videoOffNonSpeakers = remotes.filter(
-			(p) => !p.video_enabled && !activeSpeakerSet.has(p.user_id),
+			(p) =>
+				!p.video_enabled &&
+				!activeSpeakerSet.has(p.user_id) &&
+				!raisedHands[p.user_id],
 		);
 
 		const visibleRemotes = [];
@@ -54,7 +69,8 @@ export function useVideoGridLayout(participants, activeSpeakerIds) {
 		// 1. Active speakers with video ON
 		// 2. Non-active speakers with video ON
 		// 3. Active speakers with video OFF (ensure they're visible)
-		// 4. Non-active speakers with video OFF
+		// 4. Raised hands
+		// 5. Non-active speakers with video OFF
 
 		for (const p of videoOnActiveSpeakers) {
 			if (visibleRemotes.length < remoteCapacity) {
@@ -73,6 +89,14 @@ export function useVideoGridLayout(participants, activeSpeakerIds) {
 		}
 
 		for (const p of videoOffActiveSpeakers) {
+			if (visibleRemotes.length < remoteCapacity) {
+				visibleRemotes.push(p);
+			} else {
+				break;
+			}
+		}
+
+		for (const p of raisedHandsParticipants) {
 			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			} else {

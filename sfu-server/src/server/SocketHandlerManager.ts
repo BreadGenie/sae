@@ -22,6 +22,7 @@ export class SocketHandlerManager {
 	private io: Server<ClientToServerEvents, ServerToClientEvents>;
 	private mediasoup: MediasoupManager;
 	private authManager: AuthManager;
+	private raisedHands: Record<string, Record<string, string>> = {};
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -86,6 +87,7 @@ export class SocketHandlerManager {
 			this.setupScreenShareHandlers(socket);
 			this.setupChatHandlers(socket);
 			this.setupReactionHandlers(socket);
+			this.setupRaiseHandHandlers(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);
 		});
@@ -227,6 +229,16 @@ export class SocketHandlerManager {
 				try {
 					await this.mediasoup.removePeer(roomId, participantId);
 					socket.to(roomId).emit('participant_left', { roomId, participantId });
+
+					if (this.raisedHands[roomId]?.[participantId]) {
+						delete this.raisedHands[roomId][participantId];
+						socket.to(roomId).emit('hand_raised', {
+							participantId,
+							raised: false,
+							timestamp: new Date().toISOString(),
+						});
+					}
+
 					socket.leave(roomId);
 					socket.roomId = undefined;
 					loggers.socketHandler.info('%s left room %s', participantId, roomId);
@@ -263,6 +275,10 @@ export class SocketHandlerManager {
 				roomId,
 				participantId,
 				userData,
+			});
+
+			socket.emit('existing_raised_hands', {
+				hands: this.raisedHands[roomId] || {},
 			});
 
 			loggers.socketHandler.info(
@@ -483,6 +499,19 @@ export class SocketHandlerManager {
 				);
 			}
 
+			// If unmuting and hand is raised, lower it automatically
+			if (
+				action === 'unmute' &&
+				this.raisedHands[roomId]?.[socket.participantId]
+			) {
+				delete this.raisedHands[roomId][socket.participantId];
+				socket.to(roomId).emit('hand_raised', {
+					participantId: socket.participantId,
+					raised: false,
+					timestamp: new Date().toISOString(),
+				});
+			}
+
 			socket.to(roomId).emit('media_control_update', {
 				participantId: socket.participantId,
 				action,
@@ -577,6 +606,26 @@ export class SocketHandlerManager {
 							);
 						}
 					}, 1000);
+					break;
+				case 'lower_hand':
+					if (this.raisedHands[roomId]?.[targetParticipantId]) {
+						delete this.raisedHands[roomId][targetParticipantId];
+						this.io.to(roomId).emit('hand_raised', {
+							participantId: targetParticipantId,
+							raised: false,
+							timestamp: new Date().toISOString(),
+						});
+						loggers.socketHandler.info(
+							'Host %s lowered hand of participant %s',
+							socket.participantId,
+							targetParticipantId,
+						);
+					} else {
+						socket.emit('sfu_error', {
+							error: 'Participant does not have a raised hand',
+							timestamp: new Date().toISOString(),
+						});
+					}
 					break;
 				default:
 					socket.emit('sfu_error', {
@@ -675,6 +724,45 @@ export class SocketHandlerManager {
 		});
 	}
 
+	private setupRaiseHandHandlers(socket: Socket): void {
+		socket.on('raise_hand', (data, callback) => {
+			try {
+				const roomId = socket.roomId;
+				const raised = typeof data?.raised === 'boolean' ? data.raised : false;
+
+				if (!roomId || !socket.participantId) {
+					callback({ success: false, error: 'Invalid room or participant' });
+					return;
+				}
+
+				if (!this.raisedHands[roomId]) {
+					this.raisedHands[roomId] = {};
+				}
+
+				if (raised) {
+					this.raisedHands[roomId][socket.participantId] =
+						new Date().toISOString();
+				} else {
+					delete this.raisedHands[roomId][socket.participantId];
+				}
+
+				socket.to(roomId).emit('hand_raised', {
+					participantId: socket.participantId,
+					raised,
+					timestamp: new Date().toISOString(),
+				});
+
+				callback({ success: true });
+			} catch (e) {
+				loggers.socketHandler.warn(
+					'raise_hand handling failed: %s',
+					(e as Error).message || e,
+				);
+				callback({ success: false, error: 'Internal error' });
+			}
+		});
+	}
+
 	private setupDisconnectHandlers(socket: Socket): void {
 		socket.on('disconnect', async () => {
 			this.authManager.cleanupSocket(socket);
@@ -696,6 +784,15 @@ export class SocketHandlerManager {
 						roomId: roomId,
 						participantId: participantId,
 					});
+
+					if (this.raisedHands[roomId]?.[participantId]) {
+						delete this.raisedHands[roomId][participantId];
+						socket.to(roomId).emit('hand_raised', {
+							participantId,
+							raised: false,
+							timestamp: new Date().toISOString(),
+						});
+					}
 
 					loggers.socketHandler.info(
 						'Cleaned up user %s from room %s',

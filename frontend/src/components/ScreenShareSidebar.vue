@@ -2,9 +2,10 @@
 	<TransitionGroup
 		name="tile"
 		tag="div"
-		class="overflow-y-auto p-1 grid gap-2 h-full"
+		class="relative overflow-y-auto p-1 grid gap-2 h-full"
 		:class="sidebarClass"
 		:style="sidebarStyle"
+		@before-leave="lockTileDimensions"
 	>
 		<!-- Local camera tile -->
 		<div
@@ -90,6 +91,14 @@
 			>
 				<lucide-mic-off class="w-3 h-3 text-white" />
 			</div>
+
+			<div
+				v-if="isHandRaised(participant.user_id)"
+				class="absolute bottom-1 right-2 px-2 py-1 rounded-full !bg-[#e54e17] text-white pointer-events-none"
+				:aria-label="`${participant.user_name || participant.user_id} has raised their hand`"
+			>
+				<lucide-hand class="w-3.5 h-3.5" />
+			</div>
 		</div>
 
 		<!-- Grouping tile -->
@@ -127,6 +136,21 @@ const handleRemoteVideoRef = (participantId, el) => {
 	registerTile(participantId, el);
 };
 
+// needed to avoid layout shifts during tile removal
+const lockTileDimensions = (el) => {
+	const width = el.offsetWidth;
+	const height = el.offsetHeight;
+	const top = el.offsetTop;
+	const left = el.offsetLeft;
+
+	el.style.position = "absolute";
+	el.style.width = `${width}px`;
+	el.style.height = `${height}px`;
+	el.style.top = `${top}px`;
+	el.style.left = `${left}px`;
+	el.style.pointerEvents = "none";
+};
+
 const participants = computed(() => meetingState.participants.value);
 const currentUser = computed(() => meetingState.currentUser.value);
 const isCameraOn = computed(() => meetingState.isCameraOn.value);
@@ -152,7 +176,7 @@ const {
 	singleTileStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useScreenShareSidebar(participants, activeSpeakerIds);
+} = useScreenShareSidebar(participants, activeSpeakerIds, meetingState);
 
 const { stream: localStream } = useAudioStream(currentUser.value?.user_id);
 
@@ -179,6 +203,11 @@ const participantStreams = computed(() => {
 	}
 	return streams;
 });
+
+const isHandRaised = (participantId) => {
+	if (!meetingState?.raisedHands?.value) return false;
+	return !!meetingState.raisedHands.value[participantId];
+};
 </script>
 
 <style scoped>

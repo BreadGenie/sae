@@ -37,6 +37,16 @@
 			<span class="text-2xl">{{ currentReaction.emoji }}</span>
 		</div>
 
+		<!-- Raised Hand -->
+		<div
+			v-if="isHandRaised &&!isLocal"
+			class="absolute bottom-2 right-2 px-2 py-1 rounded-full !bg-[#e54e17] text-white pointer-events-none"
+			:class="{ 'animate-bounce': isAnimating }"
+			:aria-label="`${participant.user_name || participant.user_id} has raised their hand`"
+		>
+			<lucide-hand class="w-4 h-4" />
+		</div>
+
 		<div v-if="isAudioEnabled && stream" class="absolute top-2 right-2 rounded-full bg-gray-700 p-1.5">
 			<AudioIndicator
 				:mediaStream="stream"
@@ -62,7 +72,7 @@
 </template>
 
 <script setup>
-import { computed, inject } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import { useNetworkQuality } from "../composables/useNetworkQuality";
 import AudioIndicator from "./AudioIndicator.vue";
@@ -161,6 +171,22 @@ const networkQualityMessage = computed(() => {
 const currentReaction = computed(() => {
 	if (!meetingState?.reactions?.value) return null;
 	return meetingState.reactions.value[props.participant.user_id] || null;
+});
+
+const isHandRaised = computed(() => {
+	if (!meetingState?.raisedHands?.value) return false;
+	return !!meetingState.raisedHands.value[props.participant.user_id];
+});
+
+const isAnimating = ref(false);
+
+watch(isHandRaised, (newValue, oldValue) => {
+	if (newValue && !oldValue) {
+		isAnimating.value = true;
+		setTimeout(() => {
+			isAnimating.value = false;
+		}, 1500);
+	}
 });
 </script>
 

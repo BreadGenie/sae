@@ -59,6 +59,9 @@ export function useMeetingState() {
 	// Reactions states
 	const reactions = ref({});
 
+	// Raised hands states
+	const raisedHands = ref({});
+
 	// Screen sharing states
 	const screenShareStream = ref(null);
 	const activeScreenShareConsumers = ref([]);
@@ -190,6 +193,7 @@ export function useMeetingState() {
 		hasUnreadMessages,
 		isPeopleOpen,
 		reactions,
+		raisedHands,
 		screenShareStream,
 		activeScreenShareConsumers,
 		localScreenShareStartedAt,

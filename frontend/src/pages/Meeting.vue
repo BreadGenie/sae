@@ -49,7 +49,7 @@
 						/>
 
 						<!-- Normal video grid -->
-						<VideoGrid v-else />
+						<VideoGrid v-else @open-people-panel="togglePeople" />
 					</div>
 
 					<!-- Panel Container -->
@@ -93,6 +93,7 @@
 								@close="togglePeople"
 								@muteParticipant="handleMuteParticipant"
 								@kickParticipant="handleKickParticipant"
+								@lowerHand="handleLowerHand"
 							/>
 						</div>
 					</Transition>
@@ -106,6 +107,7 @@
 					:isMicOn="meetingState.isMicOn.value"
 					:isCameraOn="meetingState.isCameraOn.value"
 					:isScreenSharing="meetingState.isScreenSharing.value"
+					:isHandRaised="isHandRaised"
 					:isReactionPickerOpen="isReactionPickerOpen"
 					@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 					:meetingId="meetingId"
@@ -118,6 +120,7 @@
 					@toggle-microphone="toggleMicrophone"
 					@toggle-camera="toggleCamera"
 					@toggle-screen-share="toggleScreenShare"
+					@toggle-raise-hand="toggleRaiseHand"
 					@end-call="endCall"
 					@device-changed="handleDeviceChanged"
 				/>
@@ -192,6 +195,8 @@ const {
 	onSendChat,
 	setupChatEvents,
 	setupReactionEvents,
+	setupRaiseHandEvents,
+	toggleRaiseHand,
 	handleKeyDown,
 	sfuManager,
 	applySpeakerDevice,
@@ -237,6 +242,13 @@ const activePanel = computed(() => {
 });
 
 const panelWidth = computed(() => (activePanel.value ? "24rem" : "0rem"));
+
+const isHandRaised = computed(() => {
+	const currentUserId = meetingState.currentUser.value?.user_id;
+	return currentUserId
+		? !!meetingState.raisedHands.value?.[currentUserId]
+		: false;
+});
 
 const meetingDoc = createDocumentResource({
 	doctype: "Sae Meeting",
@@ -342,6 +354,23 @@ const handleKickParticipant = async (participantId, ban = false) => {
 		}
 	} catch (error) {
 		console.error("Failed to kick participant:", error);
+	}
+};
+
+const handleLowerHand = async (participantId) => {
+	try {
+		console.log("Lowering hand for participant:", participantId);
+
+		if (sfuManager.value?.sfuClient) {
+			sfuManager.value.sfuClient.sendEvent("host_control", {
+				action: "lower_hand",
+				targetParticipantId: participantId,
+			});
+		} else {
+			console.error("SFU client not available");
+		}
+	} catch (error) {
+		console.error("Failed to lower hand for participant:", error);
 	}
 };
 
@@ -496,6 +525,9 @@ onMounted(async () => {
 
 	// Setup reaction events
 	setupReactionEvents();
+
+	// Setup raise hand events
+	setupRaiseHandEvents();
 
 	// Auto-join if just created
 	const wasJustCreated = route.query.created === "true";

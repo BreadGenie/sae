@@ -149,6 +149,19 @@ class AudioNotificationManager {
 			0.2,
 		);
 	}
+
+	async playRaiseHandNotification(): Promise<void> {
+		await this.playTone(
+			[
+				[523.25, 0], // C5
+				[659.25, 0.08], // E5
+				[783.99, 0.16], // G5
+			],
+			0.5,
+			0.2,
+		);
+	}
+
 	async cleanup(): Promise<void> {
 		if (this.audioContext && this.audioContext.state !== "closed") {
 			await this.audioContext.close();

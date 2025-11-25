@@ -30,6 +30,16 @@
 		</div>
 
 		<div class="flex items-center gap-2 flex-shrink-0">
+			<!-- Raised Hand Indicator -->
+			<div v-if="isHandRaised" class="w-8 h-8 flex items-center justify-center">
+				<div
+					class="rounded-full bg-[#e54e17] text-white p-1"
+					:title="`${participant.user_name || participant.user_id} has raised their hand`"
+				>
+					<lucide-hand class="w-4 h-4" />
+				</div>
+			</div>
+
 			<!-- Audio Indicator -->
 			<div class="w-8 h-8 flex items-center justify-center">
 				<lucide-mic-off v-if="!participant.audio_enabled" class="w-4 h-4 text-ink-gray-4" />
@@ -78,10 +88,14 @@
 
 <script setup lang="ts">
 import { Badge, Button, Dropdown } from "frappe-ui";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import AudioIndicator from "./AudioIndicator.vue";
 import KickParticipantDialog from "./KickParticipantDialog.vue";
+
+const meetingState = inject("meetingState") as {
+	raisedHands?: { value: Record<string, string> };
+};
 
 interface Participant {
 	user_id: string;
@@ -108,6 +122,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
 	muteParticipant: [participantId: string];
 	kickParticipant: [participantId: string, ban: boolean];
+	lowerHand: [participantId: string];
 }>();
 
 const { stream } = useAudioStream(props.participant.user_id);
@@ -118,30 +133,37 @@ const showHostControls = computed(() => {
 	return props.canControlParticipant;
 });
 
+const isHandRaised = computed(() => {
+	if (!meetingState?.raisedHands?.value) return false;
+	return !!meetingState.raisedHands.value[props.participant.user_id];
+});
+
 const handleKickConfirm = (ban: boolean) => {
 	emit("kickParticipant", props.participant.user_id, ban);
 	showKickDialog.value = false;
 };
 
 const hostOptions = computed(() => {
-	const options = [];
-
-	if (props.participant.audio_enabled) {
-		options.push({
+	return [
+		{
 			icon: "mic-off",
 			label: "Mute",
+			condition: () => !!props.participant.audio_enabled,
 			onClick: () => emit("muteParticipant", props.participant.user_id),
-		});
-	}
-
-	options.push({
-		icon: "user-x",
-		label: "Remove",
-		onClick: () => {
-			showKickDialog.value = true;
 		},
-	});
-
-	return options;
+		{
+			icon: "hand",
+			label: "Lower Hand",
+			condition: () => isHandRaised.value,
+			onClick: () => emit("lowerHand", props.participant.user_id),
+		},
+		{
+			icon: "user-x",
+			label: "Remove",
+			onClick: () => {
+				showKickDialog.value = true;
+			},
+		},
+	];
 });
 </script>

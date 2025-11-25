@@ -38,6 +38,7 @@
 				key="grid-group"
 				:count="displayParticipants.extra"
 				:tooltip="hiddenParticipantsTooltip"
+				@click="handleGroupTileClick"
 			/>
 		</TransitionGroup>
 
@@ -58,10 +59,16 @@ import FloatingReactions from "./FloatingReactions.vue";
 import GroupTile from "./GroupTile.vue";
 import ParticipantTile from "./ParticipantTile.vue";
 
+const emit = defineEmits(["openPeoplePanel"]);
+
 const meetingState = inject("meetingState");
 const setLocalVideoRef = inject("setLocalVideoRef");
 const setRemoteVideoRef = inject("setRemoteVideoRef");
 const { registerTile } = useTileAdaptiveStreaming();
+
+const handleGroupTileClick = () => {
+	emit("openPeoplePanel");
+};
 
 const handleRemoteVideoRef = (participantId, el) => {
 	setRemoteVideoRef(participantId, el);
@@ -114,7 +121,7 @@ const {
 	gridStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useVideoGridLayout(participants, activeSpeakerIds);
+} = useVideoGridLayout(participants, activeSpeakerIds, meetingState);
 
 const hiddenParticipantReactions = computed(() => {
 	const reactions = meetingState.reactions?.value || {};

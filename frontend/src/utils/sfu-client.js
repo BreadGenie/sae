@@ -359,6 +359,8 @@ class SFUClient {
 			ice_candidate: () => {},
 			"chat:message": () => {},
 			active_speaker: () => {},
+			hand_raised: () => {},
+			existing_raised_hands: () => {},
 		};
 
 		for (const [event, handler] of Object.entries(defaultHandlers)) {
@@ -542,6 +544,22 @@ class SFUClient {
 		}
 
 		this.sendEvent("reaction:send", { reaction: reactionType });
+	}
+
+	sendRaiseHand(raised) {
+		if (!this.connected) {
+			throw new Error("Not connected to SFU");
+		}
+
+		return new Promise((resolve, reject) => {
+			this.socket.emit("raise_hand", { raised }, (response) => {
+				if (response?.success) {
+					resolve(response);
+				} else {
+					reject(new Error(response?.error || "Failed to raise hand"));
+				}
+			});
+		});
 	}
 
 	// ==================== UTILITY METHODS ====================

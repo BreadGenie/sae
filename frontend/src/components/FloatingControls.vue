@@ -98,6 +98,24 @@
 					</template>
 				</ReactionPicker>
 
+				<!-- Raise Hand -->
+				<Button
+					v-if="!isPreview"
+					@click="$emit('toggle-raise-hand')"
+					variant="solid"
+					:theme="isHandRaised ? 'orange' : 'gray'"
+					size="2xl"
+					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
+					:class="{
+						'!bg-[#e54e17] hover:!bg-[#e54e17]': isHandRaised,
+					}"
+					title="Raise Hand"
+				>
+					<template #icon>
+						<lucide-hand class="w-5 h-5 text-white" />
+					</template>
+				</Button>
+
 				<!-- Chat -->
 				<div v-if="!isPreview" class="relative">
 					<Button
@@ -247,6 +265,10 @@ const props = defineProps({
 		type: Boolean,
 		required: true,
 	},
+	isHandRaised: {
+		type: Boolean,
+		default: false,
+	},
 	isReactionPickerOpen: {
 		type: Boolean,
 		default: false,
@@ -282,6 +304,7 @@ const emit = defineEmits([
 	"toggle-microphone",
 	"toggle-camera",
 	"toggle-screen-share",
+	"toggle-raise-hand",
 	"end-call",
 	"device-changed",
 	"update:isReactionPickerOpen",

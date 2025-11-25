@@ -86,6 +86,12 @@ export interface ServerToClientEvents {
 	active_speaker: (data: { participantIds: string[] }) => void;
 	sfu_error: (data: { error: string; timestamp: string }) => void;
 	'auth:expired': (data: { timestamp: string; reason: string }) => void;
+	hand_raised: (data: {
+		participantId: string;
+		raised: boolean;
+		timestamp: string;
+	}) => void;
+	existing_raised_hands: (data: { hands: Record<string, boolean> }) => void;
 }
 
 export interface ClientToServerEvents {
@@ -168,6 +174,10 @@ export interface ClientToServerEvents {
 			height?: number;
 		},
 		callback: (response: ConsumerPreferenceResponse) => void,
+	) => void;
+	raise_hand: (
+		data: { raised: boolean },
+		callback: (response: SFUResponse) => void,
 	) => void;
 	leave_room: (data?: { roomId?: string }) => void;
 }
@@ -288,7 +298,10 @@ export interface ParticipantInfo {
 
 export type MediaControlAction = 'mute' | 'unmute' | 'video_off' | 'video_on';
 
-export type HostControlAction = 'mute_participant' | 'kick_participant';
+export type HostControlAction =
+	| 'mute_participant'
+	| 'kick_participant'
+	| 'lower_hand';
 
 // Screen share data interface
 export interface ScreenShareData {
