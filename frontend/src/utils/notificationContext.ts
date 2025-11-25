@@ -18,7 +18,7 @@ class NotificationContextManager {
 		lastNotificationTime: {},
 	};
 
-	private readonly MIN_NOTIFICATION_INTERVAL = 2000; // 2 seconds between same type
+	private readonly MIN_NOTIFICATION_INTERVAL = 5000; // 5 seconds between same type
 
 	constructor() {
 		this.setupVisibilityListener();
