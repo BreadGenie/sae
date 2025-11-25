@@ -9,7 +9,7 @@
 					<p class="text-gray-600">Test and tune the meeting notification sounds</p>
 				</div>
 
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 					<!-- Join Notification -->
 					<div class="bg-green-50 border border-green-200 rounded-lg p-6">
 						<div class="flex items-center mb-4">
@@ -121,6 +121,34 @@
 							<strong>Current:</strong> E4 → G4 (0.25s, 20% volume)
 						</div>
 					</div>
+
+					<!-- Hand Raise Notification -->
+					<div class="bg-orange-50 border border-orange-200 rounded-lg p-6">
+						<div class="flex items-center mb-4">
+							<div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mr-3">
+								<lucide-hand class="w-5 h-5 text-orange-600" />
+							</div>
+							<div>
+								<h3 class="font-semibold text-orange-900">Hand Raised</h3>
+								<p class="text-sm text-orange-700">Someone raises their hand</p>
+							</div>
+						</div>
+						<Button
+							variant="solid"
+							theme="orange"
+							class="w-full"
+							@click="playRaiseHandNotification"
+							:disabled="isPlaying"
+						>
+							<template #prefix>
+								<lucide-play class="w-4 h-4" />
+							</template>
+							Play Hand Raise Sound
+						</Button>
+						<div class="mt-3 text-xs text-orange-600">
+							<strong>Current:</strong> C5 → E5 → G5 (0.5s, 20% volume)
+						</div>
+					</div>
 				</div>
 
 				<!-- Test All Button -->
@@ -212,6 +240,17 @@ const playChatNotification = async () => {
 	}
 };
 
+const playRaiseHandNotification = async () => {
+	isPlaying.value = true;
+	try {
+		await audioNotificationManager.playRaiseHandNotification();
+	} finally {
+		setTimeout(() => {
+			isPlaying.value = false;
+		}, 100);
+	}
+};
+
 // Play all notifications in sequence
 const playAllNotifications = async () => {
 	isPlaying.value = true;
@@ -227,6 +266,9 @@ const playAllNotifications = async () => {
 		await new Promise((resolve) => setTimeout(resolve, 1000));
 
 		await audioNotificationManager.playChatNotification();
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+
+		await audioNotificationManager.playRaiseHandNotification();
 	} finally {
 		setTimeout(() => {
 			isPlaying.value = false;
