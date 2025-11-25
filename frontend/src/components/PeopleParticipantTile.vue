@@ -152,7 +152,7 @@ const hostOptions = computed(() => {
 			onClick: () => emit("muteParticipant", props.participant.user_id),
 		},
 		{
-			icon: "hand",
+			icon: "slash", // TODO: switch to `hand` if we integrate Lucide instead of FeatherIcon
 			label: "Lower Hand",
 			condition: () => isHandRaised.value,
 			onClick: () => emit("lowerHand", props.participant.user_id),
