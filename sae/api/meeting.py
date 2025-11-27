@@ -54,6 +54,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"user_name": user_fullname,
 			"user_avatar": user_avatar,
 			"is_host": is_host,
+			"scope": "full",
 			"exp": int(time.time()) + 3600,  # 1 hour expiry
 			"iat": int(time.time()),
 		}
