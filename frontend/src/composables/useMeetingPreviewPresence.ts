@@ -66,7 +66,6 @@ export function useMeetingPreviewPresence(meetingId: string) {
 		params: { meeting_id: meetingId },
 		auto: false,
 		onSuccess(data: TokenResponse) {
-			console.log("Presence token response:", data);
 			if (data.success) {
 				connectToSFU(data);
 			} else {
@@ -99,8 +98,6 @@ export function useMeetingPreviewPresence(meetingId: string) {
 		const currentSocket = socket;
 
 		currentSocket.on("connect", () => {
-			console.log("SFU connected for presence preview, meeting:", meetingId);
-
 			currentSocket.emit(
 				"join_room",
 				{
@@ -115,10 +112,9 @@ export function useMeetingPreviewPresence(meetingId: string) {
 						video_enabled: false,
 					},
 				},
+				// keep callback since we do evoke it
 				(joinResponse: JoinResponse) => {
-					if (joinResponse.success) {
-						console.log("Joined room for presence preview");
-					} else {
+					if (!joinResponse.success) {
 						console.error(
 							"Failed to join room for presence preview:",
 							joinResponse.error,
@@ -167,7 +163,6 @@ export function useMeetingPreviewPresence(meetingId: string) {
 			);
 			if (existingIndex === -1) {
 				participants.value.push(newParticipant);
-				console.log("Added participant:", newParticipant);
 			}
 		});
 
@@ -179,8 +174,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 				(p) => p.user_id === data.participantId,
 			);
 			if (index !== -1) {
-				const removed = participants.value.splice(index, 1);
-				console.log("Removed participant:", removed[0]);
+				participants.value.splice(index, 1);
 			}
 		});
 	};
