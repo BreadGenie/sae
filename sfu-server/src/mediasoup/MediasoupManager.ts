@@ -536,25 +536,29 @@ export class MediasoupManager {
 		const room = this.roomManager.getRoom(roomId);
 		if (!room) return [];
 
-		return Array.from(room.peers.entries()).map(([peerId, peer]) => {
-			let audioEnabled = false;
-			let videoEnabled = false;
-			for (const producer of peer.producers.values()) {
-				if (producer.kind === 'audio' && !producer.paused) audioEnabled = true;
-				if (producer.kind === 'video' && !producer.paused) videoEnabled = true;
-			}
-			return {
-				id: peerId,
-				user_id: peerId,
-				info: {
-					name: peer.info.name,
-					userId: peer.info.userId,
-					avatar: peer.info.avatar,
-					audio_enabled: audioEnabled,
-					video_enabled: videoEnabled,
-				},
-			};
-		});
+		return Array.from(room.peers.entries())
+			.filter(([_peerId, peer]) => !peer.info.userId.startsWith('preview-'))
+			.map(([peerId, peer]) => {
+				let audioEnabled = false;
+				let videoEnabled = false;
+				for (const producer of peer.producers.values()) {
+					if (producer.kind === 'audio' && !producer.paused)
+						audioEnabled = true;
+					if (producer.kind === 'video' && !producer.paused)
+						videoEnabled = true;
+				}
+				return {
+					id: peerId,
+					user_id: peerId,
+					info: {
+						name: peer.info.name,
+						userId: peer.info.userId,
+						avatar: peer.info.avatar,
+						audio_enabled: audioEnabled,
+						video_enabled: videoEnabled,
+					},
+				};
+			});
 	}
 
 	applyMediaControl(

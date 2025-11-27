@@ -288,3 +288,47 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 	except Exception as e:
 		frappe.log_error(f"Failed to refresh SFU token for meeting {meeting_id}: {e!s}")
 		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def get_sfu_presence_preview_token(meeting_id: str) -> dict:
+	"""Get a short-lived SFU token scoped for presence preview only.
+
+	This is used by the meeting preview page to fetch live participants
+	from the SFU without granting any media capabilities.
+	"""
+	meeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+	if meeting.is_user_banned(frappe.session.user):
+		frappe.throw(_("You are banned from this meeting"), frappe.PermissionError)
+
+	if not meeting.can_join(frappe.session.user):
+		frappe.throw(_("Access denied"), frappe.PermissionError)
+
+	from sae.utils.sfu_config import get_sfu_config
+
+	sfu_config = get_sfu_config()
+
+	expiry_seconds = 300
+	now = int(time.time())
+
+	auth_payload = {
+		"user_id": frappe.session.user,
+		"meeting_id": meeting_id,
+		"scope": "presence-preview",
+		"exp": now + expiry_seconds,
+		"iat": now,
+	}
+
+	secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key", "fallback-secret")
+	auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
+
+	result = {
+		"success": True,
+		"sfu_url": sfu_config["sfu_server_url"],
+		"sfu_port": sfu_config.get("sfu_server_port"),
+		"auth_token": auth_token,
+		"expires_in": expiry_seconds,
+	}
+
+	return result

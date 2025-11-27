@@ -193,6 +193,7 @@ export interface SocketData {
 	isHost: boolean;
 	roomId?: string;
 	participantId?: string;
+	scope?: 'presence-preview' | 'full';
 }
 
 // Core data types
@@ -412,6 +413,7 @@ export interface JWTPayload {
 	meeting_id: string;
 	user_avatar?: string;
 	is_host: boolean;
+	scope?: 'presence-preview' | 'full';
 	exp?: number;
 	iat?: number;
 }
@@ -443,5 +445,6 @@ declare module 'socket.io' {
 		currentToken?: string;
 		tokenExpiresAt?: number;
 		tokenExpiryTimer?: NodeJS.Timeout;
+		scope?: 'presence-preview' | 'full';
 	}
 }

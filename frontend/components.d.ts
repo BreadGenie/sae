@@ -51,6 +51,7 @@ declare module "vue" {
 			"~icons/lucide/circle-user-round",
 		)["default"];
 		LucideClock: typeof import("~icons/lucide/clock")["default"];
+		LucideCrown: typeof import("~icons/lucide/crown")["default"];
 		LucideHand: typeof import("~icons/lucide/hand")["default"];
 		LucideInfo: typeof import("~icons/lucide/info")["default"];
 		LucideLoader: typeof import("~icons/lucide/loader")["default"];
@@ -101,6 +102,9 @@ declare module "vue" {
 			"./src/components/MeetingPreview.vue",
 		)["default"];
 		NamePill: typeof import("./src/components/NamePill.vue")["default"];
+		ParticipantAvatarGroup: typeof import(
+			"./src/components/ParticipantAvatarGroup.vue",
+		)["default"];
 		ParticipantTile: typeof import(
 			"./src/components/ParticipantTile.vue",
 		)["default"];

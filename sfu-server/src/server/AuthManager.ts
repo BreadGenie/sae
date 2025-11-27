@@ -26,6 +26,7 @@ export class AuthManager {
 			socket.userName = decoded.user_name;
 			socket.meetingId = decoded.meeting_id;
 			socket.isHost = decoded.is_host || false;
+			socket.scope = decoded.scope || 'full';
 			socket.currentToken = token;
 			socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
 			this.scheduleTokenExpiry(socket);
@@ -158,6 +159,18 @@ export class AuthManager {
 		if (socket.tokenExpiryTimer) {
 			clearTimeout(socket.tokenExpiryTimer);
 			socket.tokenExpiryTimer = undefined;
+		}
+	}
+
+	ensurePresenceAccess(socket: Socket): void {
+		if (socket.scope !== 'presence-preview' && socket.scope !== 'full') {
+			throw new Error('Insufficient scope for presence access');
+		}
+	}
+
+	ensureFullAccess(socket: Socket): void {
+		if (socket.scope !== 'full') {
+			throw new Error('Insufficient scope for full access');
 		}
 	}
 }

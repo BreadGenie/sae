@@ -96,7 +96,7 @@
 									<span v-else class="text-gray-900"> Ready to join? </span>
 								</h2>
 
-								<div class="bg-gray-50 rounded-lg px-4 py-3 mb-4">
+								<div v-if="meetingTitle" class="bg-gray-50 rounded-lg px-4 py-3 mb-4">
 									<p class="text-lg font-medium text-gray-700 truncate">
 										{{ meetingTitle }}
 									</p>
@@ -122,20 +122,12 @@
 									</p>
 								</div>
 
-								<div
-									v-else-if="!isNaN(participantsCount)"
-									class="bg-blue-50 border border-blue-200 rounded-lg p-4"
-								>
-									<p class="text-sm text-blue-800">
-										<lucide-users class="w-4 h-4 inline mr-2" />
-										<span v-if="participantsCount > 0">
-											{{ getParticipantText(participantsCount) }}
-										</span>
-										<span v-else>
-											You'll be the first to join this meeting
-										</span>
-									</p>
-								</div>
+								<!-- Avatar group for current participants -->
+								<ParticipantAvatarGroup
+									:participants="participants"
+									:error="presenceError"
+									:maxDisplayed="3"
+								/>
 							</div>
 
 							<div class="space-y-3">
@@ -203,20 +195,12 @@
 </template>
 
 <script setup>
-import { frappeRequest } from "frappe-ui";
-import {
-	computed,
-	defineEmits,
-	defineProps,
-	inject,
-	onMounted,
-	onUnmounted,
-	ref,
-} from "vue";
+import { computed, defineEmits, defineProps, inject } from "vue";
 import FloatingControls from "../components/FloatingControls.vue";
-import MeetingAvatar from "../components/MeetingAvatar.vue";
-import { session } from "../data/session.js";
+import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
+import { useMeetingPreviewPresence } from "../composables/useMeetingPreviewPresence";
 import FrappeMeetingLogo from "../icons/FrappeMeetingLogo.vue";
+import MeetingAvatar from "./MeetingAvatar.vue";
 
 const props = defineProps({
 	meetingId: { type: String, required: true },
@@ -225,6 +209,10 @@ const props = defineProps({
 const meetingState = inject("meetingState");
 const setLocalVideoRef = inject("setLocalVideoRef");
 const meetingTitle = inject("meetingTitle");
+
+const { participants, error: presenceError } = useMeetingPreviewPresence(
+	props.meetingId,
+);
 
 const isCameraOn = computed(() => meetingState.isCameraOn.value);
 const isMicOn = computed(() => meetingState.isMicOn.value);
@@ -254,66 +242,7 @@ const emit = defineEmits([
 	"device-changed",
 ]);
 
-const participantsCount = ref(0);
-let pollInterval = null;
-const sfuConnection = ref(null);
-
-const buildSFUBaseUrl = (result) => {
-	return `${result.sfu_url}${result.sfu_url.startsWith("http://") ? `:${result.sfu_port}` : ""}`;
-};
-
-const fetchParticipants = async () => {
-	try {
-		if (!session.isLoggedIn) return;
-
-		if (!sfuConnection.value) {
-			const result = await frappeRequest({
-				url: "sae.api.meeting.get_sfu_connection_details",
-				params: { meeting_id: props.meetingId },
-			});
-
-			if (!result?.success) {
-				throw new Error(result?.error || "Failed to get SFU details");
-			}
-
-			sfuConnection.value = buildSFUBaseUrl(result);
-		}
-
-		const roomsResponse = await fetch(`${sfuConnection.value}/rooms`);
-		const roomsData = await roomsResponse.json();
-
-		const ourRoom = roomsData.rooms.find((room) => room.id === props.meetingId);
-		participantsCount.value = ourRoom ? ourRoom.peerCount : 0;
-	} catch (err) {
-		console.warn("Could not fetch participants count:", err?.message || err);
-		try {
-			if (!err?.message || /failed|network|fetch/i.test(err.message)) {
-				sfuConnection.value = null;
-			}
-		} catch (_) {}
-	}
-};
-
-onMounted(() => {
-	fetchParticipants();
-	pollInterval = setInterval(fetchParticipants, 10000);
-});
-
-onUnmounted(() => {
-	if (pollInterval) {
-		clearInterval(pollInterval);
-		pollInterval = null;
-	}
-});
-
 const currentUserName = computed(
 	() => currentUser.value?.full_name || currentUser.value?.name || "You",
 );
-
-const getParticipantText = (count) => {
-	if (count === 1) {
-		return "1 user in the call";
-	}
-	return `${count} users in the call`;
-};
 </script>

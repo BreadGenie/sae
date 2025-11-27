@@ -144,6 +144,7 @@ export class SocketHandlerManager {
 
 		socket.on('get_router_rtp_capabilities', async (_data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const roomId = socket.meetingId;
 
 				loggers.socketHandler.debug(
@@ -166,6 +167,7 @@ export class SocketHandlerManager {
 
 		socket.on('get_existing_producers', async (_data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const roomId = socket.meetingId;
 				const userId = socket.userId;
 
@@ -210,9 +212,37 @@ export class SocketHandlerManager {
 
 		socket.on('get_room_participants', async (_data, callback) => {
 			try {
+				this.authManager.ensurePresenceAccess(socket);
 				const roomId = socket.meetingId;
+				loggers.socketHandler.debug(
+					'Getting room participants for room %s, user %s, scope %s',
+					roomId,
+					socket.userId,
+					socket.scope,
+				);
 				const participants = this.mediasoup.getRoomParticipants(roomId);
-				callback({ success: true, participants });
+
+				let responseParticipants = participants;
+				if (socket.scope === 'presence-preview') {
+					responseParticipants = participants.map((p) => ({
+						id: p.id,
+						user_id: p.user_id,
+						info: {
+							name: p.info.name,
+							userId: p.info.userId,
+							avatar: p.info.avatar,
+							audio_enabled: false,
+							video_enabled: false,
+						},
+					}));
+				}
+
+				loggers.socketHandler.debug(
+					'Found %d participants for room %s',
+					responseParticipants.length,
+					roomId,
+				);
+				callback({ success: true, participants: responseParticipants });
 			} catch (error) {
 				loggers.socketHandler.error(
 					'Error getting room participants: %s',
@@ -228,7 +258,12 @@ export class SocketHandlerManager {
 			if (roomId && participantId) {
 				try {
 					await this.mediasoup.removePeer(roomId, participantId);
-					socket.to(roomId).emit('participant_left', { roomId, participantId });
+
+					if (!participantId.startsWith('preview-')) {
+						socket
+							.to(roomId)
+							.emit('participant_left', { roomId, participantId });
+					}
 
 					if (this.raisedHands[roomId]?.[participantId]) {
 						delete this.raisedHands[roomId][participantId];
@@ -271,11 +306,13 @@ export class SocketHandlerManager {
 			socket.roomId = roomId;
 			socket.participantId = participantId;
 
-			socket.to(roomId).emit('participant_joined', {
-				roomId,
-				participantId,
-				userData,
-			});
+			if (!userData.userId.startsWith('preview-')) {
+				socket.to(roomId).emit('participant_joined', {
+					roomId,
+					participantId,
+					userData,
+				});
+			}
 
 			socket.emit('existing_raised_hands', {
 				hands: this.raisedHands[roomId] || {},
@@ -301,6 +338,7 @@ export class SocketHandlerManager {
 	private setupWebRTCHandlers(socket: Socket): void {
 		socket.on('create_webrtc_transport', async (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const { direction } = data;
 				const roomId = socket.meetingId;
 				const userId = socket.userId;
@@ -323,6 +361,7 @@ export class SocketHandlerManager {
 
 		socket.on('connect_webrtc_transport', async (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const { transportId, dtlsParameters } = data;
 				await this.mediasoup.connectWebRtcTransport(
 					transportId,
@@ -341,6 +380,7 @@ export class SocketHandlerManager {
 
 		socket.on('create_producer', async (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const { transportId, rtpParameters, kind, appData = {} } = data;
 				const producer = await this.mediasoup.createProducer(
 					transportId,
@@ -375,6 +415,7 @@ export class SocketHandlerManager {
 
 		socket.on('create_consumer', async (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const { transportId, producerId, rtpCapabilities } = data;
 				const consumer = await this.mediasoup.createConsumer(
 					transportId,
@@ -394,6 +435,7 @@ export class SocketHandlerManager {
 
 		socket.on('close_producer', async (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const { producerId } = data;
 				const result = this.mediasoup.closeProducer(producerId);
 
@@ -440,6 +482,7 @@ export class SocketHandlerManager {
 
 		socket.on('close_consumer', async (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const { consumerId } = data;
 				await this.mediasoup.closeConsumer(consumerId);
 
@@ -485,6 +528,7 @@ export class SocketHandlerManager {
 
 	private setupMediaControlHandlers(socket: Socket): void {
 		socket.on('media_control', async (data) => {
+			this.authManager.ensureFullAccess(socket);
 			const { action } = data;
 			const roomId = socket.roomId;
 
@@ -522,6 +566,7 @@ export class SocketHandlerManager {
 
 	private setupHostControlHandlers(socket: TypedSocket): void {
 		socket.on('host_control', async (data) => {
+			this.authManager.ensureFullAccess(socket);
 			const { action, targetParticipantId } = data;
 			const roomId = socket.roomId;
 
@@ -639,6 +684,7 @@ export class SocketHandlerManager {
 
 	private setupScreenShareHandlers(socket: Socket): void {
 		socket.on('screen_share', (data) => {
+			this.authManager.ensureFullAccess(socket);
 			const { action, shareData } = data;
 			const roomId = socket.roomId;
 
@@ -662,6 +708,7 @@ export class SocketHandlerManager {
 	private setupChatHandlers(socket: Socket): void {
 		socket.on('chat:send', (data = {}) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const roomId = socket.roomId;
 				const text = (
 					typeof data.message === 'string' ? data.message : ''
@@ -698,6 +745,7 @@ export class SocketHandlerManager {
 	private setupReactionHandlers(socket: Socket): void {
 		socket.on('reaction:send', (data = {}) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const roomId = socket.roomId;
 				const reaction =
 					typeof data.reaction === 'string' ? data.reaction : null;
@@ -727,6 +775,7 @@ export class SocketHandlerManager {
 	private setupRaiseHandHandlers(socket: Socket): void {
 		socket.on('raise_hand', (data, callback) => {
 			try {
+				this.authManager.ensureFullAccess(socket);
 				const roomId = socket.roomId;
 				const raised = typeof data?.raised === 'boolean' ? data.raised : false;
 
@@ -780,10 +829,12 @@ export class SocketHandlerManager {
 				try {
 					await this.mediasoup.removePeer(roomId, participantId);
 
-					socket.to(roomId).emit('participant_left', {
-						roomId: roomId,
-						participantId: participantId,
-					});
+					if (!participantId.startsWith('preview-')) {
+						socket.to(roomId).emit('participant_left', {
+							roomId: roomId,
+							participantId: participantId,
+						});
+					}
 
 					if (this.raisedHands[roomId]?.[participantId]) {
 						delete this.raisedHands[roomId][participantId];

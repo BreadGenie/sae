@@ -205,6 +205,12 @@ const {
 	onSendReaction,
 } = useMeetingLogic(meetingState, meetingId.value);
 
+const meetingDoc = createDocumentResource({
+	doctype: "Sae Meeting",
+	name: meetingId.value,
+	auto: true,
+});
+
 // Provide meeting context for child components
 provideMeetingContext({
 	processedStream,
@@ -222,7 +228,7 @@ provide("sfuManager", sfuManager);
 provide("socket", socket);
 provide(
 	"meetingTitle",
-	computed(() => meetingDoc?.value?.data?.title || ""),
+	computed(() => meetingDoc?.doc?.title || meetingDoc?.doc?.name || "Meeting"),
 );
 
 // Computed properties
@@ -248,12 +254,6 @@ const isHandRaised = computed(() => {
 	return currentUserId
 		? !!meetingState.raisedHands.value?.[currentUserId]
 		: false;
-});
-
-const meetingDoc = createDocumentResource({
-	doctype: "Sae Meeting",
-	name: meetingId.value,
-	auto: true,
 });
 
 const creatorUserId = computed(() => {
