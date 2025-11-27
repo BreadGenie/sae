@@ -69,7 +69,7 @@ interface Participant {
 
 interface Props {
 	participants: Participant[];
-	error: string;
+	error: string | null;
 	maxDisplayed: number;
 }
 
