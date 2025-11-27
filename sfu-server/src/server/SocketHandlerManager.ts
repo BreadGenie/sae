@@ -34,6 +34,10 @@ export class SocketHandlerManager {
 		this.authManager = authManager;
 	}
 
+	private isRealParticipant(participantId: string): boolean {
+		return !participantId.startsWith('preview-');
+	}
+
 	private findSocketByParticipantId(
 		roomId: string,
 		participantId: string,
@@ -259,7 +263,7 @@ export class SocketHandlerManager {
 				try {
 					await this.mediasoup.removePeer(roomId, participantId);
 
-					if (!participantId.startsWith('preview-')) {
+					if (this.isRealParticipant(participantId)) {
 						socket
 							.to(roomId)
 							.emit('participant_left', { roomId, participantId });
@@ -306,7 +310,7 @@ export class SocketHandlerManager {
 			socket.roomId = roomId;
 			socket.participantId = participantId;
 
-			if (!userData.userId.startsWith('preview-')) {
+			if (this.isRealParticipant(userData.userId)) {
 				socket.to(roomId).emit('participant_joined', {
 					roomId,
 					participantId,
@@ -829,7 +833,7 @@ export class SocketHandlerManager {
 				try {
 					await this.mediasoup.removePeer(roomId, participantId);
 
-					if (!participantId.startsWith('preview-')) {
+					if (this.isRealParticipant(participantId)) {
 						socket.to(roomId).emit('participant_left', {
 							roomId: roomId,
 							participantId: participantId,
