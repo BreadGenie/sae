@@ -306,17 +306,21 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 	if not meeting.can_join(frappe.session.user):
 		frappe.throw(_("Access denied"), frappe.PermissionError)
 
+	import uuid
+
 	from sae.utils.sfu_config import get_sfu_config
 
 	sfu_config = get_sfu_config()
 
 	expiry_seconds = 300
 	now = int(time.time())
+	session_id = str(uuid.uuid4())
 
 	auth_payload = {
 		"user_id": frappe.session.user,
 		"meeting_id": meeting_id,
 		"scope": "presence-preview",
+		"session_id": session_id,
 		"exp": now + expiry_seconds,
 		"iat": now,
 	}

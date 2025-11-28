@@ -6,7 +6,7 @@
 				{{ error }}
 			</p>
 		</div>
-		<div v-else-if="participants.length > 0" class="flex items-center">
+		<div v-else-if="participants.length > 0" class="flex flex-col items-center">
 			<div class="relative flex mx-auto">
 				<div
 					v-for="(participant, index) in displayedParticipants"
@@ -36,23 +36,23 @@
 					</div>
 				</div>
 			</div>
+			<div class="mt-4 text-base text-ink-gray-7">
+				<span v-if="displayedParticipants.length > 0">
+					{{ formattedNames }}
+				</span>
+				<span v-if="extraCount > 0">
+					{{ displayedParticipants.length > 0 ? ' and ' : '' }}{{ extraCount }} other{{ extraCount > 1 ? 's' : '' }}
+				</span>
+				<span v-if="displayedParticipants.length > 0">
+					{{ displayedParticipants.length > 1 ? ' are' : ' is' }}
+				</span>
+				in the meeting
+			</div>
 		</div>
 		<div v-else>
 			<p class="text-base text-ink-gray-7">
 				You'll be the first to join this meeting
 			</p>
-		</div>
-		<div v-if="participants.length > 0" class="mt-4 text-base text-ink-gray-7">
-			<span v-if="displayedParticipants.length > 0">
-				{{ formattedNames }}
-			</span>
-			<span v-if="extraCount > 0">
-				{{ displayedParticipants.length > 0 ? ' and ' : '' }}{{ extraCount }} other{{ extraCount > 1 ? 's' : '' }}
-			</span>
-            <span v-if="displayedParticipants.length > 0">
-                {{ displayedParticipants.length > 1 ? ' are' : ' is' }}
-            </span>
-			in the meeting
 		</div>
 	</div>
 </template>

@@ -22,13 +22,13 @@ interface ParticipantResponse {
 	success: boolean;
 	participants?: Array<{
 		id: string;
-		user_id: string;
+		user_id?: string;
 		info: {
 			name?: string;
-			userId: string;
+			userId?: string;
 			avatar?: string;
-			audio_enabled: boolean;
-			video_enabled: boolean;
+			audio_enabled?: boolean;
+			video_enabled?: boolean;
 		};
 	}>;
 	error?: string;
@@ -129,11 +129,11 @@ export function useMeetingPreviewPresence(meetingId: string) {
 				(response: ParticipantResponse) => {
 					if (response.success && response.participants) {
 						participants.value = response.participants.map((p) => ({
-							user_id: p.info.userId,
-							full_name: p.info.name || p.user_id,
+							user_id: p.info.userId || p.user_id || p.id,
+							full_name: p.info.name || p.user_id || p.id,
 							avatar_url: p.info.avatar,
-							has_video: p.info.video_enabled,
-							has_audio: p.info.audio_enabled,
+							has_video: p.info.video_enabled || false,
+							has_audio: p.info.audio_enabled || false,
 						}));
 					} else {
 						error.value = response.error || "Failed to fetch participants";

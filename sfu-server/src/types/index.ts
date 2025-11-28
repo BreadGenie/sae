@@ -245,7 +245,7 @@ export interface ExistingProducersResponse extends SFUResponse {
 }
 
 export interface RoomParticipantsResponse extends SFUResponse {
-	participants: ParticipantInfo[];
+	participants: ParticipantInfo[] | PreviewParticipantInfo[];
 }
 export interface WebRTCTransportParams {
 	id: string;
@@ -294,6 +294,14 @@ export interface ParticipantInfo {
 		avatar?: string;
 		audio_enabled: boolean;
 		video_enabled: boolean;
+	};
+}
+
+export interface PreviewParticipantInfo {
+	id: string;
+	info: {
+		name?: string;
+		avatar?: string;
 	};
 }
 
@@ -414,6 +422,7 @@ export interface JWTPayload {
 	user_avatar?: string;
 	is_host: boolean;
 	scope?: 'presence-preview' | 'full';
+	session_id?: string;
 	exp?: number;
 	iat?: number;
 }

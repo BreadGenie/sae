@@ -3,12 +3,15 @@ import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type {
 	ChatMessage,
 	ClientToServerEvents,
+	ParticipantInfo,
+	PreviewParticipantInfo,
 	ReactionMessage,
 	ServerToClientEvents,
 	SocketData,
 	UserData,
 } from '../types';
 import { loggers } from '../utils/logger';
+import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
 
 type TypedSocket = Socket<
@@ -23,6 +26,7 @@ export class SocketHandlerManager {
 	private mediasoup: MediasoupManager;
 	private authManager: AuthManager;
 	private raisedHands: Record<string, Record<string, string>> = {};
+	private rateLimiter: RateLimiter;
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -32,10 +36,41 @@ export class SocketHandlerManager {
 		this.io = io;
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
+		this.rateLimiter = new RateLimiter();
 	}
 
 	private isRealParticipant(participantId: string): boolean {
 		return !participantId.startsWith('preview-');
+	}
+
+	private checkSocketRateLimits(
+		socket: Socket,
+		userLimit: number,
+		ipLimit: number,
+		windowMs: number,
+	): boolean {
+		const clientIp = socket.handshake.address || 'unknown';
+		const userKey = `user:${socket.userId}`;
+		const ipKey = `ip:${clientIp}`;
+
+		const userAllowed = this.rateLimiter.checkRateLimit(
+			userKey,
+			userLimit,
+			windowMs,
+		);
+		const ipAllowed = this.rateLimiter.checkRateLimit(ipKey, ipLimit, windowMs);
+
+		if (!userAllowed || !ipAllowed) {
+			loggers.socketHandler.warn(
+				'Rate limit exceeded: user=%s (allowed=%s), ip=%s (allowed=%s)',
+				socket.userId,
+				userAllowed,
+				clientIp,
+				ipAllowed,
+			);
+		}
+
+		return userAllowed && ipAllowed;
 	}
 
 	private findSocketByParticipantId(
@@ -217,6 +252,15 @@ export class SocketHandlerManager {
 		socket.on('get_room_participants', async (_data, callback) => {
 			try {
 				this.authManager.ensurePresenceAccess(socket);
+
+				if (!this.checkSocketRateLimits(socket, 10, 10, 60 * 1000)) {
+					callback({
+						success: false,
+						error: 'Too many requests. Please try again later.',
+					});
+					return;
+				}
+
 				const roomId = socket.meetingId;
 				loggers.socketHandler.debug(
 					'Getting room participants for room %s, user %s, scope %s',
@@ -226,17 +270,14 @@ export class SocketHandlerManager {
 				);
 				const participants = this.mediasoup.getRoomParticipants(roomId);
 
-				let responseParticipants = participants;
+				let responseParticipants: ParticipantInfo[] | PreviewParticipantInfo[] =
+					participants;
 				if (socket.scope === 'presence-preview') {
 					responseParticipants = participants.map((p) => ({
 						id: p.id,
-						user_id: p.user_id,
 						info: {
 							name: p.info.name,
-							userId: p.info.userId,
 							avatar: p.info.avatar,
-							audio_enabled: false,
-							video_enabled: false,
 						},
 					}));
 				}
