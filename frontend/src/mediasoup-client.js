@@ -1,6 +1,8 @@
 import { Device } from "mediasoup-client";
+import { resolveCodecStrategy } from "./utils/media/codecStrategy.ts";
 import {
 	screenEncodings,
+	svcEncodingTemplate,
 	videoCodecOptions,
 	videoEncodings,
 } from "./utils/media/encodings.js";
@@ -15,6 +17,26 @@ const consumers = new Map();
 
 // Event handlers for mediasoup events
 let mediasoupEventHandlers = {};
+
+function buildVideoEncodingConfig(source = "camera") {
+	const sfuClient = getSFUClient();
+	const preference = sfuClient?.getCodecStrategy?.() || "auto";
+	const decision = resolveCodecStrategy({
+		preference,
+		deviceCapabilities: mediasoupDevice?.rtpCapabilities,
+	});
+
+	const fallbackEncodings =
+		source === "screen" ? screenEncodings : videoEncodings;
+
+	return {
+		decision,
+		encodings:
+			decision.strategy === "svc"
+				? svcEncodingTemplate(decision.scalabilityMode)
+				: fallbackEncodings,
+	};
+}
 
 /**
  * Initialize the mediasoup device with router capabilities
@@ -435,10 +457,16 @@ export async function publishVideo(meetingId, stream) {
 			throw new Error("No video track found in stream");
 		}
 
+		const encodingConfig = buildVideoEncodingConfig("camera");
+
 		const producer = await sendTransport.produce({
 			track: videoTrack,
-			encodings: videoEncodings,
+			encodings: encodingConfig.encodings,
 			codecOptions: videoCodecOptions,
+			appData: {
+				codecStrategy: encodingConfig.decision.strategy,
+				scalabilityMode: encodingConfig.decision.scalabilityMode,
+			},
 		});
 
 		producers.set(producer.id, producer);
@@ -472,10 +500,16 @@ export async function publishScreenShare(meetingId, stream) {
 		const videoTrack = stream.getVideoTracks()[0];
 		if (!videoTrack) throw new Error("No video track in screen share stream");
 
+		const encodingConfig = buildVideoEncodingConfig("screen");
+
 		const producer = await sendTransport.produce({
 			track: videoTrack,
-			appData: { type: "screen" },
-			encodings: screenEncodings,
+			appData: {
+				type: "screen",
+				codecStrategy: encodingConfig.decision.strategy,
+				scalabilityMode: encodingConfig.decision.scalabilityMode,
+			},
+			encodings: encodingConfig.encodings,
 			codecOptions: videoCodecOptions,
 		});
 

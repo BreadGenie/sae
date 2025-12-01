@@ -122,6 +122,9 @@ declare module "vue" {
 		ScreenShareSidebar: typeof import(
 			"./src/components/ScreenShareSidebar.vue",
 		)["default"];
+		ScreenShareSidebarParticipantTile: typeof import(
+			"./src/components/ScreenShareSidebarParticipantTile.vue",
+		)["default"];
 		SettingsDialog: typeof import(
 			"./src/components/SettingsDialog.vue",
 		)["default"];

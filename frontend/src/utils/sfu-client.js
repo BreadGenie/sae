@@ -4,6 +4,8 @@
 import { frappeRequest } from "frappe-ui";
 import { io } from "socket.io-client";
 
+import { normalizeCodecStrategy } from "./media/codecStrategy";
+
 class SFUClient {
 	constructor() {
 		this.socket = null;
@@ -15,6 +17,7 @@ class SFUClient {
 			sfuUrl: null,
 			sfuPort: null,
 			tokenExpiresAt: null,
+			codecStrategy: "auto",
 		};
 		this.eventHandlers = new Map();
 		this.isRefreshingToken = false;
@@ -63,6 +66,7 @@ class SFUClient {
 			meeting_id,
 			user_data,
 			expires_in,
+			codec_strategy,
 		} = response;
 
 		const expiresInSeconds = typeof expires_in === "number" ? expires_in : 3600;
@@ -76,6 +80,7 @@ class SFUClient {
 			sfuPort: sfu_port,
 			userData: user_data,
 			tokenExpiresAt,
+			codecStrategy: normalizeCodecStrategy(codec_strategy),
 		};
 	}
 
@@ -199,6 +204,7 @@ class SFUClient {
 			sfuUrl: null,
 			sfuPort: null,
 			tokenExpiresAt: null,
+			codecStrategy: "auto",
 		};
 		this.isRefreshingToken = false;
 	}
@@ -264,6 +270,9 @@ class SFUClient {
 			this.connectionDetails.authToken = response.auth_token;
 			this.connectionDetails.tokenExpiresAt =
 				Date.now() + expiresInSeconds * 1000;
+			this.connectionDetails.codecStrategy = normalizeCodecStrategy(
+				response.codec_strategy || this.connectionDetails.codecStrategy,
+			);
 
 			if (this.socket) {
 				this.socket.auth = this.socket.auth || {};
@@ -600,6 +609,10 @@ class SFUClient {
 
 	getUserId() {
 		return this.connectionDetails.userId;
+	}
+
+	getCodecStrategy() {
+		return this.connectionDetails.codecStrategy || "auto";
 	}
 
 	getConnectionStatus() {

@@ -8,6 +8,12 @@ export const videoEncodings = [
 	{ maxBitrate: 1000000 },
 ];
 
+export const svcEncodingTemplate = (scalabilityMode = "L3T1") => [
+	{
+		scalabilityMode,
+	},
+];
+
 // layer 0: medium quality (800 kbps)
 // layer 1: high quality (1.5 Mbps
 export const screenEncodings = [
@@ -23,4 +29,5 @@ export default {
 	videoEncodings,
 	screenEncodings,
 	videoCodecOptions,
+	svcEncodingTemplate,
 };

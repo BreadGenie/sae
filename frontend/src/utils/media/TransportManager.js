@@ -4,7 +4,12 @@
  */
 
 import { getSFUClient } from "../sfu-client.js";
-import { videoCodecOptions, videoEncodings } from "./encodings.js";
+import { resolveCodecStrategy } from "./codecStrategy.ts";
+import {
+	svcEncodingTemplate,
+	videoCodecOptions,
+	videoEncodings,
+} from "./encodings.js";
 
 export class TransportManager {
 	constructor() {
@@ -12,6 +17,17 @@ export class TransportManager {
 		this.recvTransport = null;
 		this.device = null;
 		this.sfuClient = null;
+		this.routerRtpCapabilities = null;
+		this.activeVideoStrategy = "simulcast";
+	}
+
+	getVideoEncodingDecision() {
+		const preference = this.sfuClient?.getCodecStrategy?.() || "auto";
+		return resolveCodecStrategy({
+			preference,
+			deviceCapabilities: this.device?.rtpCapabilities,
+			routerCapabilities: this.routerRtpCapabilities,
+		});
 	}
 
 	initialize(sfuClient) {
@@ -25,6 +41,7 @@ export class TransportManager {
 		const routerCapsResp = await this.sfuClient.getRouterRtpCapabilities();
 		const routerRtpCapabilities =
 			routerCapsResp?.rtpCapabilities || routerCapsResp;
+		this.routerRtpCapabilities = routerRtpCapabilities;
 
 		await this.device.load({ routerRtpCapabilities });
 
@@ -141,8 +158,32 @@ export class TransportManager {
 		};
 
 		if (track?.kind === "video") {
-			produceOptions.encodings = videoEncodings;
+			const decision = this.getVideoEncodingDecision();
+			this.activeVideoStrategy = decision.strategy;
+
+			console.info("Video encoding decision", {
+				strategy: decision.strategy,
+				scalabilityMode: decision.scalabilityMode,
+			});
+
+			produceOptions.encodings =
+				decision.strategy === "svc"
+					? svcEncodingTemplate(decision.scalabilityMode)
+					: videoEncodings;
+			if (decision.strategy === "svc") {
+				const vp9Codec = this.device?.rtpCapabilities?.codecs?.find((codec) =>
+					codec.mimeType.toLowerCase().includes("vp9"),
+				);
+				if (vp9Codec) {
+					produceOptions.codec = vp9Codec;
+				}
+			}
 			produceOptions.codecOptions = videoCodecOptions;
+			produceOptions.appData = {
+				...safeAppData,
+				codecStrategy: decision.strategy,
+				scalabilityMode: decision.scalabilityMode,
+			};
 		}
 
 		const producer = await this.sendTransport.produce(produceOptions);

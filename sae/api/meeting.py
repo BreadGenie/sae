@@ -10,6 +10,10 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 
 
+def _get_codec_strategy() -> str:
+	return frappe.get_cached_doc("Sae Settings").codec_strategy or "auto"
+
+
 @frappe.whitelist()
 @rate_limit(limit=10, seconds=60 * 60)
 def create(meeting_type: str = "open") -> str:
@@ -69,6 +73,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"auth_token": auth_token,
 			"user_id": frappe.session.user,
 			"meeting_id": meeting_id,
+			"codec_strategy": _get_codec_strategy(),
 			"user_data": {
 				"name": user_fullname,
 				"email": frappe.session.user,
@@ -264,6 +269,7 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 			"success": True,
 			"auth_token": auth_token,
 			"expires_in": 3600,
+			"codec_strategy": _get_codec_strategy(),
 		}
 	except Exception as e:
 		frappe.log_error(f"Failed to refresh SFU token for meeting {meeting_id}: {e!s}")
