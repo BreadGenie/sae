@@ -101,10 +101,11 @@
 							<form class="space-y-3" @submit.prevent="handleJoin">
 								<FormControl
 									v-if="isGuest"
+									ref="guestNameInputRef"
 									v-model="guestName"
 									type="text"
 									label="Your name"
-									placeholder="e.g. John Doe"
+									placeholder="John Doe"
 									:maxlength="50"
 									autocomplete="off"
 								/>
@@ -133,7 +134,15 @@
 
 <script setup>
 import { Button, FormControl, createResource } from "frappe-ui";
-import { computed, defineEmits, defineProps, inject, ref } from "vue";
+import {
+	computed,
+	defineEmits,
+	defineProps,
+	inject,
+	nextTick,
+	ref,
+	watch,
+} from "vue";
 import FloatingControls from "../components/FloatingControls.vue";
 import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
 import { useMeetingPreviewPresence } from "../composables/useMeetingPreviewPresence";
@@ -154,6 +163,7 @@ const isGuest = computed(() => {
 });
 
 const guestName = ref("");
+const guestNameInputRef = ref(null);
 
 const joinGuestAPI = createResource({
 	url: "sae.api.meeting.join_meeting_as_guest",
@@ -201,6 +211,15 @@ const emit = defineEmits([
 	"device-changed",
 	"guest-join-complete",
 ]);
+
+watch(guestNameInputRef, (inputRef) => {
+	if (inputRef) {
+		nextTick(() => {
+			const input = inputRef.$el?.querySelector("input");
+			input?.focus();
+		});
+	}
+});
 
 const handleJoin = async () => {
 	if (isGuest.value) {
