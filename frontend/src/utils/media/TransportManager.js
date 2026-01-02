@@ -71,10 +71,12 @@ export class TransportManager {
 			"connect",
 			async ({ dtlsParameters }, callback, errback) => {
 				try {
-					await this.sfuClient.connectWebRtcTransport(
-						this.sendTransport.id,
-						dtlsParameters,
-					);
+					if (this.sendTransport.connectionState === "new") {
+						await this.sfuClient.connectWebRtcTransport(
+							this.sendTransport.id,
+							dtlsParameters,
+						);
+					}
 					callback();
 				} catch (error) {
 					errback(error);
@@ -119,10 +121,12 @@ export class TransportManager {
 			"connect",
 			async ({ dtlsParameters }, callback, errback) => {
 				try {
-					await this.sfuClient.connectWebRtcTransport(
-						this.recvTransport.id,
-						dtlsParameters,
-					);
+					if (this.recvTransport.connectionState === "new") {
+						await this.sfuClient.connectWebRtcTransport(
+							this.recvTransport.id,
+							dtlsParameters,
+						);
+					}
 					callback();
 				} catch (error) {
 					errback(error);

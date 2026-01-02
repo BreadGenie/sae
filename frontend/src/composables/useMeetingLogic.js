@@ -1,4 +1,4 @@
-import { createResource, toast } from "frappe-ui";
+import { createResource, frappeRequest, toast } from "frappe-ui";
 import { defineAsyncComponent, h, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -48,7 +48,8 @@ function getBackgroundEffectsFromStorage() {
  * Meeting Logic Composable
  * Handles all meeting-related business logic and integrations
  */
-export function useMeetingLogic(meetingState, meetingId) {
+export function useMeetingLogic(meetingState, meetingId, options = {}) {
+	const { hasReceivedExistingLobbyUsers, notifiedLobbyUsers } = options;
 	const router = useRouter();
 	const socket = useSocket();
 
@@ -886,7 +887,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 	/**
 	 * Join meeting room
 	 */
-	const joinMeetingRoom = async () => {
+	const joinMeetingRoom = async (guestName = null) => {
 		if (joiningInProgress.value) {
 			return;
 		}
@@ -896,29 +897,82 @@ export function useMeetingLogic(meetingState, meetingId) {
 			meetingState.isConnecting.value = true;
 			meetingState.connectionError.value = null;
 
-			// Join meeting via API
-			const joinResult = await joinMeetingAPI.submit();
+			let joinResult;
+
+			if (guestName) {
+				const guestLobbyToken = sessionStorage.getItem("guest_lobby_token");
+				if (guestLobbyToken) {
+					const guestId = sessionStorage.getItem("guest_id");
+					const sfuUrl = sessionStorage.getItem("guest_sfu_url");
+					const sfuPort = sessionStorage.getItem("guest_sfu_port");
+
+					joinResult = {
+						status: "waiting_for_approval",
+						lobby_token: guestLobbyToken,
+						sfu_url: sfuUrl,
+						sfu_port: sfuPort,
+						guest_id: guestId,
+						user_data: { name: guestName, is_guest: true },
+					};
+
+					meetingState.guestId.value = guestId;
+				} else {
+					const guestAuthToken = sessionStorage.getItem("guest_auth_token");
+					const guestId = sessionStorage.getItem("guest_id");
+
+					if (!guestAuthToken || !guestId) {
+						throw new Error("Guest session not found");
+					}
+
+					joinResult = {
+						status: "joined",
+						guest_id: guestId,
+						auth_token: guestAuthToken,
+					};
+
+					meetingState.guestId.value = guestId;
+				}
+			} else {
+				sessionStorage.removeItem("guest_auth_token");
+				sessionStorage.removeItem("guest_id");
+				sessionStorage.removeItem("guest_name");
+				sessionStorage.removeItem("guest_meeting_id");
+				sessionStorage.removeItem("guest_lobby_token");
+				sessionStorage.removeItem("guest_sfu_url");
+				sessionStorage.removeItem("guest_sfu_port");
+
+				const response = await joinMeetingAPI.fetch();
+
+				if (!response.success) {
+					throw new Error(response.error || "Failed to join meeting");
+				}
+
+				joinResult = response;
+			}
 
 			if (joinResult.status === "waiting_for_approval") {
 				meetingState.isWaitingForApproval.value = true;
-				meetingState.isConnecting.value = false;
 
-				// for approval/rejection events
-				setupFrappeRealtimeEventListeners();
-				return;
-			}
+				if (
+					joinResult.lobby_token &&
+					joinResult.sfu_url &&
+					joinResult.sfu_port
+				) {
+					console.log("Connecting to SFU lobby for approval...");
+					await setupLobbyConnection(joinResult, guestName);
+				}
 
-			if (joinResult.rejected) {
-				meetingState.isJoinRequestRejected.value = true;
 				meetingState.isConnecting.value = false;
 				return;
 			}
 
 			// Initialize SFU connection
 			console.log("Starting SFU connection setup...");
-			await setupSFUConnection();
+			await setupSFUConnection(guestName, joinResult?.is_host || false);
 
-			setupFrappeRealtimeEventListeners();
+			if (!guestName) {
+				setupFrappeRealtimeEventListeners();
+			}
 
 			console.log("Updating meeting state after successful SFU setup...");
 			meetingState.isInPreview.value = false;
@@ -951,7 +1005,7 @@ export function useMeetingLogic(meetingState, meetingId) {
 	/**
 	 * Setup SFU connection and media publishing
 	 */
-	const setupSFUConnection = async () => {
+	const setupSFUConnection = async (guestName = null, isHost = false) => {
 		if (meetingState.isSetupComplete.value) {
 			console.log("SFU setup already complete");
 			// Still need to update meeting state even if SFU is already set up
@@ -969,7 +1023,9 @@ export function useMeetingLogic(meetingState, meetingId) {
 				eventHandlers: createSFUEventHandlers(),
 			});
 
-			setupFrappeRealtimeEventListeners();
+			if (!guestName) {
+				setupFrappeRealtimeEventListeners();
+			}
 
 			// Connect to SFU
 			await sfuManager.value.connect();
@@ -977,20 +1033,32 @@ export function useMeetingLogic(meetingState, meetingId) {
 				getSFUClient().getCodecStrategy() || "auto";
 
 			// Join the room with user details and initial media states
-			await sfuManager.value.joinRoom(
-				{
+			let userData;
+			if (guestName) {
+				userData = {
+					name: guestName,
+					userId: meetingState.guestId.value || "",
+					avatar: null,
+					is_guest: true,
+					isHost: false,
+				};
+			} else {
+				userData = {
 					name:
 						meetingState.currentUser.value?.full_name ||
 						meetingState.currentUser.value?.name ||
 						"You",
 					userId: meetingState.currentUser.value?.user_id || "",
 					avatar: meetingState.currentUser.value?.avatar || "",
-				},
-				{
-					audio_enabled: meetingState.isMicOn.value,
-					video_enabled: meetingState.isCameraOn.value,
-				},
-			);
+					is_guest: false,
+					isHost: isHost,
+				};
+			}
+
+			await sfuManager.value.joinRoom(userData, {
+				audio_enabled: meetingState.isMicOn.value,
+				video_enabled: meetingState.isCameraOn.value,
+			});
 
 			// Now initialize device and create transports
 			await sfuManager.value.initializeDevice();
@@ -1033,10 +1101,153 @@ export function useMeetingLogic(meetingState, meetingId) {
 			console.log("SFU connection setup complete");
 
 			// Fetch waiting room, so that owner can approve/reject pending requests
-			sfuManager.value?.waitingRoomManager?.getWaitingRoom();
+			if (!guestName) sfuManager.value?.waitingRoomManager?.getWaitingRoom();
 		} catch (error) {
 			console.error("SFU setup failed:", error);
 			throw error;
+		}
+	};
+
+	const setupLobbyConnection = async (joinResult, guestName = null) => {
+		try {
+			const sfuClient = getSFUClient();
+
+			const lobbyDetails = {
+				meetingId,
+				lobbyToken: joinResult.lobby_token,
+				sfuUrl: joinResult.sfu_url,
+				sfuPort: joinResult.sfu_port,
+				userId: guestName
+					? sessionStorage.getItem("guest_id")
+					: meetingState.currentUser.value?.user_id,
+				userData: guestName
+					? { name: guestName, is_guest: true }
+					: joinResult.user_data,
+			};
+
+			await sfuClient.connectToLobby(lobbyDetails);
+
+			sfuClient.on("lobby_approved", async (data) => {
+				console.log("Lobby approval received:", data);
+
+				meetingState.isInLobby.value = false;
+				meetingState.isWaitingForApproval.value = false;
+
+				sessionStorage.removeItem("guest_lobby_token");
+				sessionStorage.removeItem("guest_sfu_url");
+				sessionStorage.removeItem("guest_sfu_port");
+
+				sfuClient.disconnect();
+
+				try {
+					if (guestName) {
+						const guestId = sessionStorage.getItem("guest_id");
+						const storedGuestName =
+							sessionStorage.getItem("guest_name") || guestName;
+						console.log(
+							"Getting approved token for guest:",
+							guestId,
+							storedGuestName,
+						);
+
+						let result;
+						try {
+							result = await frappeRequest({
+								url: "sae.api.meeting.get_approved_guest_token",
+								params: {
+									meeting_id: meetingId,
+									guest_id: guestId,
+									guest_name: storedGuestName,
+								},
+							});
+						} catch (apiError) {
+							console.error("API call error:", apiError);
+							meetingState.isJoinRequestRejected.value = true;
+							return;
+						}
+
+						if (result?.success && result?.auth_token) {
+							sessionStorage.setItem("guest_auth_token", result.auth_token);
+							if (result.sfu_url) {
+								sessionStorage.setItem("guest_sfu_url", result.sfu_url);
+							}
+							if (result.sfu_port) {
+								sessionStorage.setItem("guest_sfu_port", result.sfu_port);
+							}
+							sessionStorage.removeItem("guest_lobby_token");
+							await setupSFUConnection(guestName);
+						} else {
+							console.error(
+								"Failed to get approved guest token - missing success or auth_token:",
+								result,
+							);
+							meetingState.isJoinRequestRejected.value = true;
+							return;
+						}
+					} else {
+						console.log("Getting approved token for authenticated user");
+
+						const result = await frappeRequest({
+							url: "sae.api.meeting.get_approved_token",
+							params: {
+								meeting_id: meetingId,
+							},
+						});
+
+						if (result?.success) {
+							await setupSFUConnection();
+						} else {
+							console.error("Failed to get approved token:", result);
+							meetingState.isJoinRequestRejected.value = true;
+							return;
+						}
+					}
+				} catch (error) {
+					console.error("Error getting approved token:", error);
+					meetingState.isJoinRequestRejected.value = true;
+					return;
+				}
+
+				meetingState.isConnecting.value = false;
+			});
+
+			sfuClient.on("lobby_rejected", (data) => {
+				console.log("Lobby rejection received:", data);
+				meetingState.isInLobby.value = false;
+				meetingState.isWaitingForApproval.value = false;
+				meetingState.isJoinRequestRejected.value = true;
+
+				sfuClient.disconnect();
+			});
+
+			const userData = guestName
+				? {
+						userId: sessionStorage.getItem("guest_id"),
+						name: guestName,
+						avatar: null,
+						isGuest: true,
+					}
+				: {
+						userId: meetingState.currentUser.value?.user_id,
+						name:
+							meetingState.currentUser.value?.full_name ||
+							meetingState.currentUser.value?.name,
+						avatar: meetingState.currentUser.value?.avatar,
+						isGuest: false,
+					};
+
+			const lobbyResult = await sfuClient.joinLobby(meetingId, userData);
+			console.log("Joined lobby:", lobbyResult);
+
+			meetingState.lobbyParticipantCount.value =
+				lobbyResult.participantCount || 0;
+
+			meetingState.isInLobby.value = true;
+			meetingState.isInPreview.value = false;
+			meetingState.isConnecting.value = false;
+		} catch (error) {
+			console.error("Failed to connect to lobby:", error);
+			meetingState.isWaitingForApproval.value = true;
 		}
 	};
 
@@ -1093,6 +1304,18 @@ export function useMeetingLogic(meetingState, meetingId) {
 	const createSFUEventHandlers = () => {
 		return {
 			onParticipantJoined: (participant) => {
+				const participantName = participant?.user_name || participant?.user_id;
+				const participantId = participant.participantId || participant.user_id;
+				const currentUserId = meetingState.currentUser.value?.user_id;
+
+				// Don't add current user as a remote participant
+				if (
+					participantId === currentUserId ||
+					participant?.user_id === currentUserId
+				) {
+					return;
+				}
+
 				meetingState.addParticipant(participant);
 				console.log("Participant joined:", participant);
 
@@ -1100,15 +1323,9 @@ export function useMeetingLogic(meetingState, meetingId) {
 					participant.participantId,
 				);
 
-				const participantName = participant?.user_name || participant?.user_id;
-
-				if (
-					!participantName ||
-					participant.participantId === meetingState.currentUser.value?.user_id
-				)
+				if (!participantName) {
 					return;
-
-				// without this check, multiple toasts show up on join
+				}
 				if (sfuManager.value?.initialSyncInProgress) {
 					return;
 				}
@@ -1232,6 +1449,39 @@ export function useMeetingLogic(meetingState, meetingId) {
 			onWaitingRoomUpdated: (waitingUsers) => {
 				meetingState.waitingUsers.value = waitingUsers;
 			},
+			onLobbyUserJoined: (data) => {
+				console.log("Lobby user joined:", data);
+				const user = data.user;
+				const currentUsers = meetingState.lobbyUsers.value || [];
+				const existingIndex = currentUsers.findIndex(
+					(u) => u.userId === user.userId,
+				);
+				if (existingIndex === -1) {
+					meetingState.lobbyUsers.value = [...currentUsers, user];
+				}
+			},
+			onLobbyUserLeft: (data) => {
+				console.log("Lobby user left:", data);
+				meetingState.lobbyUsers.value = (
+					meetingState.lobbyUsers.value || []
+				).filter((u) => u.userId !== data.userId);
+			},
+			onLobbyUsersUpdated: (data) => {
+				console.log("Lobby users updated:", data);
+				meetingState.lobbyUsers.value = data.users || [];
+			},
+			onExistingLobbyUsers: (data) => {
+				console.log("Existing lobby users:", data);
+				meetingState.lobbyUsers.value = data.users || [];
+				if (hasReceivedExistingLobbyUsers) {
+					hasReceivedExistingLobbyUsers.value = true;
+				}
+				if (notifiedLobbyUsers && data.users) {
+					for (const user of data.users) {
+						notifiedLobbyUsers.value.add(user.userId);
+					}
+				}
+			},
 			onActiveSpeakerChanged: (participantIds) => {
 				if (activeSpeakerTimeout.value) {
 					clearTimeout(activeSpeakerTimeout.value);
@@ -1314,8 +1564,15 @@ export function useMeetingLogic(meetingState, meetingId) {
 	 * Approve user join request
 	 */
 	const approveUser = async (userId) => {
-		if (sfuManager.value?.waitingRoomManager) {
-			await sfuManager.value.waitingRoomManager.approveUser(userId);
+		try {
+			if (sfuManager.value?.sfuClient) {
+				await sfuManager.value.sfuClient.approveLobbyUser(userId);
+				meetingState.lobbyUsers.value = (
+					meetingState.lobbyUsers.value || []
+				).filter((u) => u.userId !== userId);
+			}
+		} catch (error) {
+			console.error("Failed to approve lobby user:", error);
 		}
 	};
 
@@ -1323,8 +1580,15 @@ export function useMeetingLogic(meetingState, meetingId) {
 	 * Reject user join request
 	 */
 	const rejectUser = async (userId) => {
-		if (sfuManager.value?.waitingRoomManager) {
-			await sfuManager.value.waitingRoomManager.rejectUser(userId);
+		try {
+			if (sfuManager.value?.sfuClient) {
+				await sfuManager.value.sfuClient.rejectLobbyUser(userId);
+				meetingState.lobbyUsers.value = (
+					meetingState.lobbyUsers.value || []
+				).filter((u) => u.userId !== userId);
+			}
+		} catch (error) {
+			console.error("Failed to reject lobby user:", error);
 		}
 	};
 

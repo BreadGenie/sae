@@ -92,6 +92,14 @@ export interface ServerToClientEvents {
 		timestamp: string;
 	}) => void;
 	existing_raised_hands: (data: { hands: Record<string, boolean> }) => void;
+	lobby_user_joined: (data: { user: LobbyUserData }) => void;
+	lobby_user_left: (data: { userId: string }) => void;
+	lobby_approved: (data: { approvedBy: string; fullToken: string }) => void;
+	lobby_rejected: (data: { rejectedBy: string; reason?: string }) => void;
+	lobby_users_updated: (data: {
+		users: LobbyUserData[];
+		count: number;
+	}) => void;
 }
 
 export interface ClientToServerEvents {
@@ -180,6 +188,26 @@ export interface ClientToServerEvents {
 		callback: (response: SFUResponse) => void,
 	) => void;
 	leave_room: (data?: { roomId?: string }) => void;
+	join_lobby: (
+		data: { roomId: string; userData: LobbyUserData },
+		callback: (response: JoinLobbyResponse) => void,
+	) => void;
+	leave_lobby: (
+		data?: { roomId?: string },
+		callback?: (response: SFUResponse) => void,
+	) => void;
+	approve_lobby_user: (
+		data: { userId: string },
+		callback: (response: SFUResponse) => void,
+	) => void;
+	reject_lobby_user: (
+		data: { userId: string; reason?: string },
+		callback: (response: SFUResponse) => void,
+	) => void;
+	get_lobby_users: (
+		data: Record<string, never>,
+		callback: (response: LobbyUsersResponse) => void,
+	) => void;
 }
 
 export interface InterServerEvents {
@@ -191,9 +219,10 @@ export interface SocketData {
 	userName: string;
 	meetingId: string;
 	isHost: boolean;
+	isGuest?: boolean;
 	roomId?: string;
 	participantId?: string;
-	scope?: 'presence-preview' | 'full';
+	scope?: 'presence-preview' | 'full' | 'lobby';
 }
 
 // Core data types
@@ -203,6 +232,7 @@ export interface UserData {
 	avatar?: string;
 	audio_enabled: boolean;
 	video_enabled: boolean;
+	is_guest?: boolean;
 }
 
 export interface SFUResponse {
@@ -247,6 +277,24 @@ export interface ExistingProducersResponse extends SFUResponse {
 export interface RoomParticipantsResponse extends SFUResponse {
 	participants: ParticipantInfo[] | PreviewParticipantInfo[];
 }
+export interface LobbyUserData {
+	userId: string;
+	name: string;
+	avatar?: string;
+	isGuest?: boolean;
+	joinedAt?: number;
+}
+
+export interface JoinLobbyResponse extends SFUResponse {
+	participantCount?: number;
+	position?: number;
+}
+
+export interface LobbyUsersResponse extends SFUResponse {
+	users: LobbyUserData[];
+	count: number;
+}
+
 export interface WebRTCTransportParams {
 	id: string;
 	iceParameters: IceParameters;
@@ -294,6 +342,7 @@ export interface ParticipantInfo {
 		avatar?: string;
 		audio_enabled: boolean;
 		video_enabled: boolean;
+		is_guest?: boolean;
 	};
 }
 
@@ -421,7 +470,7 @@ export interface JWTPayload {
 	meeting_id: string;
 	user_avatar?: string;
 	is_host: boolean;
-	scope?: 'presence-preview' | 'full';
+	scope?: 'presence-preview' | 'full' | 'lobby';
 	session_id?: string;
 	exp?: number;
 	iat?: number;
@@ -454,6 +503,6 @@ declare module 'socket.io' {
 		currentToken?: string;
 		tokenExpiresAt?: number;
 		tokenExpiryTimer?: NodeJS.Timeout;
-		scope?: 'presence-preview' | 'full';
+		scope?: 'presence-preview' | 'full' | 'lobby';
 	}
 }

@@ -1,6 +1,7 @@
 import { createResource } from "frappe-ui";
 import { type Socket, io } from "socket.io-client";
 import { computed, onUnmounted, readonly, ref } from "vue";
+import { session } from "../data/session";
 import type { FrappeRequestError } from "../types";
 
 interface Participant {
@@ -30,6 +31,7 @@ interface ParticipantResponse {
 			avatar?: string;
 			audio_enabled?: boolean;
 			video_enabled?: boolean;
+			is_guest?: boolean;
 		};
 	}>;
 	error?: string;
@@ -79,6 +81,10 @@ export function useMeetingPreviewPresence(meetingId: string) {
 				: "Failed to fetch presence token";
 		},
 	});
+
+	if (session.isLoggedIn) {
+		fetchPresenceToken.fetch();
+	}
 
 	const connectToSFU = (tokenData: TokenResponse) => {
 		if (!tokenData.sfu_url || !tokenData.auth_token) {
@@ -142,6 +148,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 							avatar_url: p.info.avatar,
 							has_video: p.info.video_enabled || false,
 							has_audio: p.info.audio_enabled || false,
+							is_guest: p.info.is_guest || false,
 						}));
 					} else {
 						error.value = response.error || "Failed to fetch participants";
@@ -189,7 +196,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 		fetchPresenceToken.fetch();
 	};
 
-	fetchPresenceToken.fetch();
+	// fetchPresenceToken.fetch();
 
 	onUnmounted(() => {
 		if (socket) {

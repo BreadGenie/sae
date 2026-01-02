@@ -20,10 +20,10 @@ class SaeMeeting(Document):
 
 		from sae.sae.doctype.sae_meeting_user.sae_meeting_user import SaeMeetingUser
 
-		banned_users: DF.TableMultiSelect[SaeMeetingUser]
+		banned_users: DF.Table[SaeMeetingUser]
 		meeting_type: DF.Literal["open", "restricted"]
-		members: DF.TableMultiSelect[SaeMeetingUser]
-		waiting_room: DF.TableMultiSelect[SaeMeetingUser]
+		members: DF.Table[SaeMeetingUser]
+		waiting_room: DF.Table[SaeMeetingUser]
 	# end: auto-generated types
 
 	def autoname(self):
@@ -145,15 +145,25 @@ class SaeMeeting(Document):
 			self.append("waiting_room", {"user": user})
 			self.save(ignore_permissions=True)
 
-		user_doc = frappe.db.get_value("User", user, ["full_name", "user_image"], as_dict=True)
+		from sae.utils.user import get_user_info
+
+		user_info = get_user_info(user)
+
+		if user_info:
+			user_name = user_info.get("full_name", user)
+			user_image = user_info.get("user_image")
+		else:
+			user_name = user
+			user_image = None
+
 		frappe.publish_realtime(
 			"meeting_join_request",
 			user=self.owner,
 			message={
 				"meeting": self.name,
 				"user": user,
-				"user_name": user_doc.full_name,
-				"user_image": user_doc.user_image,
+				"user_name": user_name,
+				"user_image": user_image,
 				"waiting_count": len(waiting_users) + 1,
 			},
 		)

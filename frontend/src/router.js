@@ -24,6 +24,7 @@ const routes = [
 		path: "/:meetingId",
 		name: "Meeting",
 		component: () => import("@/pages/Meeting.vue"),
+		meta: { allowGuest: true },
 	},
 	{
 		name: "Login",
@@ -65,6 +66,10 @@ router.beforeEach(async (to, from, next) => {
 
 	if (to.name === "Login") {
 		if (isLoggedIn) return next({ name: "Home" });
+		return next();
+	}
+
+	if (to.meta?.allowGuest && to.name === "Meeting") {
 		return next();
 	}
 

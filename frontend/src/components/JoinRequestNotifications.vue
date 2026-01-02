@@ -7,29 +7,36 @@
 					:key="request.user_id"
 					class="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-4 min-w-80 max-w-96"
 				>
-					<div class="flex items-center space-x-3 mb-4">
-						<div
-							class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0"
-						>
-							<img
-								v-if="request.user_image"
-								:src="request.user_image"
-								:alt="request.user_name"
-								class="w-10 h-10 rounded-full object-cover"
-							/>
-							<span v-else class="text-sm font-medium text-blue-400">
-								{{ getInitials(request.user_name || request.user_id) }}
-							</span>
+					<div class="flex items-start justify-between mb-4">
+						<div class="flex items-center space-x-3 flex-1 min-w-0">
+							<div
+								class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0"
+							>
+								<img
+									v-if="request.user_image"
+									:src="request.user_image"
+									:alt="request.user_name"
+									class="w-10 h-10 rounded-full object-cover"
+								/>
+								<span v-else class="text-sm font-medium text-blue-400">
+									{{ getInitials(request.user_name || request.user_id) }}
+								</span>
+							</div>
+
+							<div class="flex-1 min-w-0">
+								<p class="text-sm text-gray-200">
+									<span class="font-semibold text-white">
+										{{ request.user_name || request.user_id }}
+									</span>
+									wants to join the meeting
+								</p>
+							</div>
 						</div>
 
-						<div class="flex-1 min-w-0">
-							<p class="text-sm text-gray-200">
-								<span class="font-semibold text-white">
-									{{ request.user_name || request.user_id }}
-								</span>
-								wants to join the meeting
-							</p>
-						</div>
+						<lucide-x
+							@click="forceHide(request.user_id)"
+							class="w-4 h-4 ml-4 text-white cursor-pointer hover:text-gray-400"
+						/>
 					</div>
 
 					<div class="flex space-x-2">
@@ -38,7 +45,6 @@
 							size="sm"
 							theme="green"
 							@click="$emit('approve-user', request.user_id)"
-							:disabled="loadingUsers.includes(request.user_id)"
 							class="flex-1"
 						>
 							<template #prefix>
@@ -51,7 +57,6 @@
 							theme="red"
 							size="sm"
 							@click="$emit('reject-user', request.user_id)"
-							:disabled="loadingUsers.includes(request.user_id)"
 							class="flex-1"
 						>
 							<template #prefix>
@@ -76,10 +81,6 @@ const props = defineProps({
 		type: [Array, Object],
 		default: () => [],
 	},
-	loadingUsers: {
-		type: [Array, Object],
-		default: () => [],
-	},
 	maxVisible: {
 		type: Number,
 		default: 3,
@@ -94,10 +95,6 @@ const waitingUsers = computed(() => {
 	const users = props.waitingUsers?.value || props.waitingUsers;
 	return Array.isArray(users) ? users : [];
 });
-
-const loadingUsers = computed(() =>
-	Array.isArray(props.loadingUsers) ? props.loadingUsers : [],
-);
 
 const joinRequests = computed(() => {
 	return waitingUsers.value

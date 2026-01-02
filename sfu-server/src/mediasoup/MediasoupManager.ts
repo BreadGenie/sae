@@ -193,6 +193,11 @@ export class MediasoupManager {
 		}
 
 		const { roomId, peerId, transport } = transportData;
+
+		if (producerData.peerId === peerId) {
+			throw new Error(`Cannot consume own producer ${producerId}`);
+		}
+
 		const room = this.roomManager.getRoom(roomId);
 		if (!room) {
 			throw new Error(`Room ${roomId} not found`);
@@ -560,6 +565,7 @@ export class MediasoupManager {
 						avatar: peer.info.avatar,
 						audio_enabled: audioEnabled,
 						video_enabled: videoEnabled,
+						is_guest: peer.info.is_guest || false,
 					},
 				};
 			});

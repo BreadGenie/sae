@@ -6,6 +6,14 @@
 					<FrappeMeetingLogo class="h-8" />
 					<h4 class="text-gray-900 text-base">Frappe Meet</h4>
 				</div>
+				<Button
+					v-if="!session.isLoggedIn"
+					variant="ghost"
+					size="sm"
+					@click="$router.push({ name: 'Login' })"
+				>
+					Sign In
+				</Button>
 			</div>
 		</div>
 
@@ -65,78 +73,48 @@
 							<div class="mb-6 text-center">
 								<div class="mb-4">
 									<div
-										class="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4"
-										:class="
-											isJoinRequestRejected
-												? 'bg-gradient-to-br from-red-100 to-rose-100'
-												: isWaitingForApproval
-													? 'bg-gradient-to-br from-amber-100 to-yellow-100'
-													: 'bg-gradient-to-br from-blue-100 to-indigo-100'
-										"
-									>
-										<lucide-x-circle
-											v-if="isJoinRequestRejected"
-											class="w-8 h-8 text-red-600"
-										/>
-										<lucide-clock
-											v-else-if="isWaitingForApproval"
-											class="w-8 h-8 text-amber-600"
-										/>
-										<lucide-video v-else class="w-8 h-8 text-blue-600" />
-									</div>
-								</div>
+								class="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-gradient-to-br from-blue-100 to-indigo-100"
+							>
+								<lucide-video class="w-8 h-8 text-blue-600" />
+							</div>
+						</div>
 
-								<h2 class="text-3xl text-gray-900 mb-3">
-									<span v-if="isJoinRequestRejected" class="text-red-800">
-										Join request denied
-									</span>
-									<span v-else-if="isWaitingForApproval" class="text-amber-800">
-										Waiting for approval
-									</span>
-									<span v-else class="text-gray-900"> Ready to join? </span>
-								</h2>
+						<h2 class="text-3xl text-gray-900 mb-3">
+							<span class="text-gray-900"> Ready to join? </span>
+						</h2>
 
-								<div v-if="meetingTitle" class="bg-gray-50 rounded-lg px-4 py-3 mb-4">
-									<p class="text-lg font-medium text-gray-700 truncate">
-										{{ meetingTitle }}
-									</p>
-								</div>
+						<div v-if="meetingTitle" class="bg-gray-50 rounded-lg px-4 py-3 mb-4">
+							<p class="text-lg font-medium text-gray-700 truncate">
+								{{ meetingTitle }}
+							</p>
+						</div>
 
-								<div
-									v-if="isJoinRequestRejected"
-									class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4"
-								>
-									<p class="text-sm text-red-800 leading-relaxed">
-										<lucide-x-circle class="w-4 h-4 inline mr-2" />
-										Your join request was denied by the meeting host.
-									</p>
-								</div>
-								<div
-									v-else-if="isWaitingForApproval"
-									class="bg-amber-50 border border-amber-200 rounded-lg p-4"
-								>
-									<p class="text-sm text-amber-800 leading-relaxed">
-										<lucide-info class="w-4 h-4 inline mr-2" />
-										The meeting host will review and approve your request to
-										join shortly. Please wait a moment.
-									</p>
-								</div>
-
-								<!-- Avatar group for current participants -->
-								<ParticipantAvatarGroup
-									:participants="participants"
-									:error="presenceError"
-									:maxDisplayed="3"
-								/>
+						<!-- Avatar group for current participants -->
+						<ParticipantAvatarGroup
+							v-if="!isGuest"
+							:participants="participants"
+							:error="presenceError"
+							:maxDisplayed="3"
+						/>
 							</div>
 
-							<div class="space-y-3">
+							<form class="space-y-3" @submit.prevent="handleJoin">
+								<FormControl
+									v-if="isGuest"
+									v-model="guestName"
+									type="text"
+									label="Your name"
+									placeholder="e.g. John Doe"
+									:maxlength="50"
+									autocomplete="off"
+								/>
+
 								<Button
-									v-if="!isWaitingForApproval && !isJoinRequestRejected"
-									@click="$emit('join-from-preview')"
+									@click="handleJoin"
 									variant="solid"
 									size="lg"
-									:loading="isConnecting"
+									:loading="isConnecting || joinGuestAPI.loading"
+									:disabled="isGuest && !guestName.trim()"
 									class="w-full"
 								>
 									<template #prefix>
@@ -144,48 +122,7 @@
 									</template>
 									Join Meeting
 								</Button>
-
-								<div v-if="isJoinRequestRejected" class="space-y-3">
-									<Button
-										@click="$emit('try-join-again')"
-										variant="solid"
-										size="lg"
-										class="w-full"
-									>
-										<template #prefix>
-											<lucide-refresh-cw class="w-5 h-5" />
-										</template>
-										Request to Join Again
-									</Button>
-
-									<Button
-										@click="$emit('leave-waiting-room')"
-										variant="outline"
-										theme="gray"
-										size="lg"
-										class="w-full"
-									>
-										<template #prefix>
-											<lucide-arrow-left class="w-4 h-4" />
-										</template>
-										Leave Meeting
-									</Button>
-								</div>
-
-								<Button
-									v-if="isWaitingForApproval"
-									@click="$emit('leave-waiting-room')"
-									variant="outline"
-									theme="red"
-									size="md"
-									class="w-full"
-								>
-									<template #prefix>
-										<lucide-x class="w-4 h-4" />
-									</template>
-									Leave waiting room
-								</Button>
-							</div>
+							</form>
 						</div>
 					</div>
 				</div>
@@ -195,15 +132,35 @@
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, inject } from "vue";
+import { Button, FormControl, createResource } from "frappe-ui";
+import { computed, defineEmits, defineProps, inject, ref } from "vue";
 import FloatingControls from "../components/FloatingControls.vue";
 import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
 import { useMeetingPreviewPresence } from "../composables/useMeetingPreviewPresence";
+import { session } from "../data/session";
 import FrappeMeetingLogo from "../icons/FrappeMeetingLogo.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 
 const props = defineProps({
 	meetingId: { type: String, required: true },
+});
+
+const isGuest = computed(() => {
+	return (
+		!session.isLoggedIn &&
+		!sessionStorage.getItem("guest_auth_token") &&
+		!sessionStorage.getItem("guest_lobby_token")
+	);
+});
+
+const guestName = ref("");
+
+const joinGuestAPI = createResource({
+	url: "sae.api.meeting.join_meeting_as_guest",
+	makeParams: () => ({
+		meeting_id: props.meetingId,
+		guest_name: guestName.value.trim(),
+	}),
 });
 
 const meetingState = inject("meetingState");
@@ -217,15 +174,19 @@ const { participants, error: presenceError } = useMeetingPreviewPresence(
 const isCameraOn = computed(() => meetingState.isCameraOn.value);
 const isMicOn = computed(() => meetingState.isMicOn.value);
 const currentUser = computed(() => meetingState.currentUser.value);
-const userInitials = computed(() => meetingState.userInitials.value);
-const userAvatar = computed(() => meetingState.userAvatar.value);
+const userInitials = computed(() => {
+	if (isGuest.value && guestName.value.trim()) {
+		return guestName.value.trim().charAt(0).toUpperCase();
+	}
+	return meetingState.userInitials.value;
+});
+const userAvatar = computed(() => {
+	if (isGuest.value) {
+		return null;
+	}
+	return meetingState.userAvatar.value;
+});
 const isConnecting = computed(() => meetingState.isConnecting.value);
-const isWaitingForApproval = computed(
-	() => meetingState.isWaitingForApproval.value,
-);
-const isJoinRequestRejected = computed(
-	() => meetingState.isJoinRequestRejected.value,
-);
 const cameraPermissionGranted = computed(
 	() => meetingState.cameraPermissionGranted.value,
 );
@@ -237,12 +198,54 @@ const emit = defineEmits([
 	"toggle-microphone",
 	"toggle-camera",
 	"join-from-preview",
-	"leave-waiting-room",
-	"try-join-again",
 	"device-changed",
+	"guest-join-complete",
 ]);
 
-const currentUserName = computed(
-	() => currentUser.value?.full_name || currentUser.value?.name || "You",
-);
+const handleJoin = async () => {
+	if (isGuest.value) {
+		if (!guestName.value.trim()) {
+			return;
+		}
+
+		try {
+			const result = await joinGuestAPI.submit();
+
+			if (!result.success) {
+				console.error("Guest join failed:", result.error);
+				return;
+			}
+
+			sessionStorage.setItem("guest_id", result.guest_id);
+			sessionStorage.setItem(
+				"guest_name",
+				result.guest_name || guestName.value.trim(),
+			);
+			sessionStorage.setItem("guest_meeting_id", result.meeting_id);
+
+			if (result.status === "waiting_for_approval") {
+				if (result.lobby_token) {
+					sessionStorage.setItem("guest_lobby_token", result.lobby_token);
+					sessionStorage.setItem("guest_sfu_url", result.sfu_url);
+					sessionStorage.setItem("guest_sfu_port", result.sfu_port);
+				}
+			} else {
+				sessionStorage.setItem("guest_auth_token", result.auth_token);
+			}
+
+			emit("guest-join-complete");
+		} catch (error) {
+			console.error("Failed to join as guest:", error);
+		}
+	} else {
+		emit("join-from-preview");
+	}
+};
+
+const currentUserName = computed(() => {
+	if (isGuest.value && guestName.value.trim()) {
+		return guestName.value.trim();
+	}
+	return currentUser.value?.full_name || currentUser.value?.name || "You";
+});
 </script>

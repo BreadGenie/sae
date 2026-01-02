@@ -108,7 +108,8 @@ export class SFUMeetingManager {
 
 		try {
 			this.sfuClient = getSFUClient();
-			await this.sfuClient.connect(this.meetingId);
+			const guestAuthToken = sessionStorage.getItem("guest_auth_token") || null;
+			await this.sfuClient.connect(this.meetingId, guestAuthToken);
 			this.isConnected = true;
 
 			// Initialize transport manager with SFU client
@@ -128,6 +129,22 @@ export class SFUMeetingManager {
 		try {
 			await this.sfuClient.joinRoom(this.meetingId, userData, mediaState);
 			console.log("Successfully joined room:", this.meetingId);
+
+			if (userData.isHost) {
+				try {
+					const lobbyResult = await this.sfuClient.getLobbyUsers();
+					console.log("Lobby users result:", lobbyResult);
+					if (this.eventHandlers.onExistingLobbyUsers) {
+						this.eventHandlers.onExistingLobbyUsers({
+							users: lobbyResult?.users || [],
+							count: lobbyResult?.count || 0,
+						});
+					}
+				} catch (lobbyError) {
+					console.warn("Failed to fetch lobby users:", lobbyError);
+				}
+			}
+
 			return true;
 		} catch (error) {
 			console.error("Failed to join room:", error);
@@ -217,24 +234,31 @@ export class SFUMeetingManager {
 
 			const participants = await this.sfuClient.getRoomParticipants();
 
-			const normalized = (participants || []).map((p) => {
-				const pid = p.user_id || p.id;
-				const info = p.info || {};
-				return {
-					participantId: pid,
-					user_id: pid,
-					user_name: info.name || info.user_name || pid,
-					avatar: info.avatar || null,
-					audio_enabled:
-						typeof info.audio_enabled === "boolean"
-							? info.audio_enabled
-							: false,
-					video_enabled:
-						typeof info.video_enabled === "boolean"
-							? info.video_enabled
-							: false,
-				};
-			});
+			// Get current user ID to filter out self from participants
+			const currentUserId =
+				this.currentUser?.user_id || this.currentUser?.userId;
+
+			const normalized = (participants || [])
+				.map((p) => {
+					const pid = p.user_id || p.id;
+					const info = p.info || {};
+					return {
+						participantId: pid,
+						user_id: pid,
+						user_name: info.name || info.user_name || pid,
+						avatar: info.avatar || null,
+						audio_enabled:
+							typeof info.audio_enabled === "boolean"
+								? info.audio_enabled
+								: false,
+						video_enabled:
+							typeof info.video_enabled === "boolean"
+								? info.video_enabled
+								: false,
+						is_guest: info.is_guest || false,
+					};
+				})
+				.filter((p) => p.user_id !== currentUserId);
 
 			this.participantManager.syncParticipants(normalized);
 
@@ -265,11 +289,19 @@ export class SFUMeetingManager {
 					})),
 				);
 
+				const currentUserId =
+					this.currentUser?.user_id || this.currentUser?.userId;
+
 				for (const producerInfo of existingProducers) {
 					const pid =
 						producerInfo.participantId ||
 						producerInfo.user_id ||
 						producerInfo.userId;
+
+					if (pid === currentUserId) {
+						continue;
+					}
+
 					const metadata = { isScreen: !!producerInfo.isScreen };
 					console.log("Subscribing to existing producer:", {
 						producerId: producerInfo.id,
@@ -335,6 +367,11 @@ export class SFUMeetingManager {
 		this.processedConsumers.add(consumer?.id);
 
 		if (!participantId) {
+			return;
+		}
+
+		const currentUserId = this.currentUser?.user_id || this.currentUser?.userId;
+		if (participantId === currentUserId) {
 			return;
 		}
 
@@ -480,7 +517,13 @@ export class SFUMeetingManager {
 
 	setupSFUEventHandlers() {
 		this.sfuClient.on("participant_joined", (data) => {
-			this.participantManager.addParticipant(data);
+			const currentUserId =
+				this.currentUser?.user_id || this.currentUser?.userId;
+			const joinedUserId = data.participantId || data.user_id;
+
+			if (joinedUserId && joinedUserId !== currentUserId) {
+				this.participantManager.addParticipant(data);
+			}
 		});
 
 		this.sfuClient.on("participant_left", (data) => {
@@ -488,6 +531,8 @@ export class SFUMeetingManager {
 		});
 
 		this.sfuClient.on("producer_created", async (data) => {
+			if (data.participantId === this.currentUser.value?.user_id) return;
+
 			// If we're syncing or the device isn't ready yet, buffer this event
 			if (
 				this.initialSyncInProgress ||
@@ -696,6 +741,25 @@ export class SFUMeetingManager {
 		this.sfuClient.on("active_speaker", (data) => {
 			if (this.eventHandlers.onActiveSpeakerChanged) {
 				this.eventHandlers.onActiveSpeakerChanged(data.participantIds);
+			}
+		});
+
+		// Lobby event handlers
+		this.sfuClient.on("lobby_user_joined", (data) => {
+			if (this.eventHandlers.onLobbyUserJoined) {
+				this.eventHandlers.onLobbyUserJoined(data);
+			}
+		});
+
+		this.sfuClient.on("lobby_user_left", (data) => {
+			if (this.eventHandlers.onLobbyUserLeft) {
+				this.eventHandlers.onLobbyUserLeft(data);
+			}
+		});
+
+		this.sfuClient.on("lobby_users_updated", (data) => {
+			if (this.eventHandlers.onLobbyUsersUpdated) {
+				this.eventHandlers.onLobbyUsersUpdated(data);
 			}
 		});
 	}

@@ -10,6 +10,7 @@ class SFUClient {
 	constructor() {
 		this.socket = null;
 		this.connected = false;
+		this.isLobbyConnection = false;
 		this.connectionDetails = {
 			authToken: null,
 			meetingId: null,
@@ -27,14 +28,18 @@ class SFUClient {
 
 	// ==================== CONNECTION MANAGEMENT ====================
 
-	async connect(meetingId) {
+	async connect(meetingId, guestAuthToken = null) {
 		if (this.connected) {
 			return true;
 		}
 
 		try {
-			const connectionDetails = await this.getConnectionDetails(meetingId);
+			const connectionDetails = await this.getConnectionDetails(
+				meetingId,
+				guestAuthToken,
+			);
 			this.connectionDetails = connectionDetails;
+			this.isLobbyConnection = false;
 			this.scheduleTokenRefresh();
 
 			await this.validateSFUHealth();
@@ -48,8 +53,79 @@ class SFUClient {
 		}
 	}
 
-	async getConnectionDetails(meetingId) {
-		const response = await frappeRequest({
+	async connectToLobby(lobbyDetails) {
+		if (this.connected) {
+			return true;
+		}
+
+		const { meetingId, lobbyToken, sfuUrl, sfuPort, userId, userData } =
+			lobbyDetails;
+
+		try {
+			this.connectionDetails = {
+				authToken: lobbyToken,
+				meetingId,
+				userId,
+				sfuUrl,
+				sfuPort,
+				userData,
+				tokenExpiresAt: Date.now() + 3600 * 1000, // 1 hour
+				codecStrategy: "auto",
+			};
+			this.isLobbyConnection = true;
+
+			await this.validateSFUHealth();
+			await this.establishSocketConnection();
+
+			return true;
+		} catch (error) {
+			console.error("SFU lobby connection failed:", error);
+			throw error;
+		}
+	}
+
+	async getConnectionDetails(meetingId, guestAuthToken = null) {
+		let response;
+
+		if (guestAuthToken) {
+			const guestId = sessionStorage.getItem("guest_id");
+			const guestName = sessionStorage.getItem("guest_name");
+			const guestMeetingId = sessionStorage.getItem("guest_meeting_id");
+
+			if (!guestId || guestMeetingId !== meetingId) {
+				throw new Error("Guest session incomplete or invalid for this meeting");
+			}
+
+			response = await frappeRequest({
+				url: "sae.api.meeting.get_guest_sfu_connection_details",
+				params: {
+					meeting_id: meetingId,
+					guest_token: guestAuthToken,
+				},
+			});
+
+			if (!response.success) {
+				throw new Error(
+					response.error || "Failed to get SFU connection details",
+				);
+			}
+
+			return {
+				authToken: guestAuthToken,
+				meetingId: meetingId,
+				userId: guestId,
+				sfuUrl: response.sfu_url,
+				sfuPort: response.sfu_port,
+				userData: {
+					name: guestName,
+					is_guest: true,
+				},
+				tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+				codecStrategy: response.codec_strategy || "auto",
+			};
+		}
+
+		response = await frappeRequest({
 			url: "sae.api.meeting.get_sfu_connection_details",
 			params: { meeting_id: meetingId },
 		});
@@ -124,8 +200,9 @@ class SFUClient {
 			reconnection: true,
 			reconnectionAttempts: 5,
 			reconnectionDelay: 1000,
-			transports: ["websocket", "polling"],
 			upgrade: true,
+			reconnectionDelayMax: 5000,
+			transports: ["websocket", "polling"],
 			timeout: 20000,
 			forceNew: true,
 			withCredentials: false,
@@ -370,6 +447,11 @@ class SFUClient {
 			active_speaker: () => {},
 			hand_raised: () => {},
 			existing_raised_hands: () => {},
+			lobby_user_joined: () => {},
+			lobby_user_left: () => {},
+			lobby_approved: () => {},
+			lobby_rejected: () => {},
+			lobby_users_updated: () => {},
 		};
 
 		for (const [event, handler] of Object.entries(defaultHandlers)) {
@@ -502,6 +584,37 @@ class SFUClient {
 			userData,
 			mediaState,
 		});
+	}
+
+	// ==================== LOBBY OPERATIONS ====================
+
+	async joinLobby(roomId, userData) {
+		return this.sendRequest("join_lobby", {
+			roomId,
+			userData,
+		});
+	}
+
+	async leaveLobby(roomId = null) {
+		return this.sendRequest("leave_lobby", {
+			roomId: roomId || this.connectionDetails.meetingId,
+		});
+	}
+
+	async approveLobbyUser(userId) {
+		return this.sendRequest("approve_lobby_user", { userId });
+	}
+
+	async rejectLobbyUser(userId, reason = null) {
+		return this.sendRequest("reject_lobby_user", { userId, reason });
+	}
+
+	async getLobbyUsers() {
+		return this.sendRequest("get_lobby_users", {});
+	}
+
+	isInLobby() {
+		return this.isLobbyConnection;
 	}
 
 	// ==================== SIGNALING OPERATIONS ====================

@@ -11,10 +11,9 @@
  "fields": [
   {
    "fieldname": "user",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "User",
-   "options": "User"
+   "label": "User"
   }
  ],
  "grid_page_length": 50,

@@ -28,21 +28,21 @@
   },
   {
    "fieldname": "members",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Table",
    "label": "Members",
    "options": "Sae Meeting User",
    "read_only": 1
   },
   {
    "fieldname": "waiting_room",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Table",
    "label": "Waiting Room",
    "options": "Sae Meeting User",
    "read_only": 1
   },
   {
    "fieldname": "banned_users",
-   "fieldtype": "Table MultiSelect",
+   "fieldtype": "Table",
    "label": "Banned Users",
    "options": "Sae Meeting User",
    "read_only": 1
@@ -55,7 +55,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-11-26 10:32:58.518323",
+ "modified": "2025-12-29 15:36:01.882174",
  "modified_by": "Administrator",
  "module": "Sae",
  "name": "Sae Meeting",

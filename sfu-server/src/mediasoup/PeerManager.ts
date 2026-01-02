@@ -31,6 +31,8 @@ export class PeerManager {
 				typeof peerInfo.video_enabled === 'boolean'
 					? peerInfo.video_enabled
 					: false,
+			is_guest:
+				typeof peerInfo.is_guest === 'boolean' ? peerInfo.is_guest : false,
 		};
 
 		const peer: Peer = {

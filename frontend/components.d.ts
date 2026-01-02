@@ -41,6 +41,7 @@ declare module "vue" {
 		KickParticipantDialog: typeof import(
 			"./src/components/KickParticipantDialog.vue",
 		)["default"];
+		LobbyOverlay: typeof import("./src/components/LobbyOverlay.vue")["default"];
 		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
 		LucideAlertTriangle: typeof import(
 			"~icons/lucide/alert-triangle",
@@ -52,11 +53,9 @@ declare module "vue" {
 		)["default"];
 		LucideClock: typeof import("~icons/lucide/clock")["default"];
 		LucideHand: typeof import("~icons/lucide/hand")["default"];
+		LucideHome: typeof import("~icons/lucide/home")["default"];
 		LucideInfo: typeof import("~icons/lucide/info")["default"];
 		LucideLoader: typeof import("~icons/lucide/loader")["default"];
-		LucideMessageCircle: typeof import(
-			"~icons/lucide/message-circle",
-		)["default"];
 		LucideMessageSquare: typeof import(
 			"~icons/lucide/message-square",
 		)["default"];
@@ -82,6 +81,7 @@ declare module "vue" {
 		LucideSearch: typeof import("~icons/lucide/search")["default"];
 		LucideSettings: typeof import("~icons/lucide/settings")["default"];
 		LucideSmile: typeof import("~icons/lucide/smile")["default"];
+		LucideUser: typeof import("~icons/lucide/user")["default"];
 		LucideUserCheck: typeof import("~icons/lucide/user-check")["default"];
 		LucideUserMinus: typeof import("~icons/lucide/user-minus")["default"];
 		LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"];
@@ -111,8 +111,14 @@ declare module "vue" {
 		PeopleParticipantTile: typeof import(
 			"./src/components/PeopleParticipantTile.vue",
 		)["default"];
+		PeopleWaitingSection: typeof import(
+			"./src/components/PeopleWaitingSection.vue",
+		)["default"];
 		ReactionPicker: typeof import(
 			"./src/components/ReactionPicker.vue",
+		)["default"];
+		RejectionOverlay: typeof import(
+			"./src/components/RejectionOverlay.vue",
 		)["default"];
 		RouterLink: typeof import("vue-router")["RouterLink"];
 		RouterView: typeof import("vue-router")["RouterView"];

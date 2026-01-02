@@ -35,14 +35,25 @@
 				</div>
 
 				<div class="flex-1 overflow-y-auto">
+					<PeopleWaitingSection
+						v-if="isCreator"
+						:lobbyUsers="filteredLobbyUsers"
+						@approve="handleApproveLobbyUser"
+						@reject="handleRejectLobbyUser"
+						@approve-all="handleApproveAllLobbyUsers"
+					/>
+
 					<!-- All Participants -->
 					<div v-if="allVisibleParticipants.length > 0">
+						<div class="px-4 py-2 text-xs font-medium text-ink-gray-5 tracking-wide bg-surface-gray-1">
+							Participants
+						</div>
 						<PeopleParticipantTile
 							v-for="participant in allVisibleParticipants"
 							:key="participant.user_id"
 							:participant="participant.participantData"
 							:isCurrentUser="participant.isCurrentUser"
-							:showHostBadge="participant.showHostBadge"
+							:isHost="participant.isHost"
 							:canControlParticipant="participant.canControlParticipant"
 							@muteParticipant="handleMuteParticipant"
 							@kickParticipant="handleKickParticipant"
@@ -51,7 +62,7 @@
 					</div>
 
 					<div
-						v-if="allVisibleParticipants.length === 0"
+						v-if="allVisibleParticipants.length === 0 && filteredLobbyUsers.length === 0"
 						class="text-ink-gray-5 text-sm text-center mt-8 px-4"
 					>
 						{{ searchQuery ? "No participants found" : "No other participants" }}
@@ -67,10 +78,19 @@ import { FormControl } from "frappe-ui";
 import { computed, inject, ref } from "vue";
 import { getInitials } from "../utils/text.ts";
 import PeopleParticipantTile from "./PeopleParticipantTile.vue";
+import PeopleWaitingSection from "./PeopleWaitingSection.vue";
 
 const meetingState = inject("meetingState") as {
 	raisedHands?: { value: Record<string, string> };
+	lobbyUsers?: { value: Array<LobbyUser> };
 };
+
+interface LobbyUser {
+	userId: string;
+	name?: string;
+	isGuest?: boolean;
+	joinedAt?: number;
+}
 
 interface Participant {
 	user_id: string;
@@ -79,6 +99,7 @@ interface Participant {
 	initials?: string;
 	audio_enabled?: boolean;
 	video_enabled?: boolean;
+	is_guest?: boolean;
 }
 
 interface CurrentUser {
@@ -112,12 +133,30 @@ const emit = defineEmits<{
 	muteParticipant: [participantId: string];
 	kickParticipant: [participantId: string, ban: boolean];
 	lowerHand: [participantId: string];
+	approveLobbyUser: [participantId: string];
+	rejectLobbyUser: [participantId: string];
 }>();
 
 const searchQuery = ref<string>("");
 
 const isCreator = computed(() => {
 	return props.currentUser.user_id === props.creatorUserId;
+});
+
+const lobbyUsers = computed(() => {
+	return meetingState?.lobbyUsers?.value || [];
+});
+
+const filteredLobbyUsers = computed(() => {
+	if (!searchQuery.value.trim()) {
+		return lobbyUsers.value;
+	}
+
+	const query = searchQuery.value.toLowerCase().trim();
+	return lobbyUsers.value.filter((user) => {
+		const name = (user.name || user.userId || "").toLowerCase();
+		return name.includes(query);
+	});
 });
 
 const participantsList = computed(() => {
@@ -182,7 +221,7 @@ const allVisibleParticipants = computed(() => {
 			user_id: props.currentUser?.user_id || "",
 			participantData: currentUserData.value,
 			isCurrentUser: true,
-			showHostBadge: isCreator.value,
+			isHost: isCreator.value,
 			canControlParticipant: false,
 		});
 	}
@@ -192,8 +231,9 @@ const allVisibleParticipants = computed(() => {
 			user_id: participant.user_id,
 			participantData: participant,
 			isCurrentUser: false,
-			showHostBadge: participant.user_id === props.creatorUserId,
+			isHost: participant.user_id === props.creatorUserId,
 			canControlParticipant: isCreator.value,
+			is_guest: participant.is_guest || false,
 		});
 	}
 
@@ -225,5 +265,19 @@ const handleKickParticipant = (participantId: string, ban: boolean) => {
 
 const handleLowerHand = (participantId: string) => {
 	emit("lowerHand", participantId);
+};
+
+const handleApproveLobbyUser = (participantId: string) => {
+	emit("approveLobbyUser", participantId);
+};
+
+const handleRejectLobbyUser = (participantId: string) => {
+	emit("rejectLobbyUser", participantId);
+};
+
+const handleApproveAllLobbyUsers = () => {
+	for (const user of lobbyUsers.value) {
+		emit("approveLobbyUser", user.userId);
+	}
 };
 </script>

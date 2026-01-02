@@ -1,5 +1,5 @@
 <template>
-		<div class="flex items-center gap-3 py-3 mx-4 border-b border-gray-200 last:border-b-0 transition-colors">
+	<div class="flex items-center gap-3 py-3 mx-4 border-b border-gray-200 last:border-b-0 transition-colors">
 		<div class="flex-shrink-0">
 			<div
 				class="relative flex items-center justify-center rounded-full overflow-hidden bg-gradient-to-br from-gray-500 to-gray-600 text-white shadow-inner w-10 h-10"
@@ -23,7 +23,8 @@
 					{{ participant.user_name }}
 				</span>
 				<span v-if="isCurrentUser" class="text-xs text-ink-gray-5">(You)</span>
-				<Badge v-if="showHostBadge" theme="gray" size="sm">Host</Badge>
+				<Badge v-if="isHost" theme="gray" size="sm">Host</Badge>
+				<Badge v-if="participant.is_guest" theme="gray" size="sm">Guest</Badge>
 			</div>
 		</div>
 
@@ -72,7 +73,7 @@
 					</template>
 				</Dropdown>
 			</div>
-            <div v-else class="w-8 h-8"/>
+            <div v-else-if="isHost" class="w-8 h-8"/>
 		</div>
 	</div>
 
@@ -102,18 +103,19 @@ interface Participant {
 	initials?: string;
 	audio_enabled?: boolean;
 	video_enabled?: boolean;
+	is_guest?: boolean;
 }
 
 interface Props {
 	participant: Participant;
 	isCurrentUser?: boolean;
-	showHostBadge?: boolean;
+	isHost?: boolean;
 	canControlParticipant?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
 	isCurrentUser: false,
-	showHostBadge: false,
+	isHost: false,
 	canControlParticipant: false,
 });
 

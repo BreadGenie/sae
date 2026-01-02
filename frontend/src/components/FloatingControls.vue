@@ -146,22 +146,28 @@
 				</div>
 
 				<!-- People -->
-				<Button
-					v-if="!isPreview"
-					@click="$emit('toggle-people')"
-					variant="solid"
-					size="2xl"
-					theme="gray"
-					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
-					:class="{
-						'!bg-gray-800 hover:!bg-gray-800': isPeopleOpen,
-					}"
-					title="Show Participants"
-				>
-					<template #icon>
-						<lucide-users class="w-5 h-5 text-white" />
-					</template>
-				</Button>
+				<div class="relative" v-if="!isPreview">
+					<Button
+						@click="$emit('toggle-people')"
+						variant="solid"
+						size="2xl"
+						theme="gray"
+						class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
+						:class="{
+							'!bg-gray-800 hover:!bg-gray-800': isPeopleOpen,
+						}"
+						title="Show Participants"
+					>
+						<template #icon>
+							<lucide-users class="w-5 h-5 text-white" />
+						</template>
+					</Button>
+
+					<div
+						v-if="lobbyUserCount > 0"
+						class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"
+					/>
+				</div>
 
 				<!-- Settings -->
 				<Button
@@ -252,6 +258,10 @@ const props = defineProps({
 	hasUnread: {
 		type: Boolean,
 		default: false,
+	},
+	lobbyUserCount: {
+		type: Number,
+		default: 0,
 	},
 	isMicOn: {
 		type: Boolean,
