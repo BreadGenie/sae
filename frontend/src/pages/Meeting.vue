@@ -132,7 +132,7 @@
 			</div>
 
 			<LobbyOverlay
-				v-if="isInLobby && !isRejected"
+				v-if="(isInLobby || isWaitingForApproval) && !isRejected"
 				@leave="leaveLobby"
 			/>
 
@@ -198,7 +198,6 @@ const socket = useSocket();
 
 // Lobby user notification tracking
 const notifiedLobbyUsers = ref(new Set());
-const hasReceivedExistingLobbyUsers = ref(false);
 
 // Meeting logic composable
 const {
@@ -225,7 +224,6 @@ const {
 	applyBackgroundEffectsToLocalStream,
 	onSendReaction,
 } = useMeetingLogic(meetingState, meetingId.value, {
-	hasReceivedExistingLobbyUsers,
 	notifiedLobbyUsers,
 });
 
@@ -233,14 +231,14 @@ const {
 const isGuestSession = ref(
 	!session.isLoggedIn &&
 		(!!sessionStorage.getItem("guest_auth_token") ||
-			!!sessionStorage.getItem("guest_lobby_token")),
+			!!sessionStorage.getItem("guest_status")),
 );
 
 const updateGuestSessionStatus = () => {
 	isGuestSession.value =
 		!session.isLoggedIn &&
 		(!!sessionStorage.getItem("guest_auth_token") ||
-			!!sessionStorage.getItem("guest_lobby_token"));
+			!!sessionStorage.getItem("guest_status"));
 };
 
 const meetingDoc = createDocumentResource({
@@ -278,6 +276,9 @@ provide(
 const isConnecting = computed(() => meetingState.isConnecting.value);
 const hasConnectionError = computed(() => !!meetingState.connectionError.value);
 const isInLobby = computed(() => meetingState.isInLobby?.value || false);
+const isWaitingForApproval = computed(
+	() => meetingState.isWaitingForApproval?.value || false,
+);
 const isRejected = computed(
 	() => meetingState.isJoinRequestRejected?.value || false,
 );
@@ -291,6 +292,9 @@ const showPreview = computed(() => {
 		return false;
 	}
 	if (meetingState.isInLobby?.value) {
+		return false;
+	}
+	if (meetingState.isWaitingForApproval?.value) {
 		return false;
 	}
 	const inPreview = meetingState.isInPreview.value;
@@ -322,10 +326,8 @@ const isCurrentUserHost = computed(() => {
 	return currentUserId && currentUserId === creatorUserId.value;
 });
 
-// Transform lobby users to the format expected by JoinRequestNotifications
 const lobbyUsersForNotifications = computed(() => {
-	const lobbyUsers = meetingState.lobbyUsers?.value || [];
-	return lobbyUsers
+	return meetingState.lobbyUsers.value
 		.filter((user) => !notifiedLobbyUsers.value.has(user.userId))
 		.map((user) => ({
 			user_id: user.userId,
@@ -384,9 +386,10 @@ const leaveLobby = async () => {
 	}
 
 	meetingState.isInLobby.value = false;
+	meetingState.isWaitingForApproval.value = false;
 	meetingState.lobbyParticipantCount.value = 0;
 
-	sessionStorage.removeItem("guest_lobby_token");
+	sessionStorage.removeItem("guest_status");
 	sessionStorage.removeItem("guest_auth_token");
 	sessionStorage.removeItem("guest_sfu_url");
 	sessionStorage.removeItem("guest_sfu_port");
@@ -401,7 +404,7 @@ const goHome = () => {
 	meetingState.isJoinRequestRejected.value = false;
 	meetingState.isInLobby.value = false;
 
-	sessionStorage.removeItem("guest_lobby_token");
+	sessionStorage.removeItem("guest_status");
 	sessionStorage.removeItem("guest_sfu_url");
 	sessionStorage.removeItem("guest_sfu_port");
 	sessionStorage.removeItem("guest_id");
@@ -415,7 +418,7 @@ const tryJoinAgain = async () => {
 	meetingState.isJoinRequestRejected.value = false;
 
 	if (isGuestSession.value || sessionStorage.getItem("guest_id")) {
-		sessionStorage.removeItem("guest_lobby_token");
+		sessionStorage.removeItem("guest_status");
 		sessionStorage.removeItem("guest_auth_token");
 		sessionStorage.removeItem("guest_sfu_url");
 		sessionStorage.removeItem("guest_sfu_port");
@@ -518,12 +521,8 @@ const handleApproveLobbyUser = async (participantId) => {
 	try {
 		console.log("Approving lobby user:", participantId);
 
-		if (sfuManager.value?.sfuClient) {
-			await sfuManager.value.sfuClient.approveLobbyUser(participantId);
-			notifiedLobbyUsers.value.add(participantId);
-		} else {
-			console.error("SFU client not available");
-		}
+		await approveUser(participantId);
+		notifiedLobbyUsers.value.add(participantId);
 	} catch (error) {
 		console.error("Failed to approve lobby user:", error);
 	}
@@ -533,12 +532,8 @@ const handleRejectLobbyUser = async (participantId) => {
 	try {
 		console.log("Rejecting lobby user:", participantId);
 
-		if (sfuManager.value?.sfuClient) {
-			await sfuManager.value.sfuClient.rejectLobbyUser(participantId);
-			notifiedLobbyUsers.value.add(participantId);
-		} else {
-			console.error("SFU client not available");
-		}
+		await rejectUser(participantId);
+		notifiedLobbyUsers.value.add(participantId);
 	} catch (error) {
 		console.error("Failed to reject lobby user:", error);
 	}
@@ -672,7 +667,6 @@ onMounted(async () => {
 	// Check authentication and handle guest sessions
 	if (!session.isLoggedIn) {
 		const guestAuthToken = sessionStorage.getItem("guest_auth_token");
-		const guestLobbyToken = sessionStorage.getItem("guest_lobby_token");
 		const guestId = sessionStorage.getItem("guest_id");
 		const guestName = sessionStorage.getItem("guest_name");
 		const guestMeetingId = sessionStorage.getItem("guest_meeting_id");
@@ -680,7 +674,7 @@ onMounted(async () => {
 		if (guestMeetingId && guestMeetingId !== meetingId.value) {
 			console.log("Clearing stale guest session for different meeting");
 			sessionStorage.removeItem("guest_auth_token");
-			sessionStorage.removeItem("guest_lobby_token");
+			sessionStorage.removeItem("guest_status");
 			sessionStorage.removeItem("guest_id");
 			sessionStorage.removeItem("guest_name");
 			sessionStorage.removeItem("guest_meeting_id");
@@ -691,7 +685,7 @@ onMounted(async () => {
 			return;
 		}
 
-		if (guestLobbyToken && guestId && guestName) {
+		if (guestId && guestName) {
 			meetingState.guestId.value = guestId;
 			meetingState.currentUser.value = {
 				user_id: guestId,
@@ -830,13 +824,6 @@ watch(
 	() => meetingState.lobbyUsers?.value,
 	(newUsers, oldUsers) => {
 		if (isCurrentUserHost.value) {
-			if (
-				hasReceivedExistingLobbyUsers.value &&
-				(!oldUsers || oldUsers.length === 0)
-			) {
-				return; // Don't mark users from onExistingLobbyUsers
-			}
-
 			const newUserIds = new Set((newUsers || []).map((u) => u.userId));
 			const oldUserIds = new Set((oldUsers || []).map((u) => u.userId));
 			for (const userId of oldUserIds) {

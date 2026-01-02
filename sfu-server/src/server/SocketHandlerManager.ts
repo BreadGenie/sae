@@ -3,7 +3,6 @@ import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type {
 	ChatMessage,
 	ClientToServerEvents,
-	LobbyUserData,
 	ParticipantInfo,
 	PreviewParticipantInfo,
 	ReactionMessage,
@@ -30,8 +29,6 @@ export class SocketHandlerManager {
 	private rateLimiter: RateLimiter;
 	private fullAccessSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
 	private previewSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
-	private lobbySockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
-	private lobbyUsers: Map<string, Map<string, LobbyUserData>> = new Map(); // roomId -> Map<userId, LobbyUserData>
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -180,14 +177,9 @@ export class SocketHandlerManager {
 		}
 	}
 
-	/**
-	 * Clean up room tracking when it becomes empty
-	 */
 	private cleanupRoom(roomId: string): void {
 		this.fullAccessSockets.delete(roomId);
 		this.previewSockets.delete(roomId);
-		this.lobbySockets.delete(roomId);
-		this.lobbyUsers.delete(roomId);
 		delete this.raisedHands[roomId];
 	}
 
@@ -219,7 +211,6 @@ export class SocketHandlerManager {
 			this.setupAuthHandlers(socket);
 
 			this.setupRoomHandlers(socket);
-			this.setupLobbyHandlers(socket);
 			this.setupWebRTCHandlers(socket);
 			this.setupMediaControlHandlers(socket);
 			this.setupHostControlHandlers(socket);
@@ -505,289 +496,6 @@ export class SocketHandlerManager {
 			);
 			throw error;
 		}
-	}
-
-	private getLobbySocketByUserId(
-		roomId: string,
-		userId: string,
-	): TypedSocket | null {
-		const socketIds = this.lobbySockets.get(roomId);
-		if (!socketIds) return null;
-
-		for (const socketId of socketIds) {
-			const socket = this.io.sockets.sockets.get(socketId) as
-				| TypedSocket
-				| undefined;
-			if (socket && socket.userId === userId) {
-				return socket;
-			}
-		}
-
-		return null;
-	}
-
-	private setupLobbyHandlers(socket: Socket): void {
-		// Join lobby (for users waiting for approval in restricted meetings)
-		socket.on('join_lobby', async (data, callback) => {
-			try {
-				const { roomId, userData } = data;
-
-				if (socket.meetingId && socket.meetingId !== roomId) {
-					throw new Error(
-						`Room ID mismatch: token has ${socket.meetingId}, trying to join lobby for ${roomId}`,
-					);
-				}
-
-				if (socket.scope !== 'lobby') {
-					throw new Error(
-						'Invalid scope for lobby join. Expected lobby scope.',
-					);
-				}
-
-				socket.join(roomId);
-				socket.roomId = roomId;
-
-				if (!this.lobbySockets.has(roomId)) {
-					this.lobbySockets.set(roomId, new Set());
-				}
-				this.lobbySockets.get(roomId)?.add(socket.id);
-
-				if (!this.lobbyUsers.has(roomId)) {
-					this.lobbyUsers.set(roomId, new Map());
-				}
-				const lobbyUserData: LobbyUserData = {
-					userId: socket.userId,
-					name: userData.name,
-					avatar: userData.avatar,
-					isGuest: userData.isGuest,
-					joinedAt: Date.now(),
-				};
-				this.lobbyUsers.get(roomId)?.set(socket.userId, lobbyUserData);
-
-				const participants = this.mediasoup.getRoomParticipants(roomId);
-				const participantCount = participants.filter(
-					(p) => !p.id.startsWith('preview-'),
-				).length;
-
-				// Don't reveal actual participant count to guest lobby users for privacy
-				const lobbyParticipantCount = userData.isGuest ? 0 : participantCount;
-
-				this.emitToFullAccessParticipants(roomId, 'lobby_user_joined', {
-					user: lobbyUserData,
-				});
-
-				const lobbyUsersArray = Array.from(
-					this.lobbyUsers.get(roomId)?.values() || [],
-				);
-				this.emitToFullAccessParticipants(roomId, 'lobby_users_updated', {
-					users: lobbyUsersArray,
-					count: lobbyUsersArray.length,
-				});
-
-				loggers.socketHandler.info(
-					'User %s joined lobby for room %s',
-					socket.userId,
-					roomId,
-				);
-
-				callback({
-					success: true,
-					participantCount: lobbyParticipantCount,
-				});
-			} catch (error) {
-				loggers.socketHandler.error(
-					'Error joining lobby: %s',
-					(error as Error).message,
-				);
-				callback({ success: false, error: (error as Error).message });
-			}
-		});
-
-		socket.on('leave_lobby', async (data, callback) => {
-			try {
-				const roomId = socket.roomId || data?.roomId;
-				if (!roomId) {
-					callback?.({ success: true });
-					return;
-				}
-
-				this.lobbySockets.get(roomId)?.delete(socket.id);
-				this.lobbyUsers.get(roomId)?.delete(socket.userId);
-
-				socket.leave(roomId);
-				socket.roomId = undefined;
-
-				this.emitToFullAccessParticipants(roomId, 'lobby_user_left', {
-					userId: socket.userId,
-				});
-
-				const lobbyUsersArray = Array.from(
-					this.lobbyUsers.get(roomId)?.values() || [],
-				);
-				this.emitToFullAccessParticipants(roomId, 'lobby_users_updated', {
-					users: lobbyUsersArray,
-					count: lobbyUsersArray.length,
-				});
-
-				loggers.socketHandler.info(
-					'User %s left lobby for room %s',
-					socket.userId,
-					roomId,
-				);
-
-				callback({ success: true });
-			} catch (error) {
-				loggers.socketHandler.error(
-					'Error leaving lobby: %s',
-					(error as Error).message,
-				);
-				callback({ success: false, error: (error as Error).message });
-			}
-		});
-
-		socket.on('approve_lobby_user', async (data, callback) => {
-			try {
-				if (!socket.isHost) {
-					throw new Error('Only hosts can approve lobby users');
-				}
-
-				const roomId = socket.roomId || socket.meetingId;
-				if (!roomId) {
-					throw new Error('Not in a room');
-				}
-
-				const { userId } = data;
-
-				const lobbyUser = this.lobbyUsers.get(roomId)?.get(userId);
-				if (!lobbyUser) {
-					throw new Error('User not found in lobby');
-				}
-
-				const lobbySocket = this.getLobbySocketByUserId(roomId, userId);
-				if (!lobbySocket) {
-					throw new Error('Lobby user socket not found');
-				}
-
-				this.lobbySockets.get(roomId)?.delete(lobbySocket.id);
-				this.lobbyUsers.get(roomId)?.delete(userId);
-
-				lobbySocket.emit('lobby_approved', {
-					approvedBy: socket.userId,
-					fullToken: '', // Token will be fetched from backend
-				});
-
-				const lobbyUsersArray = Array.from(
-					this.lobbyUsers.get(roomId)?.values() || [],
-				);
-				this.emitToFullAccessParticipants(roomId, 'lobby_users_updated', {
-					users: lobbyUsersArray,
-					count: lobbyUsersArray.length,
-				});
-
-				loggers.socketHandler.info(
-					'Host %s approved lobby user %s for room %s',
-					socket.userId,
-					userId,
-					roomId,
-				);
-
-				callback({ success: true });
-			} catch (error) {
-				loggers.socketHandler.error(
-					'Error approving lobby user: %s',
-					(error as Error).message,
-				);
-				callback({ success: false, error: (error as Error).message });
-			}
-		});
-
-		socket.on('reject_lobby_user', async (data, callback) => {
-			try {
-				if (!socket.isHost) {
-					throw new Error('Only hosts can reject lobby users');
-				}
-
-				const roomId = socket.roomId || socket.meetingId;
-				if (!roomId) {
-					throw new Error('Not in a room');
-				}
-
-				const { userId, reason } = data;
-
-				const lobbyUser = this.lobbyUsers.get(roomId)?.get(userId);
-				if (!lobbyUser) {
-					throw new Error('User not found in lobby');
-				}
-
-				const lobbySocket = this.getLobbySocketByUserId(roomId, userId);
-				if (lobbySocket) {
-					lobbySocket.emit('lobby_rejected', {
-						rejectedBy: socket.userId,
-						reason: reason || 'Your request to join was denied',
-					});
-				}
-
-				this.lobbySockets.get(roomId)?.delete(lobbySocket?.id || '');
-				this.lobbyUsers.get(roomId)?.delete(userId);
-
-				const lobbyUsersArray = Array.from(
-					this.lobbyUsers.get(roomId)?.values() || [],
-				);
-				this.emitToFullAccessParticipants(roomId, 'lobby_users_updated', {
-					users: lobbyUsersArray,
-					count: lobbyUsersArray.length,
-				});
-
-				loggers.socketHandler.info(
-					'Host %s rejected lobby user %s for room %s',
-					socket.userId,
-					userId,
-					roomId,
-				);
-
-				callback({ success: true });
-			} catch (error) {
-				loggers.socketHandler.error(
-					'Error rejecting lobby user: %s',
-					(error as Error).message,
-				);
-				callback({ success: false, error: (error as Error).message });
-			}
-		});
-
-		socket.on('get_lobby_users', async (_data, callback) => {
-			try {
-				if (!socket.isHost) {
-					throw new Error('Only hosts can view lobby users');
-				}
-
-				const roomId = socket.roomId || socket.meetingId;
-				if (!roomId) {
-					throw new Error('Not in a room');
-				}
-
-				const lobbyUsersArray = Array.from(
-					this.lobbyUsers.get(roomId)?.values() || [],
-				);
-
-				callback({
-					success: true,
-					users: lobbyUsersArray,
-					count: lobbyUsersArray.length,
-				});
-			} catch (error) {
-				loggers.socketHandler.error(
-					'Error getting lobby users: %s',
-					(error as Error).message,
-				);
-				callback({
-					success: false,
-					error: (error as Error).message,
-					users: [],
-					count: 0,
-				});
-			}
-		});
 	}
 
 	private setupWebRTCHandlers(socket: Socket): void {
@@ -1280,30 +988,6 @@ export class SocketHandlerManager {
 			const roomId = socket.roomId;
 			const participantId = socket.participantId;
 
-			if (roomId && socket.scope === 'lobby') {
-				this.lobbySockets.get(roomId)?.delete(socket.id);
-				this.lobbyUsers.get(roomId)?.delete(socket.userId);
-
-				this.emitToFullAccessParticipants(roomId, 'lobby_user_left', {
-					userId: socket.userId,
-				});
-
-				const lobbyUsersArray = Array.from(
-					this.lobbyUsers.get(roomId)?.values() || [],
-				);
-				this.emitToFullAccessParticipants(roomId, 'lobby_users_updated', {
-					users: lobbyUsersArray,
-					count: lobbyUsersArray.length,
-				});
-
-				loggers.socketHandler.info(
-					'Lobby user %s disconnected from room %s',
-					socket.userId,
-					roomId,
-				);
-				return;
-			}
-
 			if (roomId && participantId) {
 				try {
 					await this.mediasoup.removePeer(roomId, participantId);
@@ -1318,8 +1002,7 @@ export class SocketHandlerManager {
 					// Clean up room if empty
 					const fullAccessCount = this.fullAccessSockets.get(roomId)?.size || 0;
 					const previewCount = this.previewSockets.get(roomId)?.size || 0;
-					const lobbyCount = this.lobbySockets.get(roomId)?.size || 0;
-					if (fullAccessCount === 0 && previewCount === 0 && lobbyCount === 0) {
+					if (fullAccessCount === 0 && previewCount === 0) {
 						this.cleanupRoom(roomId);
 					}
 

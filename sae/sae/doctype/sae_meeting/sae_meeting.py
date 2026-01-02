@@ -170,8 +170,12 @@ class SaeMeeting(Document):
 
 	def remove_from_waiting_room(self, user):
 		"""Remove user from waiting room"""
-		self.waiting_room = [row for row in self.waiting_room if row.user != user]
-		self.save(ignore_permissions=True)
+		for row in self.waiting_room:
+			if row.user == user:
+				self.remove(row)
+				break
+
+		self.save()
 
 	def approve_user(self, user):
 		"""Approve a user from waiting room to join the meeting"""
@@ -219,6 +223,14 @@ class SaeMeeting(Document):
 			frappe.throw("User is not in waiting room")
 
 		self.remove_from_waiting_room(user)
+
+		if not self.get("banned_users"):
+			self.banned_users = []
+
+		already_banned = any(row.user == user for row in self.banned_users)
+		if not already_banned:
+			self.append("banned_users", {"user": user})
+			self.save()
 
 		frappe.publish_realtime(
 			"meeting_join_rejected",

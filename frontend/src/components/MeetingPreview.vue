@@ -111,7 +111,7 @@
 								/>
 
 								<Button
-									@click="handleJoin"
+									type="submit"
 									variant="solid"
 									size="lg"
 									:loading="isConnecting || joinGuestAPI.loading"
@@ -158,7 +158,7 @@ const isGuest = computed(() => {
 	return (
 		!session.isLoggedIn &&
 		!sessionStorage.getItem("guest_auth_token") &&
-		!sessionStorage.getItem("guest_lobby_token")
+		!sessionStorage.getItem("guest_status")
 	);
 });
 
@@ -222,6 +222,10 @@ watch(guestNameInputRef, (inputRef) => {
 });
 
 const handleJoin = async () => {
+	if (joinGuestAPI.loading || isConnecting.value) {
+		return;
+	}
+
 	if (isGuest.value) {
 		if (!guestName.value.trim()) {
 			return;
@@ -243,13 +247,15 @@ const handleJoin = async () => {
 			sessionStorage.setItem("guest_meeting_id", result.meeting_id);
 
 			if (result.status === "waiting_for_approval") {
-				if (result.lobby_token) {
-					sessionStorage.setItem("guest_lobby_token", result.lobby_token);
-					sessionStorage.setItem("guest_sfu_url", result.sfu_url);
-					sessionStorage.setItem("guest_sfu_port", result.sfu_port);
-				}
+				sessionStorage.setItem("guest_sfu_url", result.sfu_url);
+				sessionStorage.setItem("guest_sfu_port", result.sfu_port);
+				sessionStorage.setItem("guest_status", "waiting_for_approval");
 			} else {
+				// Open meeting
 				sessionStorage.setItem("guest_auth_token", result.auth_token);
+				sessionStorage.setItem("guest_sfu_url", result.sfu_url);
+				sessionStorage.setItem("guest_sfu_port", result.sfu_port);
+				sessionStorage.setItem("guest_status", "joined");
 			}
 
 			emit("guest-join-complete");

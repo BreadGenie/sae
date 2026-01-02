@@ -10,7 +10,6 @@ class SFUClient {
 	constructor() {
 		this.socket = null;
 		this.connected = false;
-		this.isLobbyConnection = false;
 		this.connectionDetails = {
 			authToken: null,
 			meetingId: null,
@@ -39,7 +38,6 @@ class SFUClient {
 				guestAuthToken,
 			);
 			this.connectionDetails = connectionDetails;
-			this.isLobbyConnection = false;
 			this.scheduleTokenRefresh();
 
 			await this.validateSFUHealth();
@@ -49,37 +47,6 @@ class SFUClient {
 			return true;
 		} catch (error) {
 			console.error("SFU connection failed:", error);
-			throw error;
-		}
-	}
-
-	async connectToLobby(lobbyDetails) {
-		if (this.connected) {
-			return true;
-		}
-
-		const { meetingId, lobbyToken, sfuUrl, sfuPort, userId, userData } =
-			lobbyDetails;
-
-		try {
-			this.connectionDetails = {
-				authToken: lobbyToken,
-				meetingId,
-				userId,
-				sfuUrl,
-				sfuPort,
-				userData,
-				tokenExpiresAt: Date.now() + 3600 * 1000, // 1 hour
-				codecStrategy: "auto",
-			};
-			this.isLobbyConnection = true;
-
-			await this.validateSFUHealth();
-			await this.establishSocketConnection();
-
-			return true;
-		} catch (error) {
-			console.error("SFU lobby connection failed:", error);
 			throw error;
 		}
 	}
@@ -447,11 +414,6 @@ class SFUClient {
 			active_speaker: () => {},
 			hand_raised: () => {},
 			existing_raised_hands: () => {},
-			lobby_user_joined: () => {},
-			lobby_user_left: () => {},
-			lobby_approved: () => {},
-			lobby_rejected: () => {},
-			lobby_users_updated: () => {},
 		};
 
 		for (const [event, handler] of Object.entries(defaultHandlers)) {
@@ -584,37 +546,6 @@ class SFUClient {
 			userData,
 			mediaState,
 		});
-	}
-
-	// ==================== LOBBY OPERATIONS ====================
-
-	async joinLobby(roomId, userData) {
-		return this.sendRequest("join_lobby", {
-			roomId,
-			userData,
-		});
-	}
-
-	async leaveLobby(roomId = null) {
-		return this.sendRequest("leave_lobby", {
-			roomId: roomId || this.connectionDetails.meetingId,
-		});
-	}
-
-	async approveLobbyUser(userId) {
-		return this.sendRequest("approve_lobby_user", { userId });
-	}
-
-	async rejectLobbyUser(userId, reason = null) {
-		return this.sendRequest("reject_lobby_user", { userId, reason });
-	}
-
-	async getLobbyUsers() {
-		return this.sendRequest("get_lobby_users", {});
-	}
-
-	isInLobby() {
-		return this.isLobbyConnection;
 	}
 
 	// ==================== SIGNALING OPERATIONS ====================

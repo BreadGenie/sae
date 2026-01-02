@@ -526,7 +526,8 @@ socket.on("error", ({ code, message }) => {
 ## Security Best Practices
 
 - Validate all user inputs
-- Use Frappe's permission system (ignore_permissions flag)
+- Use Frappe's permission system appropriately
+- **NEVER use `ignore_permissions=True` on `@frappe.whitelist(allow_guest=True)` endpoints** - this bypasses all security for unauthenticated users
 - Apply rate limiting to prevent abuse
 - Validate meeting access before returning sensitive data
 - Never expose internal implementation details in error messages

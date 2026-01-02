@@ -33,8 +33,6 @@ export class ParticipantManager {
 			...participantData,
 		};
 
-		console.log("asdf", participant, participantData);
-
 		this.participants.set(participant.user_id, participant);
 
 		if (this.eventHandlers.onParticipantAdded) {

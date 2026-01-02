@@ -8,7 +8,6 @@ import { MediaStreamHandler } from "./media/MediaStreamHandler.js";
 import { ParticipantManager } from "./media/ParticipantManager.js";
 import { TransportManager } from "./media/TransportManager.js";
 import { VideoElementManager } from "./media/VideoElementManager.js";
-import { WaitingRoomManager } from "./media/WaitingRoomManager.js";
 import { getSFUClient } from "./sfu-client.js";
 
 export class SFUMeetingManager {
@@ -27,7 +26,6 @@ export class SFUMeetingManager {
 		this.participantManager = new ParticipantManager();
 		this.consumerManager = new ConsumerManager();
 		this.transportManager = new TransportManager();
-		this.waitingRoomManager = new WaitingRoomManager();
 
 		this.sfuClient = null;
 		this.eventHandlers = {};
@@ -41,7 +39,6 @@ export class SFUMeetingManager {
 		this.eventHandlers = options.eventHandlers || {};
 
 		this.setupManagerEventHandlers();
-		this.waitingRoomManager.initialize(this.meetingId, this.eventHandlers);
 	}
 
 	setupManagerEventHandlers() {
@@ -129,21 +126,6 @@ export class SFUMeetingManager {
 		try {
 			await this.sfuClient.joinRoom(this.meetingId, userData, mediaState);
 			console.log("Successfully joined room:", this.meetingId);
-
-			if (userData.isHost) {
-				try {
-					const lobbyResult = await this.sfuClient.getLobbyUsers();
-					console.log("Lobby users result:", lobbyResult);
-					if (this.eventHandlers.onExistingLobbyUsers) {
-						this.eventHandlers.onExistingLobbyUsers({
-							users: lobbyResult?.users || [],
-							count: lobbyResult?.count || 0,
-						});
-					}
-				} catch (lobbyError) {
-					console.warn("Failed to fetch lobby users:", lobbyError);
-				}
-			}
 
 			return true;
 		} catch (error) {
@@ -743,25 +725,6 @@ export class SFUMeetingManager {
 				this.eventHandlers.onActiveSpeakerChanged(data.participantIds);
 			}
 		});
-
-		// Lobby event handlers
-		this.sfuClient.on("lobby_user_joined", (data) => {
-			if (this.eventHandlers.onLobbyUserJoined) {
-				this.eventHandlers.onLobbyUserJoined(data);
-			}
-		});
-
-		this.sfuClient.on("lobby_user_left", (data) => {
-			if (this.eventHandlers.onLobbyUserLeft) {
-				this.eventHandlers.onLobbyUserLeft(data);
-			}
-		});
-
-		this.sfuClient.on("lobby_users_updated", (data) => {
-			if (this.eventHandlers.onLobbyUsersUpdated) {
-				this.eventHandlers.onLobbyUsersUpdated(data);
-			}
-		});
 	}
 
 	registerVideoElement(participantId, element) {
@@ -818,7 +781,6 @@ export class SFUMeetingManager {
 		this.participantManager.clear();
 		this.consumerManager.clear();
 		this.transportManager.cleanup();
-		this.waitingRoomManager.cleanup();
 
 		this.disconnect();
 
