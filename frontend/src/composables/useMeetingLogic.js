@@ -1584,11 +1584,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			});
 
 			if (result?.success) {
-				const beforeCount = meetingState.lobbyUsers.value?.length || 0;
 				meetingState.lobbyUsers.value = (
 					meetingState.lobbyUsers.value || []
 				).filter((u) => u.userId !== userId);
-				const afterCount = meetingState.lobbyUsers.value?.length || 0;
 			} else {
 				console.error("Failed to reject user:", result);
 				toast.error("Failed to reject user");
