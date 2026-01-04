@@ -419,7 +419,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"guest_id": guest_id,
 				"guest_name": guest_name_clean,
 				"meeting_id": meeting_id,
-				"ip_address": frappe.local.request_ip or "unknown",
+				"ip_address": frappe.local.request_ip,
 				"joined_at": int(time.time()),
 			}
 			set_guest_session(guest_id, session_data, ttl=24 * 3600)
@@ -430,7 +430,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		sfu_config = get_sfu_config()
 		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key") or "fallback-secret"
 		if not secret:
-			frappe.throw("SFU secret not configured", frappe.AuthenticationError)
+			frappe.throw(_("SFU secret not configured"), frappe.AuthenticationError)
 
 		auth_payload = {
 			"user_id": guest_id,
