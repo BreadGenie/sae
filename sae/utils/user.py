@@ -2,7 +2,6 @@
 # For license information, please see license.txt
 
 
-import hashlib
 import re
 
 import frappe

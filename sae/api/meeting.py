@@ -443,7 +443,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			"iat": int(time.time()),
 		}
 
-		if meeting.meeting_type == "restricted" and meeting.owner != guest_id:
+		if meeting.meeting_type == "restricted":
 			if meeting.is_user_approved(guest_id):
 				auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
 				return {
