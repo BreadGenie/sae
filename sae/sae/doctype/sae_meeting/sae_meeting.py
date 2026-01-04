@@ -230,10 +230,7 @@ class SaeMeeting(Document):
 
 	def remove_from_waiting_room(self, user):
 		"""Remove user from waiting room"""
-		for row in self.waiting_room:
-			if row.user == user:
-				self.remove(row)
-				break
+		self.waiting_room = [row for row in self.waiting_room if row.user != user]
 
 		self.save()
 
