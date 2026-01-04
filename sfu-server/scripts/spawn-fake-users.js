@@ -52,8 +52,8 @@ const argv = yargs(hideBin(process.argv))
 	})
 	.option("secret", {
 		type: "string",
-		default: process.env.JWT_SECRET || "fallback-secret",
-		describe: "JWT signing secret used by SFU",
+		default: process.env.JWT_SECRET,
+		describe: "JWT signing secret used by SFU (required)",
 	})
 	.option("with-producers", {
 		type: "boolean",
@@ -82,6 +82,11 @@ const {
 	autoToggle,
 	lifetime,
 } = argv;
+
+if (!secret) {
+	console.error("Error: JWT secret is required. Provide --secret or set JWT_SECRET environment variable.");
+	process.exit(1);
+}
 
 const endpoint = (() => {
 	try {

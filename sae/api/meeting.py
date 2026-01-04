@@ -72,7 +72,9 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"iat": int(time.time()),
 		}
 
-		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key", "fallback-secret")
+		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
+		if not secret:
+			frappe.throw(_("SFU secret not configured"))
 		auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
 
 		return {
@@ -125,7 +127,9 @@ def join_meeting(meeting_id: str) -> dict:
 					"iat": int(time.time()),
 				}
 
-				secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key", "fallback-secret")
+				secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
+				if not secret:
+					frappe.throw(_("SFU secret not configured"))
 				lobby_token = jwt.encode(lobby_payload, secret, algorithm="HS256")
 
 				return {
@@ -326,7 +330,9 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 			"iat": int(time.time()),
 		}
 
-		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key", "fallback-secret")
+		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
+		if not secret:
+			frappe.throw(_("SFU secret not configured"))
 		auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
 
 		return {
@@ -370,7 +376,9 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 		"iat": now,
 	}
 
-	secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key", "fallback-secret")
+	secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
+	if not secret:
+		frappe.throw(_("SFU secret not configured"))
 	auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
 
 	result = {
@@ -428,9 +436,9 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			return {"success": False, "error": "You are banned from this meeting"}
 
 		sfu_config = get_sfu_config()
-		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key") or "fallback-secret"
+		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
 		if not secret:
-			frappe.throw(_("SFU secret not configured"), frappe.AuthenticationError)
+			frappe.throw(_("SFU secret not configured"))
 
 		auth_payload = {
 			"user_id": guest_id,
@@ -519,7 +527,9 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		return {"success": False, "error": "You are banned from this meeting"}
 
 	sfu_config = get_sfu_config()
-	secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key") or "fallback-secret"
+	secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
+	if not secret:
+		frappe.throw(_("SFU secret not configured"))
 
 	guest_name = session_data.get("guest_name", f"Guest-{guest_id[:8]}")
 
@@ -557,7 +567,9 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 	"""
 	try:
 		sfu_config = get_sfu_config()
-		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key") or "fallback-secret"
+		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key")
+		if not secret:
+			frappe.throw(_("SFU secret not configured"))
 
 		try:
 			decoded = jwt.decode(guest_token, secret, algorithms=["HS256"])

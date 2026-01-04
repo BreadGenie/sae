@@ -21,10 +21,14 @@ export class SFUServer {
 	private config: ServerConfig;
 
 	constructor() {
+		const jwtSecret = process.env.JWT_SECRET;
+		if (!jwtSecret) {
+			throw new Error('JWT_SECRET environment variable is required');
+		}
 		this.config = {
 			port: Number.parseInt(process.env.PORT || '3000'),
 			host: process.env.HOST || '0.0.0.0',
-			jwtSecret: process.env.JWT_SECRET || 'fallback-secret',
+			jwtSecret,
 		};
 
 		loggers.server.info(
