@@ -56,6 +56,9 @@ export function useMeetingState() {
 	// Guest user states
 	const guestSessionToken = ref(null);
 	const guestId = ref(null);
+	const guestAuthToken = ref(null);
+	const guestSfuUrl = ref(null);
+	const guestSfuPort = ref(null);
 
 	// Chat states
 	const isChatOpen = ref(false);
@@ -204,6 +207,9 @@ export function useMeetingState() {
 		lobbyParticipantCount,
 		guestSessionToken,
 		guestId,
+		guestAuthToken,
+		guestSfuUrl,
+		guestSfuPort,
 		isChatOpen,
 		chatMessages,
 		hasUnreadMessages,

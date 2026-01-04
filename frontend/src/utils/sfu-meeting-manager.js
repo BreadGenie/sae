@@ -98,15 +98,14 @@ export class SFUMeetingManager {
 		});
 	}
 
-	async connect() {
+	async connect(authToken = null) {
 		if (this.isConnected) {
 			return true;
 		}
 
 		try {
 			this.sfuClient = getSFUClient();
-			const guestAuthToken = sessionStorage.getItem("guest_auth_token") || null;
-			await this.sfuClient.connect(this.meetingId, guestAuthToken);
+			await this.sfuClient.connect(this.meetingId, authToken);
 			this.isConnected = true;
 
 			// Initialize transport manager with SFU client

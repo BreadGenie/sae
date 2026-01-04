@@ -227,19 +227,13 @@ const {
 	notifiedLobbyUsers,
 });
 
-// Check if user is guest (either with auth token or lobby token)
-const isGuestSession = ref(
-	!session.isLoggedIn &&
-		(!!sessionStorage.getItem("guest_auth_token") ||
+const isGuestSession = computed(
+	() =>
+		!session.isLoggedIn &&
+		(!!meetingState.guestAuthToken.value ||
+			meetingState.isWaitingForApproval.value ||
 			!!sessionStorage.getItem("guest_status")),
 );
-
-const updateGuestSessionStatus = () => {
-	isGuestSession.value =
-		!session.isLoggedIn &&
-		(!!sessionStorage.getItem("guest_auth_token") ||
-			!!sessionStorage.getItem("guest_status"));
-};
 
 const meetingDoc = createDocumentResource({
 	doctype: "Sae Meeting",
@@ -353,8 +347,6 @@ const joinMeetingFromPreview = async () => {
 };
 
 const handleGuestJoinComplete = async () => {
-	updateGuestSessionStatus();
-
 	const guestId = sessionStorage.getItem("guest_id");
 	const guestName = sessionStorage.getItem("guest_name");
 
@@ -666,7 +658,6 @@ onMounted(async () => {
 
 	// Check authentication and handle guest sessions
 	if (!session.isLoggedIn) {
-		const guestAuthToken = sessionStorage.getItem("guest_auth_token");
 		const guestId = sessionStorage.getItem("guest_id");
 		const guestName = sessionStorage.getItem("guest_name");
 		const guestMeetingId = sessionStorage.getItem("guest_meeting_id");
@@ -705,7 +696,7 @@ onMounted(async () => {
 			return;
 		}
 
-		if (guestAuthToken && guestId && guestName) {
+		if (meetingState.guestAuthToken.value && guestId && guestName) {
 			meetingState.guestId.value = guestId;
 			meetingState.currentUser.value = {
 				user_id: guestId,

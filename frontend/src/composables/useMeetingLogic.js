@@ -900,14 +900,37 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			let joinResult;
 
 			if (guestName) {
-				const guestAuthToken = sessionStorage.getItem("guest_auth_token");
-				const guestId = sessionStorage.getItem("guest_id");
-				const sfuUrl = sessionStorage.getItem("guest_sfu_url");
-				const sfuPort = sessionStorage.getItem("guest_sfu_port");
+				let guestAuthToken = meetingState.guestAuthToken.value;
+				const guestId =
+					meetingState.guestId.value || sessionStorage.getItem("guest_id");
+				let sfuUrl = meetingState.guestSfuUrl.value;
+				let sfuPort = meetingState.guestSfuPort.value;
 				const guestStatus = sessionStorage.getItem("guest_status");
 
 				if (!guestId) {
 					throw new Error("Guest session not found. Please try joining again.");
+				}
+
+				// If we previously joined and lost in-memory token (e.g., refresh), refresh it via backend
+				if (guestStatus === "joined" && !guestAuthToken) {
+					const refreshed = await frappeRequest({
+						url: "sae.api.meeting.get_approved_guest_connection_details",
+						params: {
+							meeting_id: meetingId,
+							guest_id: guestId,
+						},
+					});
+
+					if (refreshed?.success && refreshed.auth_token) {
+						guestAuthToken = refreshed.auth_token;
+						sfuUrl = refreshed.sfu_url;
+						sfuPort = refreshed.sfu_port;
+						meetingState.guestAuthToken.value = guestAuthToken;
+						meetingState.guestSfuUrl.value = sfuUrl || null;
+						meetingState.guestSfuPort.value = sfuPort || null;
+					} else {
+						throw new Error("Guest session expired. Please rejoin as guest.");
+					}
 				}
 
 				meetingState.guestId.value = guestId;
@@ -921,6 +944,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					sfu_port: sfuPort,
 				};
 			} else {
+				meetingState.guestAuthToken.value = null;
+				meetingState.guestSfuUrl.value = null;
+				meetingState.guestSfuPort.value = null;
 				sessionStorage.removeItem("guest_auth_token");
 				sessionStorage.removeItem("guest_id");
 				sessionStorage.removeItem("guest_name");
@@ -938,22 +964,27 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				joinResult = response;
 			}
 
+			if (guestName && joinResult.guest_id) {
+				sessionStorage.setItem("guest_id", joinResult.guest_id);
+				sessionStorage.setItem("guest_name", guestName);
+				sessionStorage.setItem("guest_meeting_id", meetingId);
+				sessionStorage.setItem("guest_status", joinResult.status);
+
+				meetingState.guestId.value = joinResult.guest_id;
+				meetingState.guestAuthToken.value = joinResult.auth_token || null;
+				meetingState.guestSfuUrl.value = joinResult.sfu_url || null;
+				meetingState.guestSfuPort.value = joinResult.sfu_port || null;
+			}
+
 			if (joinResult.status === "waiting_for_approval") {
 				meetingState.isWaitingForApproval.value = true;
 				meetingState.isInPreview.value = false;
 				meetingState.isConnecting.value = false;
 
 				if (guestName && joinResult.guest_id) {
-					sessionStorage.setItem("guest_id", joinResult.guest_id);
-					sessionStorage.setItem("guest_name", guestName);
-					sessionStorage.setItem("guest_meeting_id", meetingId);
-					sessionStorage.setItem("guest_status", "waiting_for_approval");
-					if (joinResult.sfu_url)
-						sessionStorage.setItem("guest_sfu_url", joinResult.sfu_url);
-					if (joinResult.sfu_port)
-						sessionStorage.setItem("guest_sfu_port", joinResult.sfu_port);
-
-					meetingState.guestId.value = joinResult.guest_id;
+					meetingState.guestAuthToken.value = null;
+					meetingState.guestSfuUrl.value = joinResult.sfu_url || null;
+					meetingState.guestSfuPort.value = joinResult.sfu_port || null;
 				}
 
 				if (guestName) {
@@ -1025,7 +1056,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			}
 
 			// Connect to SFU
-			await sfuManager.value.connect();
+			await sfuManager.value.connect(meetingState.guestAuthToken.value);
 			meetingState.codecStrategy.value =
 				getSFUClient().getCodecStrategy() || "auto";
 
@@ -1181,9 +1212,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					response.status === "joined" &&
 					response.auth_token
 				) {
-					sessionStorage.setItem("guest_auth_token", response.auth_token);
-					sessionStorage.setItem("guest_sfu_url", response.sfu_url);
-					sessionStorage.setItem("guest_sfu_port", response.sfu_port);
+					meetingState.guestAuthToken.value = response.auth_token;
+					meetingState.guestSfuUrl.value = response.sfu_url || null;
+					meetingState.guestSfuPort.value = response.sfu_port || null;
 
 					await setupSFUConnection(guestName, false);
 
