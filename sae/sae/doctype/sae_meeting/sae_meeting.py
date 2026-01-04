@@ -6,6 +6,7 @@ import random
 import string
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
@@ -132,18 +133,7 @@ class SaeMeeting(Document):
 		self.save(ignore_permissions=True)
 
 	def add_guest_to_members(self, guest_id: str):
-		if not guest_id or not isinstance(guest_id, str):
-			frappe.throw("Invalid guest ID")
-
-		if not guest_id.startswith("guest_"):
-			frappe.throw("Invalid guest ID format")
-
-		if len(guest_id) < 7:
-			frappe.throw("Invalid guest ID format")
-
-		if self.is_user_banned(guest_id):
-			frappe.throw("Guest is banned from this meeting")
-
+		self.validate_guest_id(guest_id)
 		members = self.get_members()
 		if guest_id not in members:
 			self.append("members", {"user": guest_id})
@@ -187,20 +177,10 @@ class SaeMeeting(Document):
 		)
 
 	def add_guest_to_waiting_room(self, guest_id: str):
-		if not guest_id or not isinstance(guest_id, str):
-			frappe.throw("Invalid guest ID")
-
-		if not guest_id.startswith("guest_"):
-			frappe.throw("Invalid guest ID format")
-
-		if len(guest_id) < 7:
-			frappe.throw("Invalid guest ID format")
+		self.validate_guest_id(guest_id)
 
 		if self.is_user_approved(guest_id):
 			return
-
-		if self.is_user_banned(guest_id):
-			frappe.throw("Guest is banned from this meeting")
 
 		waiting_users = self.get_waiting_room()
 		if guest_id not in waiting_users:
@@ -320,6 +300,19 @@ class SaeMeeting(Document):
 		banned_user_emails = [row.user for row in self.banned_users]
 		return user in banned_user_emails
 
+	def validate_guest_id(self, guest_id: str):
+		if not guest_id or not isinstance(guest_id, str):
+			frappe.throw(_("Invalid guest ID"))
+
+		if not guest_id.startswith("guest_"):
+			frappe.throw(_("Invalid guest ID format"))
+
+		if len(guest_id) < 7:
+			frappe.throw(_("Invalid guest ID format"))
+
+		if self.is_user_banned(guest_id):
+			frappe.throw(_("Guest is banned from this meeting"))
+
 
 def generate(segment_length=4, num_segments=3, separator="-"):
 	# Define the character set: only lowercase letters
@@ -327,8 +320,8 @@ def generate(segment_length=4, num_segments=3, separator="-"):
 
 	# Generate segments
 	segments = []
-	for _ in range(num_segments):
-		segment = "".join(random.choice(characters) for _ in range(segment_length))
+	for _i in range(num_segments):
+		segment = "".join(random.choice(characters) for _j in range(segment_length))
 		segments.append(segment)
 
 	# Join segments with the separator
