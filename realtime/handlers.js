@@ -25,7 +25,6 @@ const sae_handlers = (socket) => {
 				}
 				const room = guest_room(guest_id);
 				socket.join(room);
-				console.log(room);
 			});
 	});
 
