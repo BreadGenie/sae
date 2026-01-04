@@ -386,7 +386,7 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 
 @frappe.whitelist(allow_guest=True)
 @rate_limit(limit=10, seconds=60 * 60)
-def join_meeting_as_guest(meeting_id: str, guest_name: str) -> dict:
+def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None = None) -> dict:
 	"""
 	Allow guest users to join a meeting without authentication.
 	Generates a guest session and JWT token for SFU access.
@@ -401,17 +401,28 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str) -> dict:
 
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 
-		guest_id = f"guest_{secrets.token_urlsafe(16)}"
-		guest_name_clean = guest_name.strip()
+		# Check if reusing existing guest_id
+		if guest_id:
+			session_data = get_guest_session(guest_id)
+			if session_data and session_data.get("meeting_id") == meeting_id:
+				# Reuse existing guest_id
+				guest_name_clean = session_data.get("guest_name", guest_name.strip())
+			else:
+				# Invalid or expired, generate new
+				guest_id = None
 
-		session_data = {
-			"guest_id": guest_id,
-			"guest_name": guest_name_clean,
-			"meeting_id": meeting_id,
-			"ip_address": frappe.local.request_ip or "unknown",
-			"joined_at": int(time.time()),
-		}
-		set_guest_session(guest_id, session_data, ttl=24 * 3600)
+		if not guest_id:
+			guest_id = f"guest_{secrets.token_urlsafe(16)}"
+			guest_name_clean = guest_name.strip()
+
+			session_data = {
+				"guest_id": guest_id,
+				"guest_name": guest_name_clean,
+				"meeting_id": meeting_id,
+				"ip_address": frappe.local.request_ip or "unknown",
+				"joined_at": int(time.time()),
+			}
+			set_guest_session(guest_id, session_data, ttl=24 * 3600)
 
 		if meeting.is_user_banned(guest_id):
 			return {"success": False, "error": "You are banned from this meeting"}

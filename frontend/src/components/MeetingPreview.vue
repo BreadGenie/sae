@@ -159,10 +159,17 @@ const guestNameInputRef = ref(null);
 
 const joinGuestAPI = createResource({
 	url: "sae.api.meeting.join_meeting_as_guest",
-	makeParams: () => ({
-		meeting_id: props.meetingId,
-		guest_name: guestName.value.trim(),
-	}),
+	makeParams: () => {
+		const params = {
+			meeting_id: props.meetingId,
+			guest_name: guestName.value.trim(),
+		};
+		const existingGuestId = sessionStorage.getItem("guest_id");
+		if (existingGuestId) {
+			params.guest_id = existingGuestId;
+		}
+		return params;
+	},
 });
 
 const meetingState = inject("meetingState");

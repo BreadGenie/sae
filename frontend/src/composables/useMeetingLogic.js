@@ -900,49 +900,28 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			let joinResult;
 
 			if (guestName) {
-				let guestAuthToken = meetingState.guestAuthToken.value;
 				const guestId =
 					meetingState.guestId.value || sessionStorage.getItem("guest_id");
-				let sfuUrl = meetingState.guestSfuUrl.value;
-				let sfuPort = meetingState.guestSfuPort.value;
-				const guestStatus = sessionStorage.getItem("guest_status");
 
 				if (!guestId) {
 					throw new Error("Guest session not found. Please try joining again.");
 				}
 
-				// If we previously joined and lost in-memory token (e.g., refresh), refresh it via backend
-				if (guestStatus === "joined" && !guestAuthToken) {
-					const refreshed = await frappeRequest({
-						url: "sae.api.meeting.get_approved_guest_connection_details",
-						params: {
-							meeting_id: meetingId,
-							guest_id: guestId,
-						},
-					});
+				// Always call the API to get current status, especially for waiting guests
+				const apiResult = await frappeRequest({
+					url: "sae.api.meeting.join_meeting_as_guest",
+					params: {
+						meeting_id: meetingId,
+						guest_name: guestName,
+						guest_id: guestId,
+					},
+				});
 
-					if (refreshed?.success && refreshed.auth_token) {
-						guestAuthToken = refreshed.auth_token;
-						sfuUrl = refreshed.sfu_url;
-						sfuPort = refreshed.sfu_port;
-						meetingState.guestAuthToken.value = guestAuthToken;
-						meetingState.guestSfuUrl.value = sfuUrl || null;
-						meetingState.guestSfuPort.value = sfuPort || null;
-					} else {
-						throw new Error("Guest session expired. Please rejoin as guest.");
-					}
+				if (!apiResult.success) {
+					throw new Error(apiResult.error || "Failed to join as guest");
 				}
 
-				meetingState.guestId.value = guestId;
-
-				joinResult = {
-					status:
-						guestStatus || (guestAuthToken ? "joined" : "waiting_for_approval"),
-					guest_id: guestId,
-					auth_token: guestAuthToken,
-					sfu_url: sfuUrl,
-					sfu_port: sfuPort,
-				};
+				joinResult = apiResult;
 			} else {
 				meetingState.guestAuthToken.value = null;
 				meetingState.guestSfuUrl.value = null;
