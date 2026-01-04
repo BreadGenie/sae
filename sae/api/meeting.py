@@ -206,6 +206,24 @@ def approve_join_request(meeting_id: str, user_id: str) -> dict:
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 		meeting.approve_user(user_id)
 
+		# For guests, publish realtime event in a guest-specific room
+		if user_id.startswith("guest_"):
+			session_data = get_guest_session(user_id)
+			if session_data:
+				guest_name = session_data.get("guest_name", f"Guest-{user_id[:8]}")
+
+				frappe.publish_realtime(
+					"sae:guest_join_approved",
+					{
+						"meeting_id": meeting_id,
+						"guest_id": user_id,
+						"guest_name": guest_name,
+						"message": "Your join request has been approved",
+					},
+					room=f"guest:{user_id}",
+					after_commit=True,
+				)
+
 		return {
 			"success": True,
 			"meeting_id": meeting_id,
@@ -223,6 +241,15 @@ def reject_join_request(meeting_id: str, user_id: str) -> dict:
 	try:
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 		meeting.reject_user(user_id)
+
+		# For guests, publish realtime event in a guest-specific room
+		if user_id.startswith("guest_"):
+			frappe.publish_realtime(
+				"sae:guest_join_rejected",
+				{"meeting_id": meeting_id, "guest_id": user_id},
+				room=f"guest:{user_id}",
+				after_commit=True,
+			)
 
 		return {
 			"success": True,
@@ -406,7 +433,20 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str) -> dict:
 		}
 
 		if meeting.meeting_type == "restricted" and meeting.owner != guest_id:
-			if guest_id not in meeting.get_waiting_room():
+			if meeting.is_user_approved(guest_id):
+				auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
+				return {
+					"success": True,
+					"status": "joined",
+					"meeting_id": meeting_id,
+					"guest_id": guest_id,
+					"guest_name": guest_name_clean,
+					"auth_token": auth_token,
+					"sfu_url": sfu_config["sfu_server_url"],
+					"sfu_port": sfu_config["sfu_server_port"],
+					"message": "Successfully joined meeting",
+				}
+			elif guest_id not in meeting.get_waiting_room():
 				meeting.add_to_waiting_room(guest_id)
 
 			return {
@@ -443,6 +483,59 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str) -> dict:
 	except Exception as e:
 		frappe.log_error(f"Failed guest join for meeting {meeting_id}: {e!s}")
 		return {"success": False, "error": "Failed to join meeting"}
+
+
+@frappe.whitelist(allow_guest=True)
+@rate_limit(limit=10, seconds=60 * 60)
+def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dict:
+	"""
+	Get SFU connection details for an approved guest.
+	This is called after a guest receives approval notification.
+	"""
+	session_data = get_guest_session(guest_id)
+	if not session_data:
+		return {"success": False, "error": "Guest session not found or expired"}
+
+	if not frappe.db.exists("Sae Meeting", meeting_id):
+		return {"success": False, "error": "Meeting not found"}
+
+	meeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+	if not meeting.is_user_approved(guest_id):
+		return {"success": False, "error": "Guest not approved"}
+
+	if meeting.is_user_banned(guest_id):
+		return {"success": False, "error": "You are banned from this meeting"}
+
+	sfu_config = get_sfu_config()
+	secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key") or "fallback-secret"
+
+	guest_name = session_data.get("guest_name", f"Guest-{guest_id[:8]}")
+
+	auth_payload = {
+		"user_id": guest_id,
+		"user_name": guest_name,
+		"meeting_id": meeting_id,
+		"is_host": False,
+		"is_guest": True,
+		"scope": "full",
+		"exp": int(time.time()) + 24 * 3600,
+		"iat": int(time.time()),
+	}
+
+	auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
+
+	return {
+		"success": True,
+		"status": "joined",
+		"meeting_id": meeting_id,
+		"guest_id": guest_id,
+		"guest_name": guest_name,
+		"auth_token": auth_token,
+		"sfu_url": sfu_config["sfu_server_url"],
+		"sfu_port": sfu_config["sfu_server_port"],
+		"message": "Successfully joined meeting",
+	}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -484,58 +577,24 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=True)
-@rate_limit(limit=20, seconds=60)
-def check_guest_approval_status(meeting_id: str, guest_id: str) -> dict:
+@rate_limit(limit=10, seconds=60 * 60)
+def validate_guest_session(guest_id: str) -> dict:
 	"""
-	Check if guest has been approved, rejected, or is still waiting.
-	Used by guests to poll for approval status.
-	TODO: use some realtime mechanism instead of polling.
+	Validate that a guest session exists and is active.
+
+	Args:
+		guest_id: The guest ID to validate
+
+	Returns:
+		dict: {"valid": bool}
 	"""
+	if not guest_id or not guest_id.startswith("guest_"):
+		return {"valid": False, "error": "Invalid guest ID format"}
+
 	session_data = get_guest_session(guest_id)
 	if not session_data:
-		frappe.log_error(f"Guest session not found for guest_id: {guest_id}")
-		return {"success": False, "error": "Invalid guest session"}
+		return {"valid": False, "error": "Guest session not found"}
 
-	if session_data.get("meeting_id") != meeting_id:
-		frappe.log_error(
-			f"Meeting ID mismatch. Session: {session_data.get('meeting_id')}, Requested: {meeting_id}"
-		)
-		return {"success": False, "error": "Guest not authorized for this meeting"}
-
-	meeting = frappe.get_doc("Sae Meeting", meeting_id)
-
-	if meeting.is_user_banned(guest_id):
-		return {
-			"success": True,
-			"status": "rejected",
-			"message": "Your join request was denied by the meeting host",
-		}
-
-	if meeting.is_user_approved(guest_id):
-		sfu_config = get_sfu_config()
-		guest_name = session_data.get("guest_name", f"Guest-{guest_id[:8]}")
-
-		token_payload = {
-			"user_id": guest_id,
-			"meeting_id": meeting_id,
-			"user_name": guest_name,
-			"is_host": False,
-			"is_guest": True,
-			"scope": "full",
-			"exp": int(time.time()) + 24 * 3600,
-			"iat": int(time.time()),
-		}
-
-		secret = sfu_config.get("sfu_secret") or frappe.conf.get("secret_key", "fallback-secret")
-		auth_token = jwt.encode(token_payload, secret, algorithm="HS256")
-
-		return {
-			"success": True,
-			"status": "approved",
-			"auth_token": auth_token,
-			"sfu_url": sfu_config["sfu_server_url"],
-			"sfu_port": sfu_config["sfu_server_port"],
-			"message": "Join request approved",
-		}
-
-	return {"success": True, "status": "waiting", "message": "Waiting for host approval"}
+	return {
+		"valid": True,
+	}
