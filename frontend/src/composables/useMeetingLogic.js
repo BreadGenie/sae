@@ -1339,8 +1339,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				const participantId = participant.participantId || participant.user_id;
 				const currentUserId = meetingState.currentUser.value?.user_id;
 
-				// Don't add current user as a remote participant
 				if (
+					!participantId ||
+					// Don't add current user as a remote participant
 					participantId === currentUserId ||
 					participant?.user_id === currentUserId
 				) {
@@ -1354,9 +1355,6 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					participant.participantId,
 				);
 
-				if (!participantName) {
-					return;
-				}
 				if (sfuManager.value?.initialSyncInProgress) {
 					return;
 				}
