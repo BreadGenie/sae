@@ -19,7 +19,7 @@ class SaeMeeting(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from sae.sae.doctype.sae_meeting_user.sae_meeting_user import SaeMeetingUser
+		from meet.meet.doctype.sae_meeting_user.sae_meeting_user import SaeMeetingUser
 
 		banned_users: DF.Table[SaeMeetingUser]
 		meeting_type: DF.Literal["open", "restricted"]
@@ -153,7 +153,7 @@ class SaeMeeting(Document):
 			self.append("waiting_room", {"user": user})
 			self.save(ignore_permissions=True)
 
-		from sae.utils.user import get_user_info
+		from meet.utils.user import get_user_info
 
 		user_info = get_user_info(user)
 
@@ -187,7 +187,7 @@ class SaeMeeting(Document):
 			self.append("waiting_room", {"user": guest_id})
 			self.save(ignore_permissions=True)
 
-			from sae.utils.user import get_user_info
+			from meet.utils.user import get_user_info
 
 			user_info = get_user_info(guest_id)
 

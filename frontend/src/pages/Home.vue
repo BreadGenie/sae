@@ -95,7 +95,7 @@ const meetingCode = ref("");
 const meetingCodeError = ref("");
 
 const createMeeting = createResource({
-	url: "sae.api.meeting.create",
+	url: "meet.api.meeting.create",
 	method: "POST",
 	onSuccess: (meeting_code) => {
 		router.push({

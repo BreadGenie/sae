@@ -151,7 +151,7 @@ const reconnecting = ref(false);
 
 // Resources
 const statusResource = createResource({
-	url: "sae.api.config.get_sfu_status",
+	url: "meet.api.config.get_sfu_status",
 	auto: true,
 	onSuccess: (data) => {
 		sfuStatus.value = data.status;
@@ -160,7 +160,7 @@ const statusResource = createResource({
 });
 
 const meetingsResource = createResource({
-	url: "sae.api.config.get_active_meetings",
+	url: "meet.api.config.get_active_meetings",
 	auto: true,
 	onSuccess: (data) => {
 		activeMeetings.value = data.meetings;
@@ -168,7 +168,7 @@ const meetingsResource = createResource({
 });
 
 const testConnectionResource = createResource({
-	url: "sae.api.config.test_sfu_connection",
+	url: "meet.api.config.test_sfu_connection",
 	onSuccess: (data) => {
 		if (data.success) {
 			sfuStatus.value.connected = data.connected;
@@ -179,14 +179,14 @@ const testConnectionResource = createResource({
 });
 
 const createMeetingResource = createResource({
-	url: "sae.api.meeting.create",
+	url: "meet.api.meeting.create",
 	onSuccess: (meetingId) => {
 		router.push({ name: "Meeting", params: { id: meetingId } });
 	},
 });
 
 const reconnectResource = createResource({
-	url: "sae.api.config.reconnect_sfu",
+	url: "meet.api.config.reconnect_sfu",
 	onSuccess: (data) => {
 		if (data.success) {
 			sfuStatus.value.connected = data.connected;

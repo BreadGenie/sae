@@ -68,22 +68,22 @@ export const availableBackgroundImages: BackgroundImage[] = [
 	{
 		name: "beach",
 		label: "Beach",
-		url: "/assets/sae/frontend/backgrounds/beach.webp",
+		url: "/assets/meet/frontend/backgrounds/beach.webp",
 	},
 	{
 		name: "mountains",
 		label: "Mountains",
-		url: "/assets/sae/frontend/backgrounds/mountains.webp",
+		url: "/assets/meet/frontend/backgrounds/mountains.webp",
 	},
 	{
 		name: "space",
 		label: "Earth & Moon",
-		url: "/assets/sae/frontend/backgrounds/earth-and-moon.webp",
+		url: "/assets/meet/frontend/backgrounds/earth-and-moon.webp",
 	},
 	{
 		name: "saturn",
 		label: "Saturn",
-		url: "/assets/sae/frontend/backgrounds/saturn.webp",
+		url: "/assets/meet/frontend/backgrounds/saturn.webp",
 	},
 ];
 

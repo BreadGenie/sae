@@ -1,4 +1,4 @@
-app_name = "sae"
+app_name = "meet"
 app_title = "Frappe Meet"
 app_publisher = "Frappe"
 app_description = "Video conferencing app built on Frappe Framework and Mediasoup"
@@ -11,29 +11,29 @@ app_license = "agpl-3.0"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "sae",
-# 		"logo": "/assets/sae/logo.png",
-# 		"title": "Sae",
-# 		"route": "/sae",
-# 		"has_permission": "sae.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "meet",
+		"logo": "/assets/meet/frontend/meet_logo.png",
+		"title": "Meet",
+		"route": "/meet",
+		"has_permission": "meet.api.permission.has_app_permission",
+	}
+]
 
 # Includes in <head>
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/sae/css/sae.css"
-# app_include_js = "/assets/sae/js/sae.js"
+# app_include_css = "/assets/meet/css/meet.css"
+# app_include_js = "/assets/meet/js/meet.js"
 
 # include js, css files in header of web template
-# web_include_css = "/assets/sae/css/sae.css"
-# web_include_js = "/assets/sae/js/sae.js"
+# web_include_css = "/assets/meet/css/meet.css"
+# web_include_js = "/assets/meet/js/meet.js"
 
 # include custom scss in every website theme (without file extension ".scss")
-# website_theme_scss = "sae/public/scss/website"
+# website_theme_scss = "meet/public/scss/website"
 
 # include js, css files in header of web form
 # webform_include_js = {"doctype": "public/js/doctype.js"}
@@ -51,7 +51,7 @@ app_license = "agpl-3.0"
 # Svg Icons
 # ------------------
 # include app icons in desk
-# app_include_icons = "sae/public/icons.svg"
+# app_include_icons = "meet/public/icons.svg"
 
 # Home Pages
 # ----------
@@ -78,43 +78,43 @@ app_license = "agpl-3.0"
 
 # add methods and filters to jinja environment
 # jinja = {
-# 	"methods": "sae.utils.jinja_methods",
-# 	"filters": "sae.utils.jinja_filters"
+# 	"methods": "meet.utils.jinja_methods",
+# 	"filters": "meet.utils.jinja_filters"
 # }
 
 # Installation
 # ------------
 
-# before_install = "sae.install.before_install"
-# after_install = "sae.install.after_install"
+# before_install = "meet.install.before_install"
+# after_install = "meet.install.after_install"
 
 # Uninstallation
 # ------------
 
-# before_uninstall = "sae.install.before_uninstall"
-# after_uninstall = "sae.uninstall.after_uninstall"
+# before_uninstall = "meet.install.before_uninstall"
+# after_uninstall = "meet.uninstall.after_uninstall"
 
 # Integration Setup
 # ------------------
 # To set up dependencies/integrations with other apps
 # Name of the app being installed is passed as an argument
 
-# before_app_install = "sae.utils.before_app_install"
-# after_app_install = "sae.utils.after_app_install"
+# before_app_install = "meet.utils.before_app_install"
+# after_app_install = "meet.utils.after_app_install"
 
 # Integration Cleanup
 # -------------------
 # To clean up dependencies/integrations with other apps
 # Name of the app being uninstalled is passed as an argument
 
-# before_app_uninstall = "sae.utils.before_app_uninstall"
-# after_app_uninstall = "sae.utils.after_app_uninstall"
+# before_app_uninstall = "meet.utils.before_app_uninstall"
+# after_app_uninstall = "meet.utils.after_app_uninstall"
 
 # Desk Notifications
 # ------------------
 # See frappe.core.notifications.get_notification_config
 
-# notification_config = "sae.notifications.get_notification_config"
+# notification_config = "meet.notifications.get_notification_config"
 
 # Permissions
 # -----------
@@ -134,7 +134,7 @@ app_license = "agpl-3.0"
 
 doc_events = {
 	"User": {
-		"after_insert": "sae.utils.user.assign_sae_role",
+		"after_insert": "meet.utils.user.assign_meet_role",
 	}
 }
 
@@ -149,7 +149,7 @@ doc_events = {
 # Fixtures
 
 fixtures = [
-	{"dt": "Role", "filters": [["role_name", "like", "Sae %"]]},
+	{"dt": "Role", "filters": [["role_name", "like", "Meet %"]]},
 ]
 
 # Scheduled Tasks
@@ -157,39 +157,39 @@ fixtures = [
 
 # scheduler_events = {
 # 	"all": [
-# 		"sae.tasks.all"
+# 		"meet.tasks.all"
 # 	],
 # 	"daily": [
-# 		"sae.tasks.daily"
+# 		"meet.tasks.daily"
 # 	],
 # 	"hourly": [
-# 		"sae.tasks.hourly"
+# 		"meet.tasks.hourly"
 # 	],
 # 	"weekly": [
-# 		"sae.tasks.weekly"
+# 		"meet.tasks.weekly"
 # 	],
 # 	"monthly": [
-# 		"sae.tasks.monthly"
+# 		"meet.tasks.monthly"
 # 	],
 # }
 
 # Testing
 # -------
 
-# before_tests = "sae.install.before_tests"
+# before_tests = "meet.install.before_tests"
 
 # Overriding Methods
 # ------------------------------
 #
 # override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "sae.event.get_events"
+# 	"frappe.desk.doctype.event.event.get_events": "meet.event.get_events"
 # }
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
 # along with any modifications made in other Frappe apps
 # override_doctype_dashboards = {
-# 	"Task": "sae.task.get_dashboard_data"
+# 	"Task": "meet.task.get_dashboard_data"
 # }
 
 # exempt linked doctypes from being automatically cancelled
@@ -203,13 +203,13 @@ fixtures = [
 
 # Request Events
 # ----------------
-# before_request = ["sae.utils.before_request"]
-# after_request = ["sae.utils.after_request"]
+# before_request = ["meet.utils.before_request"]
+# after_request = ["meet.utils.after_request"]
 
 # Job Events
 # ----------
-# before_job = ["sae.utils.before_job"]
-# after_job = ["sae.utils.after_job"]
+# before_job = ["meet.utils.before_job"]
+# after_job = ["meet.utils.after_job"]
 
 # User Data Protection
 # --------------------
@@ -239,7 +239,7 @@ fixtures = [
 # --------------------------------
 
 # auth_hooks = [
-# 	"sae.auth.validate"
+# 	"meet.auth.validate"
 # ]
 
 # Automatically update python controller files with type annotations for this app.

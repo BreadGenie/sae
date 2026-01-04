@@ -64,7 +64,7 @@ class SFUClient {
 			}
 
 			response = await frappeRequest({
-				url: "sae.api.meeting.get_guest_sfu_connection_details",
+				url: "meet.api.meeting.get_guest_sfu_connection_details",
 				params: {
 					meeting_id: meetingId,
 					guest_token: guestAuthToken,
@@ -93,7 +93,7 @@ class SFUClient {
 		}
 
 		response = await frappeRequest({
-			url: "sae.api.meeting.get_sfu_connection_details",
+			url: "meet.api.meeting.get_sfu_connection_details",
 			params: { meeting_id: meetingId },
 		});
 
@@ -300,7 +300,7 @@ class SFUClient {
 			this.isRefreshingToken = true;
 
 			const response = await frappeRequest({
-				url: "sae.api.meeting.refresh_sfu_token",
+				url: "meet.api.meeting.refresh_sfu_token",
 				params: { meeting_id: this.connectionDetails.meetingId },
 			});
 

@@ -54,9 +54,9 @@ jspm_packages/
 # Aider AI Chat
 .aider*
 
-sae/public/frontend
-sae/public/node_modules
+meet/public/frontend
+meet/public/node_modules
 
 #Frappe
 
-sae/www/meet.html
+meet/www/meet.html

@@ -1,6 +1,6 @@
 ---
 description: "Frappe Meet - Video conferencing app development standards and best practices"
-applyTo: "frontend/**/*.{vue,ts,js}, sae/**/*.py, sfu-server/**/*.{ts,js}"
+applyTo: "frontend/**/*.{vue,ts,js}, meet/**/*.py, sfu-server/**/*.{ts,js}"
 ---
 
 # Project Name: Frappe Meet
@@ -72,7 +72,7 @@ Frappe Meet is a video conferencing application built on the Frappe Framework wi
 - Assume the Vite dev server is already running on port 8094
 - Never ask to run dev server or build commands unless specifically requested
 - Vite config includes frappe-ui plugin with proxy enabled
-- Frontend builds to `../sae/public/frontend/` for production
+- Frontend builds to `../meet/public/frontend/` for production
 - Access via `http://meet.localhost:8094` during development
 - Production access via Frappe web route `/meet`
 
@@ -170,7 +170,7 @@ Frappe Meet is a video conferencing application built on the Frappe Framework wi
 import { createResource } from "frappe-ui";
 
 const meetingDetails = createResource({
-  url: "sae.api.meeting.get_meeting_details",
+  url: "meet.api.meeting.get_meeting_details",
   params: { meeting_id: props.meetingId },
   auto: true, // Fetch immediately
   onSuccess(data) {
@@ -458,19 +458,19 @@ socket.on("error", ({ code, message }) => {
 
 ## Backend Project Structure
 
-- `./sae/` is the main directory for backend code
-- `./sae/sae/` contains the main application code
-- `./sae/sae/doctype/` contains individual doctype definitions
-- `./sae/api/` contains whitelisted API endpoints
-- `./sae/utils/` contains utility functions and helpers
-- `./sae/fixtures/` contains initial data fixtures (e.g., roles)
-- `./sae/www/` contains web pages and routes
+- `./meet/` is the main directory for backend code
+- `./meet/meet/` contains the main application code
+- `./meet/meet/doctype/` contains individual doctype definitions
+- `./meet/api/` contains whitelisted API endpoints
+- `./meet/utils/` contains utility functions and helpers
+- `./meet/fixtures/` contains initial data fixtures (e.g., roles)
+- `./meet/www/` contains web pages and routes
 
 ## Backend Development Guidelines
 
 ### API Endpoints
 
-- Create whitelisted functions in `./sae/api/` directory
+- Create whitelisted functions in `./meet/api/` directory
 - Always use `@frappe.whitelist()` decorator for public endpoints
 - Use `@frappe.whitelist(allow_guest=True)` for guest-accessible endpoints
 - Apply rate limiting for security-sensitive endpoints:
@@ -489,7 +489,7 @@ socket.on("error", ({ code, message }) => {
 
 ### DocTypes
 
-- Main doctype: `Sae Meeting` in `./sae/sae/doctype/sae_meeting/`
+- Main doctype: `Sae Meeting` in `./meet/meet/doctype/sae_meeting/`
 - Implement custom methods in doctype controller classes
 - Override `has_permission` for custom permission logic
 - Use proper field types and validations in JSON definitions
@@ -497,8 +497,8 @@ socket.on("error", ({ code, message }) => {
 
 ### SFU Configuration
 
-- SFU config utilities in `./sae/utils/sfu_config.py`
-- SFU manager utilities in `./sae/utils/sfu_manager.py`
+- SFU config utilities in `./meet/utils/sfu_config.py`
+- SFU manager utilities in `./meet/utils/sfu_manager.py`
 - Store SFU settings in site_config.json:
   - `sfu_secret` - JWT secret for SFU authentication
   - `sfu_server_url` - SFU server URL
@@ -506,7 +506,7 @@ socket.on("error", ({ code, message }) => {
 
 ### User Management
 
-- User utilities in `./sae/utils/user.py`
+- User utilities in `./meet/utils/user.py`
 - Fetch user details (full name, avatar) for meeting participants
 - Respect Frappe's permission system for user access
 

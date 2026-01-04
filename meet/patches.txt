@@ -4,4 +4,4 @@
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
-sae.patches.migrate_meeting_fields_to_table_multiselect
+meet.patches.migrate_meeting_fields_to_table_multiselect

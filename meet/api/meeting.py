@@ -10,8 +10,8 @@ import jwt
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
-from sae.utils.sfu_config import get_sfu_config
-from sae.utils.user import (
+from meet.utils.sfu_config import get_sfu_config
+from meet.utils.user import (
 	get_guest_session,
 	get_user_info,
 	set_guest_session,
@@ -51,7 +51,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		if not meeting.can_join(frappe.session.user):
 			frappe.throw(_("Access denied"), frappe.PermissionError)
 
-		from sae.utils.sfu_config import get_sfu_config
+		from meet.utils.sfu_config import get_sfu_config
 
 		sfu_config = get_sfu_config()
 
@@ -217,7 +217,7 @@ def approve_join_request(meeting_id: str, user_id: str) -> dict:
 				guest_name = session_data.get("guest_name", f"Guest-{user_id[:8]}")
 
 				frappe.publish_realtime(
-					"sae:guest_join_approved",
+					"meet:guest_join_approved",
 					{
 						"meeting_id": meeting_id,
 						"guest_id": user_id,
@@ -249,7 +249,7 @@ def reject_join_request(meeting_id: str, user_id: str) -> dict:
 		# For guests, publish realtime event in a guest-specific room
 		if user_id.startswith("guest_"):
 			frappe.publish_realtime(
-				"sae:guest_join_rejected",
+				"meet:guest_join_rejected",
 				{"meeting_id": meeting_id, "guest_id": user_id},
 				room=f"guest:{user_id}",
 				after_commit=True,
@@ -310,7 +310,7 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		if frappe.session.user not in meeting.get_members():
 			return {"success": False, "error": "Not a meeting member"}
 
-		from sae.utils.sfu_config import get_sfu_config
+		from meet.utils.sfu_config import get_sfu_config
 
 		sfu_config = get_sfu_config()
 

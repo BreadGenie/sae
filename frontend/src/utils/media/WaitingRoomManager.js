@@ -23,7 +23,7 @@ export class WaitingRoomManager {
 
 	setupAPIResources() {
 		this.getWaitingRoomResource = createResource({
-			url: "sae.api.meeting.get_waiting_room",
+			url: "meet.api.meeting.get_waiting_room",
 			makeParams: () => ({ meeting_id: this.meetingId }),
 			onSuccess: (data) => {
 				this.updateWaitingRoom(data);
@@ -34,7 +34,7 @@ export class WaitingRoomManager {
 		});
 
 		this.approveJoinRequestResource = createResource({
-			url: "sae.api.meeting.approve_join_request",
+			url: "meet.api.meeting.approve_join_request",
 			onSuccess: (data) => {
 				if (this.eventHandlers.onUserApproved) {
 					this.eventHandlers.onUserApproved(data);
@@ -47,7 +47,7 @@ export class WaitingRoomManager {
 		});
 
 		this.rejectJoinRequestResource = createResource({
-			url: "sae.api.meeting.reject_join_request",
+			url: "meet.api.meeting.reject_join_request",
 			onSuccess: (data) => {
 				if (this.eventHandlers.onUserRejected) {
 					this.eventHandlers.onUserRejected(data);

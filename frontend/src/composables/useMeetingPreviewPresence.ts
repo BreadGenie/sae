@@ -65,7 +65,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 	let socket: Socket | null = null;
 
 	const fetchPresenceToken = createResource({
-		url: "sae.api.meeting.get_sfu_presence_preview_token",
+		url: "meet.api.meeting.get_sfu_presence_preview_token",
 		params: { meeting_id: meetingId },
 		auto: false,
 		onSuccess(data: TokenResponse) {

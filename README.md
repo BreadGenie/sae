@@ -38,14 +38,14 @@ A video conferencing app built with Frappe.
 ```bash
 cd $PATH_TO_YOUR_BENCH
 bench get-app $URL_OF_THIS_REPO --branch develop
-bench install-app sae
+bench install-app meet
 ```
 
 ### 2. Setup SFU Server
 
 ```bash
 # Navigate to SFU server directory
-cd apps/sae/sfu-server
+cd apps/meet/sfu-server
 
 # Install dependencies (including new JWT support)
 npm install
@@ -77,7 +77,7 @@ Add to `site_config.json` (values must match SFU):
 ### 4. Build Frontend
 
 ```bash
-cd apps/sae/frontend
+cd apps/meet/frontend
 yarn install
 yarn build
 ```
@@ -87,7 +87,7 @@ yarn build
 This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
 
 ```bash
-cd apps/sae
+cd apps/meet
 pre-commit install
 ```
 

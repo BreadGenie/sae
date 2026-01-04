@@ -34,7 +34,7 @@ export default defineConfig({
 			jinjaBootData: true,
 			lucideIcons: true,
 			buildConfig: {
-				indexHtmlPath: "../sae/www/meet.html",
+				indexHtmlPath: "../meet/www/meet.html",
 				emptyOutDir: true,
 				sourcemap: true,
 			},
@@ -43,7 +43,7 @@ export default defineConfig({
 	],
 	build: {
 		chunkSizeWarningLimit: 1500,
-		outDir: "../sae/public/frontend",
+		outDir: "../meet/public/frontend",
 		emptyOutDir: true,
 		target: "es2015",
 		sourcemap: true,

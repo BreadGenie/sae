@@ -7,7 +7,7 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        files: "sae.*"
+        files: "meet.*"
         exclude: ".*json$|.*txt$|.*csv|.*md|.*svg"
       - id: check-merge-conflict
       - id: check-ast
@@ -42,12 +42,12 @@ repos:
         exclude: |
           (?x)^(
               frontend/components.d.ts|
-              sae/public/dist/.*|
+              meet/public/dist/.*|
               cypress/.*|
               .*node_modules.*|
               .*boilerplate.*|
-              sae/templates/includes/.*|
-              sae/public/js/lib/.*
+              meet/templates/includes/.*|
+              meet/public/js/lib/.*
           )$
 
       - id: biome-check

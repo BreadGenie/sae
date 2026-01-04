@@ -177,7 +177,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	};
 	// API Resources
 	const joinMeetingAPI = createResource({
-		url: "sae.api.meeting.join_meeting",
+		url: "meet.api.meeting.join_meeting",
 		method: "POST",
 		makeParams: () => ({ meeting_id: meetingId }),
 	});
@@ -909,7 +909,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 				// Always call the API to get current status, especially for waiting guests
 				const apiResult = await frappeRequest({
-					url: "sae.api.meeting.join_meeting_as_guest",
+					url: "meet.api.meeting.join_meeting_as_guest",
 					params: {
 						meeting_id: meetingId,
 						guest_name: guestName,
@@ -1119,7 +1119,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const fetchExistingWaitingRoomUsers = async () => {
 		try {
 			const result = await frappeRequest({
-				url: "sae.api.meeting.get_waiting_room",
+				url: "meet.api.meeting.get_waiting_room",
 				params: { meeting_id: meetingId },
 			});
 
@@ -1163,8 +1163,8 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 		socket.emit("guest_subscribe", guestId);
 
 		// Listen for guest approval/rejection events
-		socket.on("sae:guest_join_approved", handleGuestApproved);
-		socket.on("sae:guest_join_rejected", handleGuestRejected);
+		socket.on("meet:guest_join_approved", handleGuestApproved);
+		socket.on("meet:guest_join_rejected", handleGuestRejected);
 
 		async function handleGuestApproved(data) {
 			if (data.guest_id !== guestId || data.meeting_id !== meetingId) {
@@ -1179,7 +1179,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			try {
 				const guestName = sessionStorage.getItem("guest_name") || "Guest";
 				const response = await frappeRequest({
-					url: "sae.api.meeting.get_approved_guest_connection_details",
+					url: "meet.api.meeting.get_approved_guest_connection_details",
 					params: {
 						meeting_id: meetingId,
 						guest_id: guestId,
@@ -1241,8 +1241,8 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			socket.emit("guest_unsubscribe", guestId);
 		}
 
-		socket.off("sae:guest_join_approved");
-		socket.off("sae:guest_join_rejected");
+		socket.off("meet:guest_join_approved");
+		socket.off("meet:guest_join_rejected");
 	};
 
 	const setupFrappeRealtimeEventListeners = () => {
@@ -1291,7 +1291,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 				try {
 					const sfuResult = await frappeRequest({
-						url: "sae.api.meeting.get_sfu_connection_details",
+						url: "meet.api.meeting.get_sfu_connection_details",
 						params: {
 							meeting_id: meetingId,
 						},
@@ -1547,7 +1547,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const approveUser = async (userId) => {
 		try {
 			const result = await frappeRequest({
-				url: "sae.api.meeting.approve_join_request",
+				url: "meet.api.meeting.approve_join_request",
 				params: {
 					meeting_id: meetingId,
 					user_id: userId,
@@ -1574,7 +1574,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const rejectUser = async (userId) => {
 		try {
 			const result = await frappeRequest({
-				url: "sae.api.meeting.reject_join_request",
+				url: "meet.api.meeting.reject_join_request",
 				params: {
 					meeting_id: meetingId,
 					user_id: userId,

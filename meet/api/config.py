@@ -3,9 +3,9 @@
 
 import frappe
 
-from sae.install import get_app_status, validate_config
-from sae.utils.sfu_config import get_sfu_config
-from sae.utils.sfu_manager import get_sfu_manager
+from meet.install import get_app_status, validate_config
+from meet.utils.sfu_config import get_sfu_config
+from meet.utils.sfu_manager import get_sfu_manager
 
 
 @frappe.whitelist()

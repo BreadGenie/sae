@@ -8,9 +8,9 @@ import frappe
 from frappe.core.doctype.user.user import User
 
 
-def assign_sae_role(user: User, method: str) -> None:
-	"""Assign the "Sae User" role to a newly created User."""
-	role_name = "Sae User"
+def assign_meet_role(user: User, method: str) -> None:
+	"""Assign the "Meet User" role to a newly created User."""
+	role_name = "Meet User"
 	user_name = user.name
 
 	if not user_name or user_name in ("Guest", "Administrator"):

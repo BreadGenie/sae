@@ -158,7 +158,7 @@ const guestName = ref("");
 const guestNameInputRef = ref(null);
 
 const joinGuestAPI = createResource({
-	url: "sae.api.meeting.join_meeting_as_guest",
+	url: "meet.api.meeting.join_meeting_as_guest",
 	makeParams: () => {
 		const params = {
 			meeting_id: props.meetingId,
