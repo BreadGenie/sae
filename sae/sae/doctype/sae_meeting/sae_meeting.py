@@ -131,6 +131,24 @@ class SaeMeeting(Document):
 
 		self.save(ignore_permissions=True)
 
+	def add_guest_to_members(self, guest_id: str):
+		if not guest_id or not isinstance(guest_id, str):
+			frappe.throw("Invalid guest ID")
+
+		if not guest_id.startswith("guest_"):
+			frappe.throw("Invalid guest ID format")
+
+		if len(guest_id) < 7:
+			frappe.throw("Invalid guest ID format")
+
+		if self.is_user_banned(guest_id):
+			frappe.throw("Guest is banned from this meeting")
+
+		members = self.get_members()
+		if guest_id not in members:
+			self.append("members", {"user": guest_id})
+			self.save(ignore_permissions=True)
+
 	def get_waiting_room(self):
 		"""Get list of users waiting for approval"""
 		return [row.user for row in self.waiting_room] if self.waiting_room else []
@@ -167,6 +185,48 @@ class SaeMeeting(Document):
 				"waiting_count": len(waiting_users) + 1,
 			},
 		)
+
+	def add_guest_to_waiting_room(self, guest_id: str):
+		if not guest_id or not isinstance(guest_id, str):
+			frappe.throw("Invalid guest ID")
+
+		if not guest_id.startswith("guest_"):
+			frappe.throw("Invalid guest ID format")
+
+		if len(guest_id) < 7:
+			frappe.throw("Invalid guest ID format")
+
+		if self.is_user_approved(guest_id):
+			return
+
+		if self.is_user_banned(guest_id):
+			frappe.throw("Guest is banned from this meeting")
+
+		waiting_users = self.get_waiting_room()
+		if guest_id not in waiting_users:
+			self.append("waiting_room", {"user": guest_id})
+			self.save(ignore_permissions=True)
+
+			from sae.utils.user import get_user_info
+
+			user_info = get_user_info(guest_id)
+
+			if user_info:
+				user_name = user_info.get("full_name", guest_id)
+			else:
+				user_name = guest_id
+
+			frappe.publish_realtime(
+				"meeting_join_request",
+				user=self.owner,
+				message={
+					"meeting": self.name,
+					"user": guest_id,
+					"user_name": user_name,
+					"user_image": None,
+					"waiting_count": len(waiting_users) + 1,
+				},
+			)
 
 	def remove_from_waiting_room(self, user):
 		"""Remove user from waiting room"""

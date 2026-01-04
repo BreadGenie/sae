@@ -466,7 +466,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 					"message": "Successfully joined meeting",
 				}
 			elif guest_id not in meeting.get_waiting_room():
-				meeting.add_to_waiting_room(guest_id)
+				meeting.add_guest_to_waiting_room(guest_id)
 
 			return {
 				"success": True,
@@ -482,10 +482,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		# open meeting
 		auth_token = jwt.encode(auth_payload, secret, algorithm="HS256")
 
-		members = meeting.get_members()
-		if guest_id not in members:
-			members.append(guest_id)
-			meeting.update_members(members)
+		meeting.add_guest_to_members(guest_id)
 
 		return {
 			"success": True,
