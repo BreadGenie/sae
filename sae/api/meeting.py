@@ -2,8 +2,8 @@
 # For license information, please see license.txt
 
 import json
+import secrets
 import time
-import uuid
 
 import frappe
 import jwt
@@ -359,7 +359,7 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 
 	expiry_seconds = 300
 	now = int(time.time())
-	session_id = str(uuid.uuid4())
+	session_id = str(secrets.token_urlsafe(16))
 
 	auth_payload = {
 		"user_id": frappe.session.user,
@@ -401,7 +401,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str) -> dict:
 
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 
-		guest_id = f"guest_{uuid.uuid4()}"
+		guest_id = f"guest_{secrets.token_urlsafe(16)}"
 		guest_name_clean = guest_name.strip()
 
 		session_data = {
