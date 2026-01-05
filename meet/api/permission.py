@@ -1,7 +1,7 @@
 import frappe
 
 
-def has_app_permission(user: str) -> bool:
+def has_app_permission() -> bool:
 	if frappe.session.user == "Administrator":
 		return True
 
