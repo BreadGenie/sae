@@ -7,15 +7,11 @@
 			</p>
 		</div>
 		<div v-else-if="participants.length > 0" class="flex flex-col items-center">
-			<div class="relative flex mx-auto">
+			<div class="relative flex mx-auto -space-x-2">
 				<div
-					v-for="(participant, index) in displayedParticipants"
+					v-for="participant in displayedParticipants"
 					:key="participant.user_id"
-					:class="[
-						'relative',
-						index > 0 ? '-ml-2' : ''
-					]"
-					:style="{ zIndex: displayedParticipants.length - index }"
+					:style="{ zIndex: 0 }"
 				>
 					<div class="ring-2 ring-white rounded-full h-10">
 						<Avatar
@@ -28,7 +24,6 @@
 				</div>
 				<div
 					v-if="extraCount > 0"
-					class="relative -ml-2"
 					:style="{ zIndex: 0 }"
 				>
 					<div class="ring-2 ring-white rounded-full h-10 w-10 bg-surface-gray-2 flex items-center justify-center text-ink-gray-5 text-base font-semibold">
