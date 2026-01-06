@@ -19,13 +19,11 @@
   </div>
 </template>
 
-<script setup>
-const props = defineProps({
-	title: {
-		type: String,
-	},
-	description: {
-		type: String,
-	},
-});
+<script setup lang="ts">
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const props = defineProps<Props>();
 </script>

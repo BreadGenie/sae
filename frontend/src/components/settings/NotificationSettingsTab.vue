@@ -25,16 +25,18 @@
 	</SettingsLayoutBase>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Switch } from "frappe-ui";
-import { ref, watch } from "vue";
+import { type Ref, ref, watch } from "vue";
 import {
 	notificationChimesEnabled,
 	setNotificationChimesEnabled,
 } from "../../data/notificationPreferences.js";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
-const notificationChimesEnabledLocal = ref(notificationChimesEnabled.value);
+const notificationChimesEnabledLocal: Ref<boolean> = ref(
+	notificationChimesEnabled.value,
+);
 
 watch(notificationChimesEnabledLocal, (newValue) => {
 	setNotificationChimesEnabled(newValue);
