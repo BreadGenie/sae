@@ -244,7 +244,7 @@ import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
 import { canScreenShare } from "../utils/device";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
 import ReactionPicker from "./ReactionPicker.vue";
-import SettingsDialog from "./SettingsDialog.vue";
+import SettingsDialog from "./settings/SettingsDialog.vue";
 
 const props = defineProps({
 	isChatOpen: {

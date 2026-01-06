@@ -1,115 +1,116 @@
 <template>
-	<div class="space-y-6 mt-6">
-		<div class="">
-			<p class="text-sm text-gray-600">
-				Customize your video background with blur effects or virtual backgrounds
-			</p>
-		</div>
-
-		<!-- Video Preview -->
-		<div class="flex justify-center mb-4">
-			<div class="w-full h-auto aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-sm relative">
-				<video
-					ref="videoPreviewRef"
-					autoplay
-					muted
-					playsinline
-					class="w-full h-full object-cover transform scale-x-[-1]"
-				/>
-				<div v-if="!previewStream"
-					class="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
-					<div v-if="isLoadingPreview" class="text-white text-center">
-						<lucide-loader class="mx-auto mb-2 w-8 h-8 animate-spin" />
-						<p class="text-sm">
-							Loading preview...
-						</p>
+	<SettingsLayoutBase
+		:description="'Customize your video background with blur effects or virtual backgrounds'"
+	>
+		<template #title>
+			Background
+		</template>
+		<template #content>
+			<!-- Video Preview -->
+			<div class="flex justify-center mb-4">
+				<div class="w-96 h-auto aspect-video bg-gray-900 rounded-lg overflow-hidden shadow-sm relative">
+					<video
+						ref="videoPreviewRef"
+						autoplay
+						muted
+						playsinline
+						class="w-full h-full object-cover transform scale-x-[-1]"
+					/>
+					<div v-if="!previewStream"
+						class="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+						<div v-if="isLoadingPreview" class="text-white text-center">
+							<lucide-loader class="mx-auto mb-2 w-8 h-8 animate-spin" />
+							<p class="text-sm">
+								Loading preview...
+							</p>
+						</div>
 					</div>
 				</div>
 			</div>
-		</div>
 
-		<div class="space-y-4">
-			<!-- Image picker -->
-			<input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="handleFileSelect" />
+			<div class="space-y-4">
+				<!-- Image picker -->
+				<input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="handleFileSelect" />
 
-			<!-- Background Options -->
-			<div class="grid grid-cols-4 gap-3">
-				<div v-for="option in allBackgroundOptions" :key="option.name"
-					@click="handleBackgroundOptionClick(option)"
-					class="relative cursor-pointer rounded-lg border overflow-hidden transition-all duration-200 hover:shadow-sm group"
-					:class="[
-						selectedBackgroundOption === option.name
-							? 'border-gray-900 ring-gray-300'
-							: 'border-gray-200 hover:border-gray-300',
-					]">
-					<div class="aspect-video bg-gray-100 relative">
-						<!-- For blur option -->
-						<div v-if="option.type === 'blur'" class="absolute inset-0 flex items-center justify-center"
-							:class="option.name === 'blur-low'
-								? 'bg-[radial-gradient(circle_at_center,theme(colors.blue.200),theme(colors.blue.300),theme(colors.blue.500))]'
-								: 'bg-[radial-gradient(circle_at_center,theme(colors.blue.300),theme(colors.blue.400),theme(colors.blue.600))]'">
-							<lucide-circle-user-round class="w-8 h-8 text-gray-50" />
+				<!-- Background Options -->
+				<div class="grid grid-cols-4 gap-3">
+					<div v-for="option in allBackgroundOptions" :key="option.name"
+						@click="handleBackgroundOptionClick(option)"
+						class="relative cursor-pointer rounded-lg border overflow-hidden transition-all duration-200 hover:shadow-sm group"
+						:class="[
+							selectedBackgroundOption === option.name
+								? 'border-gray-900 ring-gray-300'
+								: 'border-gray-200 hover:border-gray-300',
+						]">
+						<div class="aspect-video bg-gray-100 relative">
+							<!-- For blur option -->
+							<div v-if="option.type === 'blur'" class="absolute inset-0 flex items-center justify-center"
+								:class="option.name === 'blur-low'
+									? 'bg-[radial-gradient(circle_at_center,theme(colors.blue.200),theme(colors.blue.300),theme(colors.blue.500))]'
+									: 'bg-[radial-gradient(circle_at_center,theme(colors.blue.300),theme(colors.blue.400),theme(colors.blue.600))]'">
+								<lucide-circle-user-round class="w-8 h-8 text-gray-50" />
+							</div>
+
+							<!-- For add custom option -->
+							<div v-else-if="option.isAddButton"
+								class="absolute inset-0 bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
+								<lucide-plus class="w-8 h-8 text-gray-400" />
+							</div>
+
+							<!-- For image options -->
+							<img v-else-if="option.url" :src="option.url" :alt="option.label"
+								class="w-full h-full object-cover" @error="handleImageError" />
+
+							<!-- For none option -->
+							<div v-else class="absolute inset-0 bg-gray-50 flex items-center justify-center">
+								<lucide-circle-user-round class="w-8 h-8 text-gray-400" />
+							</div>
+
+							<!-- Selected indicator -->
+							<div v-if="selectedBackgroundOption === option.name"
+								class="absolute top-1 right-1 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
+								<lucide-check class="w-3 h-3 text-white" />
+							</div>
+
+							<!-- Delete button for custom images -->
+							<div v-if="option.isCustom" @click.stop="handleDeleteCustomImage(option.name)"
+								class="absolute top-1 right-1 w-5 h-5 bg-gray-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-gray-600">
+								<lucide-x class="w-3 h-3 text-white" />
+							</div>
 						</div>
 
-						<!-- For add custom option -->
-						<div v-else-if="option.isAddButton"
-							class="absolute inset-0 bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
-							<lucide-plus class="w-8 h-8 text-gray-400" />
+						<!-- Label -->
+						<div class="p-2 bg-white">
+							<p class="text-sm font-medium text-center text-gray-900 truncate">
+								{{ option.label }}
+							</p>
 						</div>
-
-						<!-- For image options -->
-						<img v-else-if="option.url" :src="option.url" :alt="option.label"
-							class="w-full h-full object-cover" @error="handleImageError" />
-
-						<!-- For none option -->
-						<div v-else class="absolute inset-0 bg-gray-50 flex items-center justify-center">
-							<lucide-circle-user-round class="w-8 h-8 text-gray-400" />
-						</div>
-
-						<!-- Selected indicator -->
-						<div v-if="selectedBackgroundOption === option.name"
-							class="absolute top-1 right-1 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center">
-							<lucide-check class="w-3 h-3 text-white" />
-						</div>
-
-						<!-- Delete button for custom images -->
-						<div v-if="option.isCustom" @click.stop="handleDeleteCustomImage(option.name)"
-							class="absolute top-1 right-1 w-5 h-5 bg-gray-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-gray-600">
-							<lucide-x class="w-3 h-3 text-white" />
-						</div>
-					</div>
-
-					<!-- Label -->
-					<div class="p-2 bg-white">
-						<p class="text-sm font-medium text-center text-gray-900 truncate">
-							{{ option.label }}
-						</p>
 					</div>
 				</div>
 			</div>
-		</div>
 
-		<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-			<div class="flex">
-				<div class="flex-shrink-0">
-					<lucide-alert-triangle class="h-5 w-5 text-yellow-400" />
-				</div>
-				<div class="ml-3">
-					<p class="text-sm text-yellow-800">
-						<strong>Performance Warning:</strong> Enabling background effects may slow down your computer,
-						especially on older devices.
+			<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-4">
+				<div class="flex">
+					<div class="flex-shrink-0">
+						<lucide-alert-triangle class="h-5 w-5 text-yellow-400" />
+					</div>
+					<div class="ml-3">
+						<p class="text-sm text-yellow-800">
+							<strong>Performance Warning:</strong> Enabling background effects may slow down your computer,
+							especially on older devices.
 					</p>
 				</div>
 			</div>
 		</div>
-	</div>
+		</template>
+	</SettingsLayoutBase>
 </template>
 
 <script setup>
 import { toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useBackgroundEffects } from "../composables/useBackgroundEffects";
-import { useMeetingContext } from "../composables/useMeetingContext.js";
+import { useBackgroundEffects } from "../../composables/useBackgroundEffects";
+import { useMeetingContext } from "../../composables/useMeetingContext.js";
 import {
 	addCustomBackgroundImage,
 	allBackgroundOptions,
@@ -124,8 +125,9 @@ import {
 	setBackgroundImageEnabled,
 	setBlurIntensity,
 	setSelectedBackgroundImage,
-} from "../data/backgroundEffects";
-import { selectedCameraId } from "../data/mediaPreferences.js";
+} from "../../data/backgroundEffects";
+import { selectedCameraId } from "../../data/mediaPreferences.js";
+import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
 const props = defineProps({
 	isVisible: {

@@ -3,6 +3,7 @@
  * Generates notification tones using Web Audio API
  */
 
+import { notificationChimesEnabled } from "../data/notificationPreferences.js";
 import notificationContextManager from "./notificationContext";
 
 type FrequencyPoint = [number, number]; // [frequency, timeOffset]
@@ -86,6 +87,7 @@ class AudioNotificationManager {
 	}
 
 	async playJoinNotification(userId?: string): Promise<void> {
+		if (!notificationChimesEnabled.value) return;
 		if (
 			!notificationContextManager.shouldPlayNotification("join", { userId })
 		) {
@@ -104,6 +106,7 @@ class AudioNotificationManager {
 	}
 
 	async playLeaveNotification(isLocalUser = false): Promise<void> {
+		if (!notificationChimesEnabled.value) return;
 		if (
 			!notificationContextManager.shouldPlayNotification("leave", {
 				isLocalUser,
@@ -123,6 +126,7 @@ class AudioNotificationManager {
 	}
 
 	async playJoinRequestNotification(): Promise<void> {
+		if (!notificationChimesEnabled.value) return;
 		if (!notificationContextManager.shouldPlayNotification("joinRequest")) {
 			return;
 		}
@@ -139,6 +143,7 @@ class AudioNotificationManager {
 	}
 
 	async playChatNotification(): Promise<void> {
+		if (!notificationChimesEnabled.value) return;
 		if (!notificationContextManager.shouldPlayNotification("chat")) {
 			return;
 		}
@@ -153,6 +158,7 @@ class AudioNotificationManager {
 	}
 
 	async playRaiseHandNotification(): Promise<void> {
+		if (!notificationChimesEnabled.value) return;
 		if (!notificationContextManager.shouldPlayNotification("raiseHand")) {
 			return;
 		}

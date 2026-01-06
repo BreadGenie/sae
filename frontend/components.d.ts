@@ -12,7 +12,7 @@ declare module "vue" {
 			"./src/components/AudioIndicator.vue",
 		)["default"];
 		BackgroundSettingsTab: typeof import(
-			"./src/components/BackgroundSettingsTab.vue",
+			"./src/components/settings/BackgroundSettingsTab.vue",
 		)["default"];
 		ChatNotification: typeof import(
 			"./src/components/ChatNotification.vue",
@@ -25,7 +25,7 @@ declare module "vue" {
 			"./src/components/ClickToCopyField.vue",
 		)["default"];
 		DeviceSettingsTab: typeof import(
-			"./src/components/DeviceSettingsTab.vue",
+			"./src/components/settings/DeviceSettingsTab.vue",
 		)["default"];
 		EmojiPicker: typeof import("./src/components/EmojiPicker.vue")["default"];
 		FloatingControls: typeof import(
@@ -54,6 +54,9 @@ declare module "vue" {
 		LucideHand: typeof import("~icons/lucide/hand")["default"];
 		LucideHome: typeof import("~icons/lucide/home")["default"];
 		LucideLoader: typeof import("~icons/lucide/loader")["default"];
+		LucideMessageCircle: typeof import(
+			"~icons/lucide/message-circle",
+		)["default"];
 		LucideMessageSquare: typeof import(
 			"~icons/lucide/message-square",
 		)["default"];
@@ -97,6 +100,9 @@ declare module "vue" {
 			"./src/components/MeetingPreview.vue",
 		)["default"];
 		NamePill: typeof import("./src/components/NamePill.vue")["default"];
+		NotificationSettingsTab: typeof import(
+			"./src/components/settings/NotificationSettingsTab.vue",
+		)["default"];
 		ParticipantAvatarGroup: typeof import(
 			"./src/components/ParticipantAvatarGroup.vue",
 		)["default"];
@@ -128,7 +134,10 @@ declare module "vue" {
 			"./src/components/ScreenShareSidebarParticipantTile.vue",
 		)["default"];
 		SettingsDialog: typeof import(
-			"./src/components/SettingsDialog.vue",
+			"./src/components/settings/SettingsDialog.vue",
+		)["default"];
+		SettingsLayoutBase: typeof import(
+			"./src/components/settings/SettingsLayoutBase.vue",
 		)["default"];
 		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
 		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];

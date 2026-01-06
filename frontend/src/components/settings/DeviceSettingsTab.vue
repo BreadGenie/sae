@@ -1,66 +1,67 @@
 <template>
-	<div>
-		<LoadingText
-			v-if="!cameraSelectOptions.length && !micSelectOptions.length && !speakerSelectOptions.length"
-			class="mx-auto w-max my-32"
-			:text="'Loading devices...'"
-		/>
-		<div v-else class="space-y-6 mt-6">
-			<div class="">
-				<p class="text-sm text-gray-600">
-					Select your preferred camera, microphone, and speaker
-				</p>
-			</div>
+	<SettingsLayoutBase
+		:description="'Select your preferred camera, microphone, and speaker'"
+	>
+		<template #title>
+			Devices
+		</template>
+		<template #content>
+			<LoadingText
+				v-if="!cameraSelectOptions.length && !micSelectOptions.length && !speakerSelectOptions.length"
+				class="mx-auto w-max my-32"
+				:text="'Loading devices...'"
+			/>
+			<div v-else class="space-y-6">
+				<div class="space-y-2">
+					<FormControl label="Camera" type="autocomplete" v-model="selectedCameraIdLocal"
+						:options="cameraSelectOptions" placeholder="Select camera">
+						<template #prefix>
+							<lucide-camera class="mr-2 h-4 w-4" />
+						</template>
+						<template #item-prefix="{ selected }">
+							<lucide-check v-if="selected" class="w-4 h-4" />
+						</template>
+					</FormControl>
+				</div>
 
-			<div class="space-y-2">
-				<FormControl label="Camera" type="autocomplete" v-model="selectedCameraIdLocal"
-					:options="cameraSelectOptions" placeholder="Select camera">
-					<template #prefix>
-						<lucide-camera class="mr-2 h-4 w-4" />
-					</template>
-					<template #item-prefix="{ selected }">
-						<lucide-check v-if="selected" class="w-4 h-4" />
-					</template>
-				</FormControl>
-			</div>
+				<div class="space-y-2 flex gap-4 items-center">
+					<FormControl class="w-full" label="Microphone" type="autocomplete" v-model="selectedMicIdLocal"
+						:options="micSelectOptions" placeholder="Select microphone">
+						<template #prefix>
+							<lucide-mic class="mr-2 h-4 w-4" />
+						</template>
+						<template #item-prefix="{ selected }">
+							<lucide-check v-if="selected" class="w-4 h-4" />
+						</template>
+					</FormControl>
 
-			<div class="space-y-2 flex gap-4 items-center">
-				<FormControl class="w-full" label="Microphone" type="autocomplete" v-model="selectedMicIdLocal"
-					:options="micSelectOptions" placeholder="Select microphone">
-					<template #prefix>
-						<lucide-mic class="mr-2 h-4 w-4" />
-					</template>
-					<template #item-prefix="{ selected }">
-						<lucide-check v-if="selected" class="w-4 h-4" />
-					</template>
-				</FormControl>
+					<div v-if="selectedMicIdLocal" class="w-5">
+						<AudioIndicator class="mt-2" :device-id="selectedMicIdLocal" :is-active="true" :sensitivity="2"
+							:max-height="40" />
+					</div>
+				</div>
 
-				<div v-if="selectedMicIdLocal" class="w-5">
-					<AudioIndicator class="mt-2" :device-id="selectedMicIdLocal" :is-active="true" :sensitivity="2"
-						:max-height="40" />
+				<div class="space-y-2 flex gap-2">
+					<FormControl class="w-full" label="Speaker" type="autocomplete" v-model="selectedSpeakerIdLocal"
+						:options="speakerSelectOptions" placeholder="Select speaker">
+						<template #prefix>
+							<lucide-speaker class="mr-2 h-4 w-4" />
+						</template>
+						<template #item-prefix="{ selected }">
+							<lucide-check v-if="selected" class="w-4 h-4" />
+						</template>
+					</FormControl>
+
+					<div>
+						<Button class="mt-3" v-if="selectedSpeakerIdLocal" @click="testSpeaker" :loading="isTestingAudio"
+							icon-left="volume-2">
+							Test
+						</Button>
+					</div>
 				</div>
 			</div>
-
-			<div class="space-y-2 flex gap-2">
-				<FormControl class="w-full" label="Speaker" type="autocomplete" v-model="selectedSpeakerIdLocal"
-					:options="speakerSelectOptions" placeholder="Select speaker">
-					<template #prefix>
-						<lucide-speaker class="mr-2 h-4 w-4" />
-					</template>
-					<template #item-prefix="{ selected }">
-						<lucide-check v-if="selected" class="w-4 h-4" />
-					</template>
-				</FormControl>
-
-				<div>
-					<Button class="mt-3" v-if="selectedSpeakerIdLocal" @click="testSpeaker" :loading="isTestingAudio"
-						icon-left="volume-2">
-						Test
-					</Button>
-				</div>
-			</div>
-		</div>
-	</div>
+		</template>
+	</SettingsLayoutBase>
 </template>
 
 <script setup>
@@ -76,9 +77,10 @@ import {
 	setSelectedCameraId,
 	setSelectedMicId,
 	setSelectedSpeakerId,
-} from "../data/mediaPreferences.js";
-import { deviceManager } from "../utils/media/DeviceManager.js";
-import AudioIndicator from "./AudioIndicator.vue";
+} from "../../data/mediaPreferences.js";
+import { deviceManager } from "../../utils/media/DeviceManager.js";
+import AudioIndicator from "../AudioIndicator.vue";
+import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
 const props = defineProps({
 	isDialogOpen: {
