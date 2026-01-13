@@ -26,6 +26,7 @@ class SaeMeeting(Document):
 
 		from meet.meet.doctype.sae_meeting_user.sae_meeting_user import SaeMeetingUser
 
+		allow_guest: DF.Check
 		banned_users: DF.Table[SaeMeetingUser]
 		meeting_type: DF.Literal["open", "restricted"]
 		members: DF.Table[SaeMeetingUser]
@@ -58,6 +59,7 @@ class SaeMeeting(Document):
 		if self.meeting_type == "restricted" and user != self.owner:
 			if not self.is_user_approved(user):
 				self.add_to_waiting_room(user)
+				self.save()
 				return {"status": "waiting_for_approval", "message": "Waiting for host approval"}
 
 		# Get current members list

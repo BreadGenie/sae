@@ -133,7 +133,7 @@
 </template>
 
 <script setup>
-import { Button, FormControl, createResource } from "frappe-ui";
+import { Button, FormControl, createResource, toast } from "frappe-ui";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import FloatingControls from "../components/FloatingControls.vue";
 import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
@@ -231,6 +231,7 @@ const handleJoin = async () => {
 
 			if (!result.success) {
 				console.error("Guest join failed:", result.error);
+				toast.error(result.error || "Failed to join meeting");
 				return;
 			}
 
@@ -255,6 +256,7 @@ const handleJoin = async () => {
 			emit("guest-join-complete");
 		} catch (error) {
 			console.error("Failed to join as guest:", error);
+			toast.error("Failed to join meeting. Please try again.");
 		}
 	} else {
 		emit("join-from-preview");

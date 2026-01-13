@@ -54,9 +54,6 @@ declare module "vue" {
 		LucideHand: typeof import("~icons/lucide/hand")["default"];
 		LucideHome: typeof import("~icons/lucide/home")["default"];
 		LucideLoader: typeof import("~icons/lucide/loader")["default"];
-		LucideMessageCircle: typeof import(
-			"~icons/lucide/message-circle",
-		)["default"];
 		LucideMessageSquare: typeof import(
 			"~icons/lucide/message-square",
 		)["default"];
@@ -92,6 +89,9 @@ declare module "vue" {
 		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
 		MeetingAvatar: typeof import(
 			"./src/components/MeetingAvatar.vue",
+		)["default"];
+		MeetingHostControls: typeof import(
+			"./src/components/MeetingHostControls.vue",
 		)["default"];
 		MeetingInfoDialog: typeof import(
 			"./src/components/MeetingInfoDialog.vue",

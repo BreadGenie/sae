@@ -232,6 +232,11 @@
 		:meetingTitle="meetingTitle"
 	/>
 
+	<MeetingHostControls
+		v-model="showMeetingHostControls"
+		:meetingId="meetingId"
+	/>
+
 	<SettingsDialog
 		v-model="showSettingsDialog"
 		@device-changed="$emit('device-changed', $event)"
@@ -241,7 +246,9 @@
 <script setup>
 import { Button, Dropdown } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
+import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { canScreenShare } from "../utils/device";
+import MeetingHostControls from "./MeetingHostControls.vue";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
 import ReactionPicker from "./ReactionPicker.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
@@ -295,6 +302,10 @@ const props = defineProps({
 		type: String,
 		default: "",
 	},
+	currentUser: {
+		type: Object,
+		default: null,
+	},
 	cameraPermissionGranted: {
 		type: Boolean,
 		default: false,
@@ -305,7 +316,15 @@ const props = defineProps({
 	},
 });
 
+const { getMeetingDoc, isCurrentUserHost: isHost } = useMeetingDoc();
+
+if (props.meetingId) {
+	getMeetingDoc(props.meetingId);
+}
+
 const { isPreview } = toRefs(props);
+
+const isCurrentUserHost = computed(() => isHost.value);
 
 const emit = defineEmits([
 	"toggle-chat",
@@ -334,6 +353,15 @@ const moreOptions = computed(() => [
 		},
 	},
 	{
+		icon: "shield",
+		label: "Meeting Settings",
+		condition: () => !isPreview.value && isCurrentUserHost.value,
+		onClick: () => {
+			showMeetingHostControls.value = true;
+			resetHideTimer();
+		},
+	},
+	{
 		icon: "info",
 		label: "Meeting information",
 		onClick: () => {
@@ -349,6 +377,7 @@ const isDropdownOpen = ref(false);
 const dropdownContainer = ref(null);
 const showMeetingInfoDialog = ref(false);
 const showSettingsDialog = ref(false);
+const showMeetingHostControls = ref(false);
 let hideTimeout = null;
 
 const showControls = () => {

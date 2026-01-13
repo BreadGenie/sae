@@ -117,7 +117,8 @@
 					:isReactionPickerOpen="isReactionPickerOpen"
 					@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 					:meetingId="meetingId"
-					:meetingTitle="meetingDoc?.value?.data?.title"
+					:meetingTitle="meetingTitle.value"
+					:currentUser="meetingState.currentUser.value"
 					:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
 					:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
 					@toggle-chat="toggleChat"
@@ -176,6 +177,7 @@ import ScreenShareLayout from "../components/ScreenShareLayout.vue";
 import VideoGrid from "../components/VideoGrid.vue";
 
 import { provideMeetingContext } from "../composables/useMeetingContext.js";
+import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
 import { useMeetingState } from "../composables/useMeetingState.js";
 import {
@@ -199,6 +201,11 @@ const socket = useSocket();
 
 // Lobby user notification tracking
 const notifiedLobbyUsers = ref(new Set());
+
+const { getMeetingDoc, meetingTitle, meetingOwner, isCurrentUserHost } =
+	useMeetingDoc();
+
+const meetingDoc = getMeetingDoc(meetingId.value);
 
 // Meeting logic composable
 const {
@@ -237,12 +244,6 @@ const isGuestSession = computed(
 			!!sessionStorage.getItem("guest_status")),
 );
 
-const meetingDoc = createDocumentResource({
-	doctype: "Sae Meeting",
-	name: meetingId.value,
-	auto: session.isLoggedIn,
-});
-
 // Provide meeting context for child components
 provideMeetingContext({
 	processedStream,
@@ -264,7 +265,7 @@ provide(
 		if (isGuestSession.value) {
 			return meetingId.value;
 		}
-		return meetingDoc?.doc?.title || meetingDoc?.doc?.name || meetingId.value;
+		return meetingTitle.value;
 	}),
 );
 
@@ -313,14 +314,7 @@ const isHandRaised = computed(() => {
 		: false;
 });
 
-const creatorUserId = computed(() => {
-	return meetingDoc?.doc?.owner || meetingDoc?.data?.owner || "";
-});
-
-const isCurrentUserHost = computed(() => {
-	const currentUserId = meetingState.currentUser.value?.user_id;
-	return currentUserId && currentUserId === creatorUserId.value;
-});
+const creatorUserId = computed(() => meetingOwner.value);
 
 const lobbyUsersForNotifications = computed(() => {
 	return meetingState.lobbyUsers.value

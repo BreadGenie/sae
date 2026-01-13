@@ -29,12 +29,13 @@ def _get_codec_strategy() -> str:
 
 @frappe.whitelist()
 @rate_limit(limit=10, seconds=60 * 60)
-def create(meeting_type: str = "open") -> str:
+def create(meeting_type: str = "open", allow_guest: bool = True) -> str:
 	"""Create a new meeting with specified type"""
 	meeting: SaeMeeting = frappe.get_doc(
 		{
 			"doctype": "Sae Meeting",
 			"meeting_type": meeting_type,
+			"allow_guest": allow_guest,
 		}
 	).insert()
 
@@ -408,6 +409,9 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 
 		meeting = frappe.get_doc("Sae Meeting", meeting_id)
 
+		if not meeting.allow_guest:
+			return {"success": False, "error": "Guests are not allowed in this meeting"}
+
 		# Check if reusing existing guest_id
 		if guest_id:
 			session_data = get_guest_session(guest_id)
@@ -616,4 +620,36 @@ def validate_guest_session(guest_id: str) -> dict:
 
 	return {
 		"valid": True,
+	}
+
+
+@frappe.whitelist()
+def update_meeting_settings(meeting_id: str, allow_guest: int, meeting_type: str) -> dict:
+	"""
+	Update meeting settings (host only)
+	"""
+	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+	if frappe.session.user != meeting.owner:
+		return {"success": False, "error": "Only the meeting host can update settings"}
+
+	updated_fields = {}
+	if allow_guest is not None:
+		meeting.allow_guest = bool(allow_guest)
+		updated_fields["allow_guest"] = meeting.allow_guest
+
+	if meeting_type is not None:
+		if meeting_type not in ["open", "restricted"]:
+			return {"success": False, "error": "Invalid meeting type"}
+		meeting.meeting_type = meeting_type
+		updated_fields["meeting_type"] = meeting.meeting_type
+
+	if updated_fields:
+		meeting.save()
+
+	return {
+		"success": True,
+		"meeting_id": meeting_id,
+		"updated_fields": updated_fields,
+		"message": "Meeting settings updated successfully",
 	}
