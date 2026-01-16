@@ -111,18 +111,21 @@ interface Props {
 	isCurrentUser?: boolean;
 	isHost?: boolean;
 	canControlParticipant?: boolean;
+	canPromoteToCohost?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
 	isCurrentUser: false,
 	isHost: false,
 	canControlParticipant: false,
+	canPromoteToCohost: false,
 });
 
 const emit = defineEmits<{
 	muteParticipant: [participantId: string];
 	kickParticipant: [participantId: string, ban: boolean];
 	lowerHand: [participantId: string];
+	promoteToCohost: [participantId: string];
 }>();
 
 const { stream } = useAudioStream(props.participant.user_id);
@@ -156,6 +159,12 @@ const hostOptions = computed(() => {
 			label: "Lower Hand",
 			condition: () => isHandRaised.value,
 			onClick: () => emit("lowerHand", props.participant.user_id),
+		},
+		{
+			icon: "user-plus",
+			label: "Promote to Co-host",
+			condition: () => props.canPromoteToCohost,
+			onClick: () => emit("promoteToCohost", props.participant.user_id),
 		},
 		{
 			icon: "user-x",

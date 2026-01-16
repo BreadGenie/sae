@@ -65,6 +65,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		) or (frappe.session.user, None)
 
 		is_host = meeting.owner == frappe.session.user
+		is_cohost = meeting.is_host_or_cohost(frappe.session.user) and not is_host
 
 		auth_payload = {
 			"user_id": frappe.session.user,
@@ -72,6 +73,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"user_name": user_fullname,
 			"user_avatar": user_avatar,
 			"is_host": is_host,
+			"is_cohost": is_cohost,
 			"scope": "full",
 			"exp": int(time.time()) + 3600,  # 1 hour expiry
 			"iat": int(time.time()),
@@ -152,12 +154,14 @@ def join_meeting(meeting_id: str) -> dict:
 				}
 			elif result.get("status") == "joined":
 				is_host = meeting.owner == frappe.session.user
+				is_cohost = meeting.is_host_or_cohost(frappe.session.user) and not is_host
 				return {
 					"success": True,
 					"status": "joined",
 					"meeting_id": meeting_id,
 					"message": result.get("message", "Successfully joined meeting"),
 					"is_host": is_host,
+					"is_cohost": is_cohost,
 				}
 	else:
 		return {"success": False, "error": "Access denied"}
@@ -213,6 +217,10 @@ def approve_join_request(meeting_id: str, user_id: str) -> dict:
 	"""Approve a user's join request from waiting room"""
 	try:
 		meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+		if not meeting.is_host_or_cohost(frappe.session.user):
+			return {"success": False, "error": "Access denied"}
+
 		meeting.approve_user(user_id)
 
 		return {
@@ -230,6 +238,10 @@ def approve_join_request(meeting_id: str, user_id: str) -> dict:
 def approve_all_join_requests(meeting_id: str) -> dict:
 	"""Approve all users' join requests from waiting room"""
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+	if not meeting.is_host_or_cohost(frappe.session.user):
+		return {"success": False, "error": "Access denied"}
+
 	meeting.approve_all_users()
 
 	return {
@@ -244,6 +256,10 @@ def reject_join_request(meeting_id: str, user_id: str) -> dict:
 	"""Reject a user's join request from waiting room"""
 	try:
 		meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+		if not meeting.is_host_or_cohost(frappe.session.user):
+			return {"success": False, "error": "Access denied"}
+
 		meeting.reject_user(user_id)
 
 		# For guests, publish realtime event in a guest-specific room
@@ -272,7 +288,7 @@ def get_waiting_room(meeting_id: str) -> dict:
 	try:
 		meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
-		if frappe.session.user != meeting.owner:
+		if not meeting.is_host_or_cohost(frappe.session.user):
 			return {"success": False, "error": "Access denied"}
 
 		waiting_users = meeting.get_waiting_room()
@@ -319,6 +335,7 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		) or (frappe.session.user, None)
 
 		is_host = meeting.owner == frappe.session.user
+		is_cohost = meeting.is_host_or_cohost(frappe.session.user) and not is_host
 
 		auth_payload = {
 			"user_id": frappe.session.user,
@@ -326,6 +343,7 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 			"user_name": user_fullname,
 			"user_avatar": user_avatar,
 			"is_host": is_host,
+			"is_cohost": is_cohost,
 			"exp": int(time.time()) + 3600,  # 1 hour expiry
 			"iat": int(time.time()),
 		}
@@ -624,12 +642,12 @@ def validate_guest_session(guest_id: str) -> dict:
 @frappe.whitelist()
 def update_meeting_settings(meeting_id: str, allow_guest: int, meeting_type: str) -> dict:
 	"""
-	Update meeting settings (host only)
+	Update meeting settings (host or co-host only)
 	"""
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
-	if frappe.session.user != meeting.owner:
-		return {"success": False, "error": "Only the meeting host can update settings"}
+	if not meeting.is_host_or_cohost(frappe.session.user):
+		return {"success": False, "error": "Only the meeting host or co-host can update settings"}
 
 	updated_fields = {}
 	if allow_guest is not None:
@@ -651,6 +669,15 @@ def update_meeting_settings(meeting_id: str, allow_guest: int, meeting_type: str
 		"updated_fields": updated_fields,
 		"message": "Meeting settings updated successfully",
 	}
+
+
+@frappe.whitelist()
+def promote_to_cohost(meeting_id: str, user_id: str) -> dict:
+	"""
+	Promote a user to co-host during an active meeting (host only)
+	"""
+	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+	return meeting.promote_to_cohost(frappe.session.user, user_id)
 
 
 @frappe.whitelist(allow_guest=True)

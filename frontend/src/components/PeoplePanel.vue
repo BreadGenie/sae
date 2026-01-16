@@ -58,6 +58,7 @@
 							@muteParticipant="handleMuteParticipant"
 							@kickParticipant="handleKickParticipant"
 							@lowerHand="handleLowerHand"
+							@promoteToCohost="handlePromoteToCohost"
 						/>
 					</div>
 
@@ -117,6 +118,7 @@ interface Props {
 	isMicOn: boolean;
 	isCameraOn: boolean;
 	creatorUserId: string;
+	coHosts: string[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -126,6 +128,7 @@ const props = withDefaults(defineProps<Props>(), {
 	isMicOn: false,
 	isCameraOn: false,
 	creatorUserId: "",
+	coHosts: () => [],
 });
 
 const emit = defineEmits<{
@@ -133,6 +136,7 @@ const emit = defineEmits<{
 	muteParticipant: [participantId: string];
 	kickParticipant: [participantId: string, ban: boolean];
 	lowerHand: [participantId: string];
+	promoteToCohost: [participantId: string];
 	approveLobbyUser: [participantId: string];
 	approveAllLobbyUsers: [participantIds: string[]];
 	rejectLobbyUser: [participantId: string];
@@ -141,6 +145,13 @@ const emit = defineEmits<{
 const searchQuery = ref<string>("");
 
 const isCreator = computed(() => {
+	return (
+		props.currentUser.user_id === props.creatorUserId ||
+		props.coHosts.includes(props.currentUser.user_id || "")
+	);
+});
+
+const isHost = computed(() => {
 	return props.currentUser.user_id === props.creatorUserId;
 });
 
@@ -224,6 +235,7 @@ const allVisibleParticipants = computed(() => {
 			isCurrentUser: true,
 			isHost: isCreator.value,
 			canControlParticipant: false,
+			canPromoteToCohost: false,
 		});
 	}
 
@@ -232,8 +244,15 @@ const allVisibleParticipants = computed(() => {
 			user_id: participant.user_id,
 			participantData: participant,
 			isCurrentUser: false,
-			isHost: participant.user_id === props.creatorUserId,
-			canControlParticipant: isCreator.value,
+			isHost:
+				participant.user_id === props.creatorUserId ||
+				props.coHosts.includes(participant.user_id),
+			canControlParticipant:
+				isCreator.value && participant.user_id !== props.creatorUserId,
+			canPromoteToCohost:
+				isHost.value &&
+				!participant.is_guest &&
+				!props.coHosts.includes(participant.user_id),
 			is_guest: participant.is_guest || false,
 		});
 	}
@@ -266,6 +285,10 @@ const handleKickParticipant = (participantId: string, ban: boolean) => {
 
 const handleLowerHand = (participantId: string) => {
 	emit("lowerHand", participantId);
+};
+
+const handlePromoteToCohost = (participantId: string) => {
+	emit("promoteToCohost", participantId);
 };
 
 const handleApproveLobbyUser = (participantId: string) => {

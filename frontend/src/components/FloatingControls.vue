@@ -316,7 +316,11 @@ const props = defineProps({
 	},
 });
 
-const { getMeetingDoc, isCurrentUserHost: isHost } = useMeetingDoc();
+const {
+	getMeetingDoc,
+	isCurrentUserHost: isHost,
+	isCurrentUserCohost: isCohost,
+} = useMeetingDoc();
 
 if (props.meetingId) {
 	getMeetingDoc(props.meetingId);
@@ -324,7 +328,7 @@ if (props.meetingId) {
 
 const { isPreview } = toRefs(props);
 
-const isCurrentUserHost = computed(() => isHost.value);
+const isCurrentUserHost = computed(() => isHost.value || isCohost.value);
 
 const emit = defineEmits([
 	"toggle-chat",

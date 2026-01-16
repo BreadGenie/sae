@@ -741,13 +741,13 @@ export class SocketHandlerManager {
 				return;
 			}
 
-			if (!socket.isHost) {
+			if (!socket.isHost && !socket.isCohost) {
 				socket.emit('sfu_error', {
-					error: 'Only host can control participants',
+					error: 'Only host or co-host can control participants',
 					timestamp: new Date().toISOString(),
 				});
 				loggers.socketHandler.warn(
-					'Non-host %s attempted host control in room %s',
+					'Non-host/co-host %s attempted host control in room %s',
 					socket.participantId,
 					roomId,
 				);

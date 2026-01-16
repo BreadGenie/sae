@@ -8,6 +8,7 @@ interface MeetingDocument {
 	owner?: string;
 	title?: string;
 	name?: string;
+	co_hosts?: { user: string }[];
 }
 
 interface DocumentResource {
@@ -27,6 +28,8 @@ interface UseMeetingDocReturn {
 	isCurrentUserHost: ComputedRef<boolean>;
 	meetingType: ComputedRef<string>;
 	allowGuest: ComputedRef<boolean>;
+	meetingCoHosts: ComputedRef<string[]>;
+	isCurrentUserCohost: ComputedRef<boolean>;
 }
 
 const meetingDoc: Ref<DocumentResource | null> = ref(null);
@@ -74,6 +77,18 @@ export function useMeetingDoc(): UseMeetingDocReturn {
 		return Boolean(currentUserId && ownerId && currentUserId === ownerId);
 	});
 
+	const meetingCoHosts = computed((): string[] => {
+		const doc = meetingDoc.value?.doc;
+		if (!doc?.co_hosts) return [];
+		return doc.co_hosts.map((row: { user: string }) => row.user);
+	});
+
+	const isCurrentUserCohost = computed((): boolean => {
+		const currentUserId = session.user?.sessionUser;
+		const coHosts = meetingCoHosts.value;
+		return Boolean(currentUserId && coHosts && coHosts.includes(currentUserId));
+	});
+
 	const meetingType = computed((): string => {
 		return meetingDoc.value?.doc?.meeting_type || "open";
 	});
@@ -89,6 +104,8 @@ export function useMeetingDoc(): UseMeetingDocReturn {
 		meetingTitle,
 		meetingOwner,
 		isCurrentUserHost,
+		meetingCoHosts,
+		isCurrentUserCohost,
 		meetingType,
 		allowGuest,
 	};

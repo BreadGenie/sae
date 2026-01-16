@@ -92,10 +92,12 @@
 								:isMicOn="meetingState.isMicOn.value"
 								:isCameraOn="meetingState.isCameraOn.value"
 								:creatorUserId="creatorUserId"
+								:coHosts="meetingCoHosts"
 								@close="togglePeople"
 								@muteParticipant="handleMuteParticipant"
 								@kickParticipant="handleKickParticipant"
 								@lowerHand="handleLowerHand"
+								@promoteToCohost="handlePromoteToCohost"
 								@approveLobbyUser="handleApproveLobbyUser"
 								@approveAllLobbyUsers="handleApproveAllLobbyUsers"
 								@rejectLobbyUser="handleRejectLobbyUser"
@@ -207,8 +209,13 @@ const socket = useSocket();
 // Lobby user notification tracking
 const notifiedLobbyUsers = ref(new Set());
 
-const { getMeetingDoc, meetingTitle, meetingOwner, isCurrentUserHost } =
-	useMeetingDoc();
+const {
+	getMeetingDoc,
+	meetingTitle,
+	meetingOwner,
+	isCurrentUserHost,
+	meetingCoHosts,
+} = useMeetingDoc();
 
 const meetingDoc = getMeetingDoc(meetingId.value);
 
@@ -507,6 +514,30 @@ const handleLowerHand = async (participantId) => {
 		}
 	} catch (error) {
 		console.error("Failed to lower hand for participant:", error);
+	}
+};
+
+const handlePromoteToCohost = async (participantId) => {
+	try {
+		console.log("Promoting participant to co-host:", participantId);
+
+		const response = await frappeRequest({
+			url: "meet.api.meeting.promote_to_cohost",
+			params: {
+				meeting_id: route.params.meetingId,
+				user_id: participantId,
+			},
+		});
+
+		if (response.success) {
+			toast.success("User promoted to co-host");
+			await meetingDoc.reload();
+		} else {
+			toast.error(response.error || "Failed to promote user to co-host");
+		}
+	} catch (error) {
+		console.error("Failed to promote participant to co-host:", error);
+		toast.error("Failed to promote user to co-host");
 	}
 };
 

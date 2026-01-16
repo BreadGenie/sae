@@ -75,6 +75,7 @@ export class AuthManager {
 			socket.userName = decoded.user_name;
 			socket.meetingId = decoded.meeting_id;
 			socket.isHost = decoded.is_host || false;
+			socket.isCohost = decoded.is_cohost || false;
 			socket.scope = decoded.scope || 'presence-preview';
 			socket.currentToken = token;
 			socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;

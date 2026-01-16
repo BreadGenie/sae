@@ -9,6 +9,7 @@
   "meeting_type",
   "allow_guest",
   "members",
+  "co_hosts",
   "waiting_room",
   "banned_users",
   "column_break_1"
@@ -39,6 +40,12 @@
    "label": "Members",
    "options": "Sae Meeting User",
    "read_only": 1
+  },
+  {
+   "fieldname": "co_hosts",
+   "fieldtype": "Table",
+   "label": "Co-hosts",
+   "options": "Sae Meeting User"
   },
   {
    "fieldname": "waiting_room",

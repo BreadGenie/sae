@@ -29,6 +29,7 @@ class SaeMeeting(Document):
 
 		allow_guest: DF.Check
 		banned_users: DF.Table[SaeMeetingUser]
+		co_hosts: DF.Table[SaeMeetingUser]
 		meeting_type: DF.Literal["open", "restricted"]
 		members: DF.Table[SaeMeetingUser]
 		waiting_room: DF.Table[SaeMeetingUser]
@@ -47,6 +48,7 @@ class SaeMeeting(Document):
 	def validate(self):
 		"""Ensure unique users in all child tables"""
 		self.members = unique_users(self.members) if self.members else []
+		self.co_hosts = unique_users(self.co_hosts) if self.co_hosts else []
 		self.waiting_room = unique_users(self.waiting_room) if self.waiting_room else []
 		self.banned_users = unique_users(self.banned_users) if self.banned_users else []
 
@@ -105,6 +107,10 @@ class SaeMeeting(Document):
 	def get_members(self):
 		"""Get list of current members"""
 		return [row.user for row in self.members] if self.members else []
+
+	def get_co_hosts(self):
+		"""Get list of current co-hosts"""
+		return [row.user for row in self.co_hosts] if self.co_hosts else []
 
 	def can_join(self, user=None):
 		"""
@@ -321,6 +327,42 @@ class SaeMeeting(Document):
 
 		members = self.get_members()
 		return user in members
+
+	def is_host_or_cohost(self, user: str) -> bool:
+		"""Check if user is the host or a co-host"""
+		if user == self.owner:
+			return True
+
+		co_hosts = self.get_co_hosts()
+		return user in co_hosts
+
+	def validate_can_promote_to_cohost(self, user: str, target_user: str) -> None:
+		"""Validate that a user can promote another user to co-host"""
+		if user != self.owner:
+			frappe.throw(_("Only the meeting host can promote users to co-host"))
+
+		if target_user.startswith("guest_"):
+			frappe.throw(_("Guests cannot be promoted to co-host"))
+
+		if self.is_host_or_cohost(target_user):
+			frappe.throw(_("User is already a host or co-host"))
+
+		if target_user not in self.get_members():
+			frappe.throw(_("User is not currently in the meeting"))
+
+	def promote_to_cohost(self, user: str, target_user: str) -> dict:
+		"""Promote a user to co-host during an active meeting (host only)"""
+		self.validate_can_promote_to_cohost(user, target_user)
+
+		self.append("co_hosts", {"user": target_user})
+		self.save()
+
+		return {
+			"success": True,
+			"meeting_id": self.name,
+			"user_id": target_user,
+			"message": _("User promoted to co-host successfully"),
+		}
 
 	def is_user_banned(self, user):
 		"""Check if user is banned from this meeting"""

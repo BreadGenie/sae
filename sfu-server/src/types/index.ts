@@ -429,6 +429,7 @@ export interface JWTPayload {
 	meeting_id: string;
 	user_avatar?: string;
 	is_host: boolean;
+	is_cohost?: boolean;
 	scope?: 'presence-preview' | 'full';
 	session_id?: string;
 	exp?: number;
@@ -457,6 +458,7 @@ declare module 'socket.io' {
 		userName: string;
 		meetingId: string;
 		isHost: boolean;
+		isCohost: boolean;
 		roomId?: string;
 		participantId?: string;
 		currentToken?: string;
