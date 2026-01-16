@@ -174,17 +174,20 @@ class SaeMeeting(Document):
 			user_name = user
 			user_image = None
 
-		frappe.publish_realtime(
-			"meeting_join_request",
-			user=self.owner,
-			message={
-				"meeting": self.name,
-				"user": user,
-				"user_name": user_name,
-				"user_image": user_image,
-				"waiting_count": len(waiting_users) + 1,
-			},
-		)
+		authorized_users = [self.owner, *self.get_co_hosts()]
+
+		for authorized_user in authorized_users:
+			frappe.publish_realtime(
+				"meeting_join_request",
+				user=authorized_user,
+				message={
+					"meeting": self.name,
+					"user": user,
+					"user_name": user_name,
+					"user_image": user_image,
+					"waiting_count": len(waiting_users) + 1,
+				},
+			)
 
 	def add_guest_to_waiting_room(self, guest_id: str):
 		self.validate_guest_id(guest_id)
@@ -204,17 +207,20 @@ class SaeMeeting(Document):
 			else:
 				user_name = guest_id
 
-			frappe.publish_realtime(
-				"meeting_join_request",
-				user=self.owner,
-				message={
-					"meeting": self.name,
-					"user": guest_id,
-					"user_name": user_name,
-					"user_image": None,
-					"waiting_count": len(waiting_users) + 1,
-				},
-			)
+			authorized_users = [self.owner, *self.get_co_hosts()]
+
+			for authorized_user in authorized_users:
+				frappe.publish_realtime(
+					"meeting_join_request",
+					user=authorized_user,
+					message={
+						"meeting": self.name,
+						"user": guest_id,
+						"user_name": user_name,
+						"user_image": None,
+						"waiting_count": len(waiting_users) + 1,
+					},
+				)
 
 	def remove_from_waiting_room(self, user):
 		"""Remove user from waiting room"""
@@ -222,8 +228,8 @@ class SaeMeeting(Document):
 
 	def approve_user(self, user):
 		"""Approve a user from waiting room to join the meeting"""
-		if frappe.session.user != self.owner:
-			frappe.throw("Only the meeting creator can approve join requests")
+		if not self.is_host_or_cohost(frappe.session.user):
+			frappe.throw("Only hosts and co-hosts can approve join requests")
 
 		waiting_users = self.get_waiting_room()
 		if user not in waiting_users:
@@ -263,6 +269,15 @@ class SaeMeeting(Document):
 				)
 
 		updated_waiting_users = self.get_waiting_room()
+
+		authorized_users = [self.owner, *self.get_co_hosts()]
+		for authorized_user in authorized_users:
+			frappe.publish_realtime(
+				"meeting_user_approved",
+				user=authorized_user,
+				message={"meeting": self.name, "user": user, "approved_by": frappe.session.user},
+			)
+
 		frappe.publish_realtime(
 			"meeting_waiting_room_updated",
 			doctype=self.doctype,
@@ -273,8 +288,8 @@ class SaeMeeting(Document):
 		return {"status": "joined", "message": "Successfully joined the meeting"}
 
 	def approve_all_users(self):
-		if frappe.session.user != self.owner:
-			frappe.throw(_("Only the meeting creator can approve join requests"))
+		if not self.is_host_or_cohost(frappe.session.user):
+			frappe.throw(_("Only hosts and co-hosts can approve join requests"))
 
 		users = self.get_waiting_room()
 		for user in users:
@@ -287,8 +302,8 @@ class SaeMeeting(Document):
 		if not rejected_by:
 			rejected_by = frappe.session.user
 
-		if rejected_by != self.owner:
-			frappe.throw("Only the meeting creator can reject join requests")
+		if not self.is_host_or_cohost(rejected_by):
+			frappe.throw("Only hosts and co-hosts can reject join requests")
 
 		waiting_users = self.get_waiting_room()
 		if user not in waiting_users:
@@ -310,6 +325,14 @@ class SaeMeeting(Document):
 			user=user,
 			message={"meeting": self.name, "user": user, "rejected_by": rejected_by},
 		)
+
+		authorized_users = [self.owner, *self.get_co_hosts()]
+		for authorized_user in authorized_users:
+			frappe.publish_realtime(
+				"meeting_user_rejected",
+				user=authorized_user,
+				message={"meeting": self.name, "user": user, "rejected_by": rejected_by},
+			)
 
 		updated_waiting_users = self.get_waiting_room()
 		frappe.publish_realtime(

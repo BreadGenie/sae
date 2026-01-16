@@ -1333,6 +1333,24 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			}
 		});
 
+		socket.on("meeting_user_approved", (data) => {
+			if (data.meeting === meetingId) {
+				meetingState.lobbyUsers.value = (
+					meetingState.lobbyUsers.value || []
+				).filter((u) => u.userId !== data.user);
+				console.log(`User ${data.user} was approved by ${data.approved_by}`);
+			}
+		});
+
+		socket.on("meeting_user_rejected", (data) => {
+			if (data.meeting === meetingId) {
+				meetingState.lobbyUsers.value = (
+					meetingState.lobbyUsers.value || []
+				).filter((u) => u.userId !== data.user);
+				console.log(`User ${data.user} was rejected by ${data.rejected_by}`);
+			}
+		});
+
 		realtimeListenersSetup.value = true;
 	};
 
