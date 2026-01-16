@@ -229,7 +229,7 @@ class SaeMeeting(Document):
 	def approve_user(self, user):
 		"""Approve a user from waiting room to join the meeting"""
 		if not self.is_host_or_cohost(frappe.session.user):
-			frappe.throw("Only hosts and co-hosts can approve join requests")
+			frappe.throw(_("Only hosts and co-hosts can approve join requests"))
 
 		waiting_users = self.get_waiting_room()
 		if user not in waiting_users:
@@ -303,7 +303,7 @@ class SaeMeeting(Document):
 			rejected_by = frappe.session.user
 
 		if not self.is_host_or_cohost(rejected_by):
-			frappe.throw("Only hosts and co-hosts can reject join requests")
+			frappe.throw(_("Only hosts and co-hosts can reject join requests"))
 
 		waiting_users = self.get_waiting_room()
 		if user not in waiting_users:
