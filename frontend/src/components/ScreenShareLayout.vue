@@ -1,10 +1,11 @@
 <template>
 	<div
 		ref="screenShareContainer"
-		class="flex-1 flex min-h-0 overflow-hidden mb-2"
+		class="flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden mb-2"
 	>
+		<!-- Screen share video - full width on mobile, flex-1 on larger screens -->
 		<div
-			class="flex-1 relative bg-black rounded-lg overflow-hidden flex items-center justify-center"
+			class="relative bg-black rounded-lg overflow-hidden flex items-center justify-center flex-1 sm:flex-1"
 		>
 			<template v-for="(share, idx) in displayScreenShares" :key="share.consumerId">
 				<!-- Render only the first (focused) screen share -->
@@ -29,7 +30,11 @@
 			</div>
 		</div>
 
-		<ScreenShareSidebar class="ml-3" @open-people-panel="emit('openPeoplePanel')" />
+		<!-- Sidebar - below on mobile (mt-3), right on larger screens (ml-3) -->
+		<ScreenShareSidebar 
+			class="mt-3 sm:mt-0 sm:ml-3" 
+			@open-people-panel="emit('openPeoplePanel')" 
+		/>
 
 		<FloatingReactions
 			:reactions="allReactions"

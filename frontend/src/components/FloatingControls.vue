@@ -3,9 +3,15 @@
 		enter-active-class="transition-all duration-300 ease-out"
 		enter-from-class="opacity-0 transform translate-y-4"
 		enter-to-class="opacity-100 transform translate-y-0"
-		leave-active-class="transition-all duration-300 ease-in"
+		:leave-active-class="
+			instantHide
+				? 'duration-0'
+				: 'transition-all duration-300 ease-in'
+		"
 		leave-from-class="opacity-100 transform translate-y-0"
-		leave-to-class="opacity-0 transform translate-y-4"
+		:leave-to-class="
+			instantHide ? 'opacity-0' : 'opacity-0 transform translate-y-4'
+		"
 	>
 		<div
 			v-show="isVisible"
@@ -76,7 +82,9 @@
 				<!-- Reactions -->
 				<ReactionPicker
 					:is-open="isReactionPickerOpen"
+					:is-hand-raised="isHandRaised"
 					@select="handleReactionSelect"
+					@toggle-raise-hand="$emit('toggle-raise-hand')"
 					@update:open="updateReactionPickerOpen"
 				>
 					<template #trigger>
@@ -89,7 +97,7 @@
 							:class="{
 								'!bg-gray-800 hover:!bg-gray-800': isReactionPickerOpen,
 							}"
-							title="Reactions"
+							title="Reactions & Raise Hand"
 						>
 							<template #icon>
 								<lucide-smile class="w-5 h-5 text-white" />
@@ -99,25 +107,10 @@
 				</ReactionPicker>
 
 				<!-- Raise Hand -->
-				<Button
-					v-if="!isPreview"
-					@click="$emit('toggle-raise-hand')"
-					variant="solid"
-					:theme="isHandRaised ? 'orange' : 'gray'"
-					size="2xl"
-					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
-					:class="{
-						'!bg-[#e54e17] hover:!bg-[#e54e17]': isHandRaised,
-					}"
-					:title="isHandRaised ? 'Lower Hand' : 'Raise Hand'"
-				>
-					<template #icon>
-						<lucide-hand class="w-5 h-5 text-white" />
-					</template>
-				</Button>
+
 
 				<!-- Chat -->
-				<div v-if="!isPreview" class="relative">
+				<div v-if="!isPreview && !isMobile" class="relative">
 					<Button
 						@click="$emit('toggle-chat')"
 						variant="solid"
@@ -146,7 +139,7 @@
 				</div>
 
 				<!-- People -->
-				<div class="relative" v-if="!isPreview">
+				<div class="relative" v-if="!isPreview && !isMobile">
 					<Button
 						@click="$emit('toggle-people')"
 						variant="solid"
@@ -245,6 +238,7 @@
 import { Button, Dropdown } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
+import { useResponsiveGrid } from "../composables/useResponsiveGrid";
 import { canScreenShare } from "../utils/device";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
 import ReactionPicker from "./ReactionPicker.vue";
@@ -334,6 +328,9 @@ const emit = defineEmits([
 	"update:isReactionPickerOpen",
 ]);
 
+const { windowWidth } = useResponsiveGrid();
+const isMobile = computed(() => windowWidth.value < 768);
+
 const moreOptions = computed(() => [
 	{
 		icon: "settings",
@@ -355,9 +352,38 @@ const moreOptions = computed(() => [
 			resetHideTimer();
 		},
 	},
+	...(isMobile.value
+		? [
+				{
+					icon: "users",
+					label: "People",
+					onClick: () => {
+						emit("toggle-people");
+						instantHide.value = true;
+						isVisible.value = false;
+						setTimeout(() => {
+							instantHide.value = false;
+						}, 300);
+					},
+				},
+				{
+					icon: "message-square",
+					label: "Chat",
+					onClick: () => {
+						emit("toggle-chat");
+						instantHide.value = true;
+						isVisible.value = false;
+						setTimeout(() => {
+							instantHide.value = false;
+						}, 300);
+					},
+				},
+			]
+		: []),
 ]);
 
 const isVisible = ref(true);
+const instantHide = ref(false);
 const isHovering = ref(false);
 const isDropdownOpen = ref(false);
 const dropdownContainer = ref(null);

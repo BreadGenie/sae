@@ -27,22 +27,23 @@ const props = defineProps({
 	tiles: { type: Number, default: 1 }, // number of visible tiles in grid
 });
 
-// Dynamic sizing tiers based on total visible tiles (reduced a notch)
-// <=4 (1x1,2x2)       : large (slightly reduced)
-// 5-9  (up to 3x3)    : medium
-// 10-16 (4x4 max)     : small
-// >16 (overflow mode) : extra small
+// Dynamic sizing tiers based on total visible tiles
+// Uses responsive classes that scale down on smaller screens
+// Base sizes are for large screens, with smaller sizes for mobile/tablet
 const sizeClasses = computed(() => {
-	// Reduced sizes: make placeholders smaller for a denser layout
-	if (props.tiles <= 4) return "w-28 h-28";
-	if (props.tiles <= 9) return "w-20 h-20";
-	if (props.tiles <= 16) return "w-16 h-16";
-	return "w-12 h-12";
+	// For 1-4 tiles: larger avatars, responsive down on mobile
+	if (props.tiles <= 4) return "w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28";
+	// For 5-9 tiles: medium avatars
+	if (props.tiles <= 9) return "w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20";
+	// For 10-16 tiles: smaller avatars
+	if (props.tiles <= 16) return "w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16";
+	// For overflow (>16 tiles): extra small
+	return "w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12";
 });
 
 const textClasses = computed(() => {
-	if (props.tiles <= 9) return "text-3xl tracking-wide";
-	if (props.tiles <= 16) return "text-xl";
+	if (props.tiles <= 9) return "text-xl sm:text-2xl md:text-3xl tracking-wide";
+	if (props.tiles <= 16) return "text-lg sm:text-xl";
 	return "text-sm";
 });
 </script>

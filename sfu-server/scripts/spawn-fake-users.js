@@ -114,6 +114,7 @@ function makeToken(userId, index) {
 			user_id: userId,
 			meeting_id: meetingId,
 			user_name: `Fake User ${index}`,
+			scope: "full", // Required to be treated as full participant
 			iat: now,
 			exp: now + 3600,
 		},

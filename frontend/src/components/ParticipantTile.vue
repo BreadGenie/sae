@@ -31,7 +31,7 @@
 		<div
 			v-if="currentReaction"
 			class="absolute top-1 px-2 py-1 rounded-md text-xl pointer-events-none animate-pop"
-			:class="{'left-2': !isHandRaised, 'left-10': isHandRaised && !isLocal }"
+			:class="{ 'left-2': !isHandRaised, 'left-10': isHandRaised }"
 			:aria-label="`Reaction ${currentReaction.emoji} from ${participant.user_name || participant.user_id}`"
 			role="img"
 		>
@@ -40,7 +40,7 @@
 
 		<!-- Raised Hand -->
 		<div
-			v-if="isHandRaised && !isLocal"
+			v-if="isHandRaised"
 			class="absolute top-2 left-2 px-2 py-1 rounded-full !bg-[#e54e17] text-white pointer-events-none flex items-center justify-center"
 			:aria-label="`${participant.user_name || participant.user_id} has raised their hand`"
 		>

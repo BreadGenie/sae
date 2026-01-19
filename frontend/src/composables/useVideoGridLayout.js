@@ -1,15 +1,40 @@
 import { computed } from "vue";
+import { useResponsiveGrid } from "./useResponsiveGrid";
 
 /**
  * Composable for managing video grid layout logic
  * Handles participant display, grid sizing, and overflow grouping
+ *
+ * Layout rules:
+ * - Maximum 4 rows at any screen size
+ * - Columns adapt to screen size (2 mobile, 3 tablet, 4 desktop)
+ * - Overflow participants go to grouped tile
  */
 export function useVideoGridLayout(
 	participants,
 	activeSpeakerIds,
 	meetingState,
 ) {
-	// Logic: cap visible tiles at 16 (4x4); extra participants are grouped
+	const { maxColumns } = useResponsiveGrid();
+
+	const getOptimalColumns = (tileCount, maxCols) => {
+		if (tileCount <= 1) return Math.min(1, maxCols);
+		if (tileCount === 2) return Math.min(2, maxCols);
+		if (tileCount <= 4) return Math.min(2, maxCols); // 2x2
+		if (tileCount <= 6) return Math.min(3, maxCols); // up to 2x3
+		if (tileCount <= 9) return Math.min(3, maxCols); // up to 3x3
+		if (tileCount <= 12) return Math.min(4, maxCols); // up to 3x4
+		return Math.min(4, maxCols); // 4x4 max
+	};
+
+	const maxVisibleTiles = computed(() => {
+		const cols = maxColumns.value;
+		const maxRows = 4;
+		return cols * maxRows; // e.g., 2 cols = 8 tiles, 3 cols = 12, 4 cols = 16
+	});
+
+	// cap visible tiles based on screen size (cols × 4 rows)
+	// extra participants are grouped
 	const displayParticipants = computed(() => {
 		const src =
 			participants && participants.value !== undefined
@@ -25,19 +50,21 @@ export function useVideoGridLayout(
 			remotes = [];
 		}
 
-		const total = remotes.length + 1;
-		const threshold = 16;
+		const total = remotes.length + 1; // +1 for local user
+		const threshold = maxVisibleTiles.value;
 
 		// Get active speaker IDs
 		const activeSpeakers = activeSpeakerIds?.value || [];
 		const activeSpeakerSet = new Set(activeSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
 
+		// If within threshold, show all
 		if (total <= threshold) {
 			return { list: remotes, hidden: [], extra: 0 };
 		}
 
-		const remoteCapacity = 14;
+		// 1 for local user and 1 for grouped tile
+		const remoteCapacity = threshold - 2;
 
 		// Separate participants by video state and active speaker status
 		const videoOnActiveSpeakers = remotes.filter(
@@ -119,21 +146,14 @@ export function useVideoGridLayout(
 		return { list: visibleRemotes, hidden, extra: hidden.length };
 	});
 
-	// Calculate grid columns based on total visible tiles
+	// Calculate grid columns based on total visible tiles and screen size
 	const gridClass = computed(() => {
 		const totalVisibleTiles =
 			1 + // local
 			displayParticipants.value.list.length +
 			(displayParticipants.value.extra > 0 ? 1 : 0); // grouped tile if present
 
-		let cols;
-		if (totalVisibleTiles <= 1) cols = 1;
-		else if (totalVisibleTiles === 2) cols = 2;
-		else if (totalVisibleTiles <= 4)
-			cols = 2; // 2x2
-		else if (totalVisibleTiles <= 9)
-			cols = 3; // up to 3x3
-		else cols = 4; // 4 columns for 10+ (capped at 4x4 with grouping)
+		const cols = getOptimalColumns(totalVisibleTiles, maxColumns.value);
 
 		return `grid-cols-${cols}`;
 	});
@@ -145,12 +165,7 @@ export function useVideoGridLayout(
 			displayParticipants.value.list.length +
 			(displayParticipants.value.extra > 0 ? 1 : 0);
 
-		let cols;
-		if (totalVisibleTiles <= 1) cols = 1;
-		else if (totalVisibleTiles === 2) cols = 2;
-		else if (totalVisibleTiles <= 4) cols = 2;
-		else if (totalVisibleTiles <= 9) cols = 3;
-		else cols = 4;
+		const cols = getOptimalColumns(totalVisibleTiles, maxColumns.value);
 
 		return {
 			"grid-auto-rows": "1fr",
@@ -190,5 +205,6 @@ export function useVideoGridLayout(
 		gridStyle,
 		visibleTileCount,
 		hiddenParticipantsTooltip,
+		maxVisibleTiles,
 	};
 }

@@ -36,7 +36,7 @@
 		<template v-else>
 			<div class="flex flex-1 min-h-0">
 				<div
-					class="grid flex-1 min-h-0 transition-[grid-template-columns] duration-300 ease-out"
+					class="grid flex-1 min-h-0 transition-[grid-template-columns] duration-300 ease-out relative"
 					:style="{
 						'--panel-width': panelWidth,
 						gridTemplateColumns: 'minmax(0, 1fr) var(--panel-width)',
@@ -65,8 +65,13 @@
 					>
 						<div
 							v-if="activePanel"
-							class="h-full overflow-hidden relative"
-							:style="{ width: '24rem' }"
+							class="h-full overflow-hidden z-50 md:z-auto bg-black/30 backdrop-blur-sm md:bg-transparent"
+							:class="{
+								'absolute inset-0 w-full': isMobile,
+								relative: !isMobile,
+								'md:relative': true,
+							}"
+							:style="{ width: isMobile ? '100%' : '24rem' }"
 						>
 							<!-- Chat Panel -->
 							<ChatPanel
@@ -187,6 +192,7 @@ import { provideMeetingContext } from "../composables/useMeetingContext.js";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
 import { useMeetingState } from "../composables/useMeetingState.js";
+import { useResponsiveGrid } from "../composables/useResponsiveGrid.js";
 import {
 	selectedCameraId,
 	selectedMicId,
@@ -314,10 +320,19 @@ const showPreview = computed(() => {
 const activePanel = computed(() => {
 	if (meetingState.isChatOpen.value) return "chat";
 	if (meetingState.isPeopleOpen.value) return "people";
+	if (meetingState.isPeopleOpen.value) return "people";
 	return null;
 });
 
-const panelWidth = computed(() => (activePanel.value ? "24rem" : "0rem"));
+const { windowWidth } = useResponsiveGrid();
+const isMobile = computed(() => windowWidth.value < 768);
+
+const panelWidth = computed(() => {
+	if (!activePanel.value) return "0rem";
+	// On mobile, panel overlays, so it doesn't take up grid space
+	if (isMobile.value) return "0rem";
+	return "24rem";
+});
 
 const isHandRaised = computed(() => {
 	const currentUserId = meetingState.currentUser.value?.user_id;

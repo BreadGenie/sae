@@ -1,14 +1,48 @@
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useResponsiveGrid } from "./useResponsiveGrid";
 
 /**
  * Composable for managing screen share sidebar layout
  * Handles participant display in sidebar during screen sharing
+ *
+ * Layout rules:
+ * - Mobile (<768px): Max 3 tiles total (horizontal strip)
+ * - Tablet/Desktop: Maximum 4 rows, 1-2 columns
+ * - Overflow participants go to grouped tile
  */
 export function useScreenShareSidebar(
 	participants,
 	activeSpeakerIds,
 	meetingState,
 ) {
+	const { sidebarMaxColumns } = useResponsiveGrid();
+
+	const windowWidth = ref(window.innerWidth || 1280);
+
+	const updateWidth = () => {
+		windowWidth.value = window.innerWidth;
+	};
+
+	onMounted(() => {
+		window.addEventListener("resize", updateWidth);
+	});
+
+	onUnmounted(() => {
+		window.removeEventListener("resize", updateWidth);
+	});
+
+	const maxVisibleTiles = computed(() => {
+		const isMobile = windowWidth.value < 768;
+
+		if (isMobile) {
+			return 3;
+		}
+
+		const cols = sidebarMaxColumns.value;
+		const maxRows = 4;
+		return cols * maxRows;
+	});
+
 	const sidebarDisplay = computed(() => {
 		const participantData = participants.value || participants;
 
@@ -44,8 +78,9 @@ export function useScreenShareSidebar(
 			}
 		}
 		const total = remotes.length + 1; // include local user
+		const threshold = maxVisibleTiles.value;
 
-		if (total <= 8) {
+		if (total <= threshold) {
 			return { list: remotes, hidden: [], extra: 0 };
 		}
 
@@ -53,6 +88,9 @@ export function useScreenShareSidebar(
 		const activeSpeakers = activeSpeakerIds?.value || [];
 		const activeSpeakerSet = new Set(activeSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
+
+		// 1 for local user and 1 for grouped tile
+		const remoteCapacity = threshold - 2;
 
 		// Separate participants by video state and active speaker status
 		const videoOnActiveSpeakers = remotes.filter(
@@ -78,7 +116,6 @@ export function useScreenShareSidebar(
 				!raisedHands[p.user_id],
 		);
 
-		const baseCapacity = 6;
 		const visibleRemotes = [];
 
 		// Priority order:
@@ -89,31 +126,31 @@ export function useScreenShareSidebar(
 		// 5. Non-active speakers with video OFF
 
 		for (const p of videoOnActiveSpeakers) {
-			if (visibleRemotes.length < baseCapacity) {
+			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			}
 		}
 
 		for (const p of videoOnNonSpeakers) {
-			if (visibleRemotes.length < baseCapacity) {
+			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			}
 		}
 
 		for (const p of videoOffActiveSpeakers) {
-			if (visibleRemotes.length < baseCapacity) {
+			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			}
 		}
 
 		for (const p of raisedHandsParticipants) {
-			if (visibleRemotes.length < baseCapacity) {
+			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			}
 		}
 
 		for (const p of videoOffNonSpeakers) {
-			if (visibleRemotes.length < baseCapacity) {
+			if (visibleRemotes.length < remoteCapacity) {
 				visibleRemotes.push(p);
 			}
 		}
@@ -125,34 +162,64 @@ export function useScreenShareSidebar(
 	});
 
 	const sidebarClass = computed(() => {
+		const isMobile = windowWidth.value < 768;
+
+		if (isMobile) {
+			// horizontal strip with 3 columns max
+			const visible =
+				1 +
+				sidebarDisplay.value.list.length +
+				(sidebarDisplay.value.extra > 0 ? 1 : 0);
+			const cols = Math.min(visible, 3);
+			return `w-full grid-cols-${cols} grid-rows-1`;
+		}
+
+		// vertical sidebar for desktop/tablet
 		const participantData = participants.value || participants;
 		const participantCount =
 			participantData?.size || Object.keys(participantData).length || 0;
 		const total = participantCount + 1;
-		const base = total > 4 ? "w-72 grid-cols-2" : "w-64 grid-cols-1";
+
+		let columns = total > 4 ? 2 : 1;
+		columns = Math.min(columns, sidebarMaxColumns.value);
+
+		const widthClass = columns === 2 ? "w-72" : "w-64";
 
 		const visible =
 			1 +
 			sidebarDisplay.value.list.length +
 			(sidebarDisplay.value.extra > 0 ? 1 : 0);
 
-		const columns = total > 4 ? 2 : 1;
-		const rows = Math.ceil(visible / columns);
+		const rows = Math.min(4, Math.ceil(visible / columns));
 
-		return `${base} grid-rows-${rows}`;
+		return `${widthClass} grid-cols-${columns} grid-rows-${rows}`;
 	});
 
 	const sidebarStyle = computed(() => {
+		const isMobile = windowWidth.value < 768;
+
+		if (isMobile) {
+			return {
+				display: "grid",
+				"grid-auto-rows": "1fr",
+				maxHeight: "120px",
+			};
+		}
+
 		const participantData = participants.value || participants;
 		const participantCount =
 			participantData?.size || Object.keys(participantData).length || 0;
 		const total = participantCount + 1;
-		const columns = total > 4 ? 2 : 1;
+
+		let columns = total > 4 ? 2 : 1;
+		columns = Math.min(columns, sidebarMaxColumns.value);
+
 		const visible =
 			1 +
 			sidebarDisplay.value.list.length +
 			(sidebarDisplay.value.extra > 0 ? 1 : 0);
-		const rows = Math.ceil(visible / columns);
+
+		const rows = Math.min(4, Math.ceil(visible / columns));
 
 		// subtract total vertical gaps (rows-1)*0.5rem (gap-2 = 0.5rem) from 100%
 		const gapRem = 0.5;
@@ -218,5 +285,6 @@ export function useScreenShareSidebar(
 		singleTileStyle,
 		visibleTileCount,
 		hiddenParticipantsTooltip,
+		maxVisibleTiles,
 	};
 }

@@ -11,7 +11,7 @@
 			class="bg-black/90 rounded-2xl p-3 shadow-xl border border-white/10 max-w-sm w-full"
 		>
 			<div class="text-center">
-				<div class="grid grid-cols-5 gap-3">
+				<div class="grid grid-cols-5 gap-3 mb-4">
 					<button
 						v-for="emoji in reactionEmojis"
 						:key="emoji"
@@ -22,6 +22,14 @@
 						{{ emoji }}
 					</button>
 				</div>
+				<button
+					@click="handleRaiseHand"
+					class="w-full py-2 px-4 bg-white/10 hover:bg-opacity-100 rounded-lg transition-colors flex items-center justify-center gap-3 font-medium text-white"
+					:class="{ '!bg-gray-800 hover:!bg-gray-800': isHandRaised }"
+				>
+					<lucide-hand class="w-5 h-5" />
+					{{ isHandRaised ? "Lower Hand" : "Raise Hand" }}
+				</button>
 			</div>
 		</PopoverContent>
 	</PopoverRoot>
@@ -35,9 +43,13 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	isHandRaised: {
+		type: Boolean,
+		default: false,
+	},
 });
 
-const emit = defineEmits(["select", "update:open"]);
+const emit = defineEmits(["select", "update:open", "toggle-raise-hand"]);
 
 const reactionEmojis = [
 	"👍",
@@ -59,6 +71,11 @@ const reactionEmojis = [
 
 const handleReactionSelect = (emoji) => {
 	emit("select", emoji);
+};
+
+const handleRaiseHand = () => {
+	emit("toggle-raise-hand");
+	updateOpen(false);
 };
 
 const updateOpen = (value) => {

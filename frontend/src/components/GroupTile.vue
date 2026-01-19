@@ -62,10 +62,13 @@ const props = defineProps({
 });
 
 const sizeClasses = computed(() => {
-	return props.size === "medium" ? "w-16 h-16" : "w-8 h-8";
+	// Responsive sizing: smaller on mobile, larger on desktop
+	return props.size === "medium"
+		? "w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16"
+		: "w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8";
 });
 
 const textSizeClass = computed(() => {
-	return props.size === "medium" ? "text-xl" : "text-xs";
+	return props.size === "medium" ? "text-lg sm:text-xl" : "text-xs";
 });
 </script>
