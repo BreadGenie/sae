@@ -182,6 +182,37 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 		}
 	};
 
+	const getFreshMicTrack = async () => {
+		try {
+			const constraints = {
+				audio: selectedMicId.value
+					? { deviceId: { exact: selectedMicId.value } }
+					: true,
+			};
+			const freshStream =
+				await navigator.mediaDevices.getUserMedia(constraints);
+			const freshTrack = freshStream.getAudioTracks()[0];
+
+			if (!freshTrack) {
+				return null;
+			}
+
+			if (meetingState.localStream.value) {
+				const oldAudioTracks = meetingState.localStream.value.getAudioTracks();
+				for (const track of oldAudioTracks) {
+					meetingState.localStream.value.removeTrack(track);
+					track.stop();
+				}
+				meetingState.localStream.value.addTrack(freshTrack);
+			}
+
+			return freshTrack;
+		} catch (error) {
+			console.error("[Audio] Failed to get fresh mic track:", error);
+			return null;
+		}
+	};
+
 	/**
 	 * Get audio track with noise cancellation applied if enabled
 	 * Returns the original track if noise cancellation is disabled or fails
@@ -199,34 +230,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			}
 
 			if (originalTrack.readyState === "ended") {
-				try {
-					const constraints = {
-						audio: selectedMicId.value
-							? { deviceId: { exact: selectedMicId.value } }
-							: true,
-					};
-					const freshStream =
-						await navigator.mediaDevices.getUserMedia(constraints);
-					const freshTrack = freshStream.getAudioTracks()[0];
-
-					if (meetingState.localStream.value) {
-						const oldAudioTracks =
-							meetingState.localStream.value.getAudioTracks();
-						for (const track of oldAudioTracks) {
-							meetingState.localStream.value.removeTrack(track);
-							track.stop();
-						}
-						meetingState.localStream.value.addTrack(freshTrack);
-					}
-
-					return freshTrack;
-				} catch (error) {
-					console.error(
-						"[Noise Cancellation] Failed to get fresh track:",
-						error,
-					);
-					return null;
-				}
+				return await getFreshMicTrack();
 			}
 
 			return originalTrack;
@@ -240,13 +244,6 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 			const processedTrack = result.stream.getAudioTracks()[0];
 			if (processedTrack) {
-				console.log(
-					"[Noise Cancellation] Successfully applied to audio track",
-					{
-						processedTrackId: processedTrack.id,
-						readyState: processedTrack.readyState,
-					},
-				);
 				return processedTrack;
 			}
 
@@ -2103,26 +2100,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 		try {
 			// get a new microphone track when toggling cuz otherwise retoggling gets messed up
-			const constraints = {
-				audio: selectedMicId.value
-					? { deviceId: { exact: selectedMicId.value } }
-					: true,
-			};
-			const freshStream =
-				await navigator.mediaDevices.getUserMedia(constraints);
-			const freshTrack = freshStream.getAudioTracks()[0];
+			const freshTrack = await getFreshMicTrack();
 
 			if (!freshTrack) {
 				return;
-			}
-
-			if (meetingState.localStream.value) {
-				const oldAudioTracks = meetingState.localStream.value.getAudioTracks();
-				for (const track of oldAudioTracks) {
-					meetingState.localStream.value.removeTrack(track);
-					track.stop();
-				}
-				meetingState.localStream.value.addTrack(freshTrack);
 			}
 
 			if (noiseCancellationSession) {
@@ -2133,9 +2114,6 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			let trackToPublish = freshTrack;
 
 			if (enabled) {
-				console.log(
-					"[Noise Cancellation] Applying noise cancellation to fresh track...",
-				);
 				const audioStream = new MediaStream([freshTrack]);
 				const result = await applyNoiseCancellation(audioStream);
 				noiseCancellationSession = result;
@@ -2143,16 +2121,12 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				const processedTrack = result.stream.getAudioTracks()[0];
 				if (processedTrack && processedTrack.readyState === "live") {
 					trackToPublish = processedTrack;
-					console.log("[Noise Cancellation] Using processed track");
 				}
 			}
 
 			const mh = sfuManager.value.mediaHandler;
 			if (mh?.audioProducer && trackToPublish.readyState === "live") {
 				await mh.audioProducer.replaceTrack({ track: trackToPublish });
-				console.log(
-					`[Noise Cancellation] Audio track replaced (enabled: ${enabled})`,
-				);
 			}
 		} catch (error) {
 			console.error("[Noise Cancellation] Failed to toggle:", error);
