@@ -192,7 +192,7 @@ import { provideMeetingContext } from "../composables/useMeetingContext.js";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useMeetingLogic } from "../composables/useMeetingLogic.js";
 import { useMeetingState } from "../composables/useMeetingState.js";
-import { useResponsiveGrid } from "../composables/useResponsiveGrid.js";
+import { useResponsiveGrid } from "../composables/useResponsiveGrid";
 import {
 	selectedCameraId,
 	selectedMicId,

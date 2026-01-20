@@ -1,20 +1,44 @@
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import {
+	type ComputedRef,
+	type Ref,
+	computed,
+	onMounted,
+	onUnmounted,
+	ref,
+} from "vue";
+
+export type AvatarSizeTier = "xs" | "sm" | "md" | "lg";
+
+interface Breakpoints {
+	sm: number;
+	md: number;
+	lg: number;
+	xl: number;
+}
+
+interface UseResponsiveGridReturn {
+	windowWidth: Ref<number>;
+	maxColumns: ComputedRef<number>;
+	sidebarMaxColumns: ComputedRef<number>;
+	avatarSizeTier: ComputedRef<AvatarSizeTier>;
+	BREAKPOINTS: Readonly<Breakpoints>;
+}
 
 /**
  * Composable for responsive grid layout based on screen width
  * Returns the maximum number of columns allowed for the current viewport
  */
-export function useResponsiveGrid() {
-	const BREAKPOINTS = {
+export function useResponsiveGrid(): UseResponsiveGridReturn {
+	const BREAKPOINTS: Readonly<Breakpoints> = {
 		sm: 640,
 		md: 768,
 		lg: 1024,
 		xl: 1280,
-	};
+	} as const;
 
-	const windowWidth = ref(window.innerWidth || 1280);
+	const windowWidth = ref<number>(window.innerWidth || 1280);
 
-	const updateWidth = () => {
+	const updateWidth = (): void => {
 		windowWidth.value = window.innerWidth;
 	};
 
@@ -27,7 +51,7 @@ export function useResponsiveGrid() {
 	});
 
 	// Mobile: min 2 columns, Tablet: max 3 columns, Desktop: max 4 columns
-	const maxColumns = computed(() => {
+	const maxColumns = computed<number>(() => {
 		if (windowWidth.value < BREAKPOINTS.sm) {
 			return 2;
 		}
@@ -42,14 +66,14 @@ export function useResponsiveGrid() {
 
 	// For sidebar during screen share
 	// Mobile: max 1 column, Tablet: max 2 columns
-	const sidebarMaxColumns = computed(() => {
+	const sidebarMaxColumns = computed<number>(() => {
 		if (windowWidth.value < BREAKPOINTS.md) {
 			return 1;
 		}
 		return 2;
 	});
 
-	const avatarSizeTier = computed(() => {
+	const avatarSizeTier = computed<AvatarSizeTier>(() => {
 		if (windowWidth.value < BREAKPOINTS.sm) {
 			return "xs";
 		}
