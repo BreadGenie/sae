@@ -2,15 +2,7 @@ import { createResource } from "frappe-ui";
 import { type Socket, io } from "socket.io-client";
 import { computed, onUnmounted, readonly, ref } from "vue";
 import { session } from "../data/session";
-import type { FrappeRequestError } from "../types";
-
-interface Participant {
-	user_id: string;
-	full_name: string;
-	avatar_url?: string;
-	has_video: boolean;
-	has_audio: boolean;
-}
+import type { FrappeRequestError, ParticipantPreview } from "../types";
 
 interface TokenResponse {
 	success: boolean;
@@ -60,7 +52,7 @@ interface ParticipantLeftData {
 }
 
 export function useMeetingPreviewPresence(meetingId: string) {
-	const participants = ref<Participant[]>([]);
+	const participants = ref<ParticipantPreview[]>([]);
 	const error = ref<string | null>(null);
 	let socket: Socket | null = null;
 
@@ -162,7 +154,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 		});
 
 		currentSocket.on("participant_joined", (data: ParticipantJoinedData) => {
-			const newParticipant: Participant = {
+			const newParticipant: ParticipantPreview = {
 				user_id: data.userData.userId,
 				full_name: data.userData.name || data.userData.userId,
 				avatar_url: data.userData.avatar,

@@ -75,8 +75,9 @@
 </template>
 
 <script setup lang="ts">
-import { FormControl, frappeRequest } from "frappe-ui";
+import { FormControl } from "frappe-ui";
 import { computed, inject, ref } from "vue";
+import type { Participant } from "../types";
 import { getInitials } from "../utils/text.ts";
 import PeopleParticipantTile from "./PeopleParticipantTile.vue";
 import PeopleWaitingSection from "./PeopleWaitingSection.vue";
@@ -91,16 +92,6 @@ interface LobbyUser {
 	name?: string;
 	isGuest?: boolean;
 	joinedAt?: number;
-}
-
-interface Participant {
-	user_id: string;
-	user_name?: string;
-	avatar?: string;
-	initials?: string;
-	audio_enabled?: boolean;
-	video_enabled?: boolean;
-	is_guest?: boolean;
 }
 
 interface CurrentUser {

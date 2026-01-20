@@ -89,22 +89,13 @@
 import { Badge, Button, Dropdown } from "frappe-ui";
 import { computed, inject, ref } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
+import type { Participant } from "../types";
 import AudioIndicator from "./AudioIndicator.vue";
 import KickParticipantDialog from "./KickParticipantDialog.vue";
 
 const meetingState = inject("meetingState") as {
 	raisedHands?: { value: Record<string, string> };
 };
-
-interface Participant {
-	user_id: string;
-	user_name?: string;
-	avatar?: string;
-	initials?: string;
-	audio_enabled?: boolean;
-	video_enabled?: boolean;
-	is_guest?: boolean;
-}
 
 interface Props {
 	participant: Participant;

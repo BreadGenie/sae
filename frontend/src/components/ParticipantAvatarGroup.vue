@@ -55,15 +55,10 @@
 <script setup lang="ts">
 import { Avatar } from "frappe-ui";
 import { computed } from "vue";
-
-interface Participant {
-	user_id: string;
-	full_name: string;
-	avatar_url?: string;
-}
+import type { ParticipantPreview } from "../types";
 
 interface Props {
-	participants: Participant[];
+	participants: ParticipantPreview[];
 	error: string | null;
 	maxDisplayed: number;
 }

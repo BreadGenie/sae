@@ -55,7 +55,7 @@
 <script setup>
 import { computed, inject, ref } from "vue";
 import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
-import { useVideoGridLayout } from "../composables/useVideoGridLayout.js";
+import { useVideoGridLayout } from "../composables/useVideoGridLayout";
 import { getInitials } from "../utils/text";
 import FloatingReactions from "./FloatingReactions.vue";
 import GroupTile from "./GroupTile.vue";

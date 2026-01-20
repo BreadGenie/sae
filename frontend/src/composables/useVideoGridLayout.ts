@@ -1,5 +1,30 @@
-import { computed } from "vue";
+import { type ComputedRef, type Ref, computed } from "vue";
+import type { Participant } from "../types";
 import { useResponsiveGrid } from "./useResponsiveGrid";
+
+interface MeetingState {
+	raisedHands?: Ref<Record<string, string>>;
+}
+
+interface DisplayParticipantsResult {
+	list: Participant[];
+	hidden: Participant[];
+	extra: number;
+}
+
+interface GridStyle {
+	"grid-auto-rows": string;
+	"grid-template-columns": string;
+}
+
+interface UseVideoGridLayoutReturn {
+	displayParticipants: ComputedRef<DisplayParticipantsResult>;
+	gridClass: ComputedRef<string>;
+	gridStyle: ComputedRef<GridStyle>;
+	visibleTileCount: ComputedRef<number>;
+	hiddenParticipantsTooltip: ComputedRef<string>;
+	maxVisibleTiles: ComputedRef<number>;
+}
 
 /**
  * Composable for managing video grid layout logic
@@ -11,13 +36,13 @@ import { useResponsiveGrid } from "./useResponsiveGrid";
  * - Overflow participants go to grouped tile
  */
 export function useVideoGridLayout(
-	participants,
-	activeSpeakerIds,
-	meetingState,
-) {
+	participants: Ref<Record<string, Participant>>,
+	activeSpeakerIds: Ref<string[]>,
+	meetingState: MeetingState,
+): UseVideoGridLayoutReturn {
 	const { maxColumns } = useResponsiveGrid();
 
-	const getOptimalColumns = (tileCount, maxCols) => {
+	const getOptimalColumns = (tileCount: number, maxCols: number): number => {
 		if (tileCount <= 1) return Math.min(1, maxCols);
 		if (tileCount === 2) return Math.min(2, maxCols);
 		if (tileCount <= 4) return Math.min(2, maxCols); // 2x2
@@ -27,7 +52,7 @@ export function useVideoGridLayout(
 		return Math.min(4, maxCols); // 4x4 max
 	};
 
-	const maxVisibleTiles = computed(() => {
+	const maxVisibleTiles = computed<number>(() => {
 		const cols = maxColumns.value;
 		const maxRows = 4;
 		return cols * maxRows; // e.g., 2 cols = 8 tiles, 3 cols = 12, 4 cols = 16
@@ -35,17 +60,11 @@ export function useVideoGridLayout(
 
 	// cap visible tiles based on screen size (cols × 4 rows)
 	// extra participants are grouped
-	const displayParticipants = computed(() => {
-		const src =
-			participants && participants.value !== undefined
-				? participants.value
-				: participants;
-		let remotes = [];
+	const displayParticipants = computed<DisplayParticipantsResult>(() => {
+		let remotes: Participant[] = [];
 
-		if (typeof src === "object" && src !== null && !Array.isArray(src)) {
-			remotes = Object.values(src);
-		} else if (Array.isArray(src)) {
-			remotes = src;
+		if (participants.value) {
+			remotes = Object.values(participants.value);
 		} else {
 			remotes = [];
 		}
@@ -55,7 +74,7 @@ export function useVideoGridLayout(
 
 		// Get active speaker IDs
 		const activeSpeakers = activeSpeakerIds?.value || [];
-		const activeSpeakerSet = new Set(activeSpeakers);
+		const activeSpeakerSet = new Set<string>(activeSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
 
 		// If within threshold, show all
@@ -97,7 +116,7 @@ export function useVideoGridLayout(
 			)
 			.sort((a, b) => a.user_id.localeCompare(b.user_id));
 
-		const visibleRemotes = [];
+		const visibleRemotes: Participant[] = [];
 
 		// Priority order:
 		// 1. Active speakers with video ON
@@ -154,7 +173,7 @@ export function useVideoGridLayout(
 	});
 
 	// Calculate grid columns based on total visible tiles and screen size
-	const gridClass = computed(() => {
+	const gridClass = computed<string>(() => {
 		const totalVisibleTiles =
 			1 + // local
 			displayParticipants.value.list.length +
@@ -166,7 +185,7 @@ export function useVideoGridLayout(
 	});
 
 	// Calculate grid style for equal row heights
-	const gridStyle = computed(() => {
+	const gridStyle = computed<GridStyle>(() => {
 		const totalVisibleTiles =
 			1 +
 			displayParticipants.value.list.length +
@@ -181,7 +200,7 @@ export function useVideoGridLayout(
 	});
 
 	// Total visible tile count for avatar sizing
-	const visibleTileCount = computed(() => {
+	const visibleTileCount = computed<number>(() => {
 		return (
 			1 +
 			displayParticipants.value.list.length +
@@ -189,7 +208,7 @@ export function useVideoGridLayout(
 		);
 	});
 
-	const hiddenParticipantsTooltip = computed(() => {
+	const hiddenParticipantsTooltip = computed<string>(() => {
 		const hidden = displayParticipants.value.hidden || [];
 		if (!hidden.length) return "";
 
