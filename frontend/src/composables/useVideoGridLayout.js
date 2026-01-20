@@ -67,28 +67,35 @@ export function useVideoGridLayout(
 		const remoteCapacity = threshold - 2;
 
 		// Separate participants by video state and active speaker status
-		const videoOnActiveSpeakers = remotes.filter(
-			(p) => p.video_enabled && activeSpeakerSet.has(p.user_id),
-		);
-		const videoOnNonSpeakers = remotes.filter(
-			(p) => p.video_enabled && !activeSpeakerSet.has(p.user_id),
-		);
-		const videoOffActiveSpeakers = remotes.filter(
-			(p) => !p.video_enabled && activeSpeakerSet.has(p.user_id),
-		);
+		// Sort by user_id for stable ordering within each category
+		const videoOnActiveSpeakers = remotes
+			.filter((p) => p.video_enabled && activeSpeakerSet.has(p.user_id))
+			.sort((a, b) => a.user_id.localeCompare(b.user_id));
+		const videoOnNonSpeakers = remotes
+			.filter((p) => p.video_enabled && !activeSpeakerSet.has(p.user_id))
+			.sort((a, b) => a.user_id.localeCompare(b.user_id));
+		const videoOffActiveSpeakers = remotes
+			.filter((p) => !p.video_enabled && activeSpeakerSet.has(p.user_id))
+			.sort((a, b) => a.user_id.localeCompare(b.user_id));
 		const raisedHandsParticipants = remotes
 			.filter((p) => raisedHands[p.user_id] && !activeSpeakerSet.has(p.user_id))
 			.sort((a, b) => {
 				const aTime = new Date(raisedHands[a.user_id]).getTime();
 				const bTime = new Date(raisedHands[b.user_id]).getTime();
-				return aTime - bTime; // Earliest first
+				// First sort by timestamp (earliest first), then by user_id for stability
+				if (aTime !== bTime) {
+					return aTime - bTime;
+				}
+				return a.user_id.localeCompare(b.user_id);
 			});
-		const videoOffNonSpeakers = remotes.filter(
-			(p) =>
-				!p.video_enabled &&
-				!activeSpeakerSet.has(p.user_id) &&
-				!raisedHands[p.user_id],
-		);
+		const videoOffNonSpeakers = remotes
+			.filter(
+				(p) =>
+					!p.video_enabled &&
+					!activeSpeakerSet.has(p.user_id) &&
+					!raisedHands[p.user_id],
+			)
+			.sort((a, b) => a.user_id.localeCompare(b.user_id));
 
 		const visibleRemotes = [];
 
