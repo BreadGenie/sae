@@ -77,7 +77,7 @@ import {
 	setSelectedCameraId,
 	setSelectedMicId,
 	setSelectedSpeakerId,
-} from "../../data/mediaPreferences.js";
+} from "../../data/mediaPreferences";
 import { deviceManager } from "../../utils/media/DeviceManager.js";
 import AudioIndicator from "../AudioIndicator.vue";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";

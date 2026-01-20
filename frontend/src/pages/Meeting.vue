@@ -197,7 +197,7 @@ import {
 	selectedCameraId,
 	selectedMicId,
 	selectedSpeakerId,
-} from "../data/mediaPreferences.js";
+} from "../data/mediaPreferences";
 import { session } from "../data/session.js";
 import { useSocket } from "../socket.js";
 import { deviceManager } from "../utils/media/DeviceManager.js";

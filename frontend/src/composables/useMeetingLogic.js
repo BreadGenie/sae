@@ -2,6 +2,7 @@ import { createResource, frappeRequest, toast } from "frappe-ui";
 import { defineAsyncComponent, h, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
+	noiseCancellationEnabled,
 	cameraEnabled as prefCameraEnabled,
 	micEnabled as prefMicEnabled,
 	selectedCameraId,
@@ -12,7 +13,7 @@ import {
 	setSelectedCameraId,
 	setSelectedMicId,
 	setSelectedSpeakerId,
-} from "../data/mediaPreferences.js";
+} from "../data/mediaPreferences";
 import { publishScreenShare } from "../mediasoup-client.js";
 import { useSocket } from "../socket.js";
 import audioNotificationManager from "../utils/audioNotifications";
@@ -24,6 +25,7 @@ import {
 	resetSFUMeetingManager,
 } from "../utils/sfu-meeting-manager.js";
 import { useBackgroundEffects } from "./useBackgroundEffects";
+import { useNoiseCancellation } from "./useNoiseCancellation";
 
 function getBackgroundEffectsFromStorage() {
 	const blurEnabled = localStorage.getItem("backgroundEffects.blur") === "1";
@@ -67,6 +69,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 	let backgroundSession = null;
 	let shouldApplyBackgroundEffectsWhenVideoAvailable = false;
+
+	const { applyNoiseCancellation } = useNoiseCancellation();
+
+	let noiseCancellationSession = null;
 
 	const replacePublishedVideoTrack = async (
 		stream,
@@ -175,6 +181,83 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			}
 		}
 	};
+
+	/**
+	 * Get audio track with noise cancellation applied if enabled
+	 * Returns the original track if noise cancellation is disabled or fails
+	 */
+	const getProcessedAudioTrack = async (stream) => {
+		const originalTrack = stream.getAudioTracks()[0];
+		if (!originalTrack) {
+			return null;
+		}
+
+		if (!noiseCancellationEnabled.value) {
+			if (noiseCancellationSession) {
+				noiseCancellationSession.cleanup?.();
+				noiseCancellationSession = null;
+			}
+
+			if (originalTrack.readyState === "ended") {
+				try {
+					const constraints = {
+						audio: selectedMicId.value
+							? { deviceId: { exact: selectedMicId.value } }
+							: true,
+					};
+					const freshStream =
+						await navigator.mediaDevices.getUserMedia(constraints);
+					const freshTrack = freshStream.getAudioTracks()[0];
+
+					if (meetingState.localStream.value) {
+						const oldAudioTracks =
+							meetingState.localStream.value.getAudioTracks();
+						for (const track of oldAudioTracks) {
+							meetingState.localStream.value.removeTrack(track);
+							track.stop();
+						}
+						meetingState.localStream.value.addTrack(freshTrack);
+					}
+
+					return freshTrack;
+				} catch (error) {
+					console.error(
+						"[Noise Cancellation] Failed to get fresh track:",
+						error,
+					);
+					return null;
+				}
+			}
+
+			return originalTrack;
+		}
+
+		try {
+			const audioStream = new MediaStream([originalTrack]);
+
+			const result = await applyNoiseCancellation(audioStream);
+			noiseCancellationSession = result;
+
+			const processedTrack = result.stream.getAudioTracks()[0];
+			if (processedTrack) {
+				console.log(
+					"[Noise Cancellation] Successfully applied to audio track",
+					{
+						processedTrackId: processedTrack.id,
+						readyState: processedTrack.readyState,
+					},
+				);
+				return processedTrack;
+			}
+
+			console.warn("[Noise Cancellation] No processed track returned");
+			return originalTrack;
+		} catch (error) {
+			console.error("[Noise Cancellation] Failed to apply:", error);
+			return originalTrack;
+		}
+	};
+
 	// API Resources
 	const joinMeetingAPI = createResource({
 		url: "meet.api.meeting.join_meeting",
@@ -441,7 +524,8 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				}
 
 				// Publish or resume audio producer
-				const track = stream.getAudioTracks()[0];
+				// Apply noise cancellation if enabled
+				const track = await getProcessedAudioTrack(stream);
 				if (mh?.audioProducer) {
 					if (meetingState.isScreenSharing.value) {
 						const currentTrack = mh.audioProducer.track;
@@ -479,6 +563,12 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 						}
 					}
 				}
+
+				if (noiseCancellationSession) {
+					noiseCancellationSession.cleanup?.();
+					noiseCancellationSession = null;
+				}
+
 				if (mh?.audioProducer) {
 					mh.audioProducer.close?.();
 
@@ -1076,11 +1166,16 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				try {
 					// Create a combined stream with:
 					// - Video from processedStream (if background effects) or localStream
-					// - Audio always from localStream (there's no audio in processedStream)
+					// - Audio with noise cancellation applied if enabled
 					const videoTracks = processedStream.value
 						? processedStream.value.getVideoTracks()
 						: meetingState.localStream.value.getVideoTracks();
-					const audioTracks = meetingState.localStream.value.getAudioTracks();
+
+					// Apply noise cancellation to audio if enabled
+					const audioTrack = await getProcessedAudioTrack(
+						meetingState.localStream.value,
+					);
+					const audioTracks = audioTrack ? [audioTrack] : [];
 
 					const streamToPublish = new MediaStream([
 						...videoTracks,
@@ -1992,6 +2087,77 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			notificationContextManager.updateScreenShareState(isSharing);
 		},
 	);
+
+	// Watch noise cancellation toggle to apply/remove processing dynamically
+	watch(noiseCancellationEnabled, async (enabled) => {
+		console.log(
+			"[Noise Cancellation] Setting changed to:",
+			enabled,
+			"Mic on:",
+			meetingState.isMicOn.value,
+		);
+
+		if (!meetingState.isMicOn.value || !sfuManager.value?.mediaHandler) {
+			return;
+		}
+
+		try {
+			// get a new microphone track when toggling cuz otherwise retoggling gets messed up
+			const constraints = {
+				audio: selectedMicId.value
+					? { deviceId: { exact: selectedMicId.value } }
+					: true,
+			};
+			const freshStream =
+				await navigator.mediaDevices.getUserMedia(constraints);
+			const freshTrack = freshStream.getAudioTracks()[0];
+
+			if (!freshTrack) {
+				return;
+			}
+
+			if (meetingState.localStream.value) {
+				const oldAudioTracks = meetingState.localStream.value.getAudioTracks();
+				for (const track of oldAudioTracks) {
+					meetingState.localStream.value.removeTrack(track);
+					track.stop();
+				}
+				meetingState.localStream.value.addTrack(freshTrack);
+			}
+
+			if (noiseCancellationSession) {
+				noiseCancellationSession.cleanup?.();
+				noiseCancellationSession = null;
+			}
+
+			let trackToPublish = freshTrack;
+
+			if (enabled) {
+				console.log(
+					"[Noise Cancellation] Applying noise cancellation to fresh track...",
+				);
+				const audioStream = new MediaStream([freshTrack]);
+				const result = await applyNoiseCancellation(audioStream);
+				noiseCancellationSession = result;
+
+				const processedTrack = result.stream.getAudioTracks()[0];
+				if (processedTrack && processedTrack.readyState === "live") {
+					trackToPublish = processedTrack;
+					console.log("[Noise Cancellation] Using processed track");
+				}
+			}
+
+			const mh = sfuManager.value.mediaHandler;
+			if (mh?.audioProducer && trackToPublish.readyState === "live") {
+				await mh.audioProducer.replaceTrack({ track: trackToPublish });
+				console.log(
+					`[Noise Cancellation] Audio track replaced (enabled: ${enabled})`,
+				);
+			}
+		} catch (error) {
+			console.error("[Noise Cancellation] Failed to toggle:", error);
+		}
+	});
 
 	// ==================== CLEANUP ====================
 

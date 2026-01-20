@@ -3,7 +3,7 @@
  *
  * Manages video and audio elements for participants.
  */
-import { selectedSpeakerId } from "../../data/mediaPreferences.js";
+import { selectedSpeakerId } from "../../data/mediaPreferences";
 
 export class VideoElementManager {
 	constructor() {

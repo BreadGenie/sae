@@ -20,9 +20,8 @@ import {
 } from "frappe-ui";
 
 import "./index.css";
-import { loadMediaPreferences } from "./data/mediaPreferences.js";
+import { loadMediaPreferences } from "./data/mediaPreferences";
 import { getPlatform } from "./utils/device";
-import { deviceManager } from "./utils/media/DeviceManager.js";
 
 const globalComponents = {
 	Button,

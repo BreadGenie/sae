@@ -537,6 +537,11 @@
   dependencies:
     "@tanstack/virtual-core" "3.13.12"
 
+"@timephy/rnnoise-wasm@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@timephy/rnnoise-wasm/-/rnnoise-wasm-1.0.0.tgz#a8c4f4088c12ca95ede01bc16cc51c7637638012"
+  integrity sha512-zzRdFyALbhaNIuEo3LKazPWxabatbPxkaBrHzRjGDlVHX2dFklh68HUENHlvHkKsq+OOQSC1ag5sGPDMDgg2CA==
+
 "@tiptap/core@^2.26.1", "@tiptap/core@^2.27.1":
   version "2.27.1"
   resolved "https://registry.yarnpkg.com/@tiptap/core/-/core-2.27.1.tgz#0a91346952b8314cd6bbe5cda0c32a6e7e24f432"

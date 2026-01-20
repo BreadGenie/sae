@@ -126,7 +126,7 @@ import {
 	setBlurIntensity,
 	setSelectedBackgroundImage,
 } from "../../data/backgroundEffects";
-import { selectedCameraId } from "../../data/mediaPreferences.js";
+import { selectedCameraId } from "../../data/mediaPreferences";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
 const props = defineProps({

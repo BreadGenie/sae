@@ -57,11 +57,13 @@
 <script setup>
 import { Dialog } from "frappe-ui";
 import { computed, h, markRaw, ref } from "vue";
+import LucideAudioLines from "~icons/lucide/audio-lines";
 import LucideBell from "~icons/lucide/bell";
 import LucideCamera from "~icons/lucide/camera";
 import LucideMonitorSmartphone from "~icons/lucide/monitor-smartphone";
 import LucideSettings from "~icons/lucide/settings";
 import { useMeetingDoc } from "../../composables/useMeetingDoc";
+import AudioSettingsTab from "./AudioSettingsTab.vue";
 import BackgroundSettingsTab from "./BackgroundSettingsTab.vue";
 import DeviceSettingsTab from "./DeviceSettingsTab.vue";
 import HostSettingsTab from "./HostSettingsTab.vue";
@@ -115,6 +117,11 @@ const tabs = computed(() => {
 				label: "Devices",
 				icon: h(LucideMonitorSmartphone),
 				component: markRaw(DeviceSettingsTab),
+			},
+			{
+				label: "Audio",
+				icon: h(LucideAudioLines),
+				component: markRaw(AudioSettingsTab),
 			},
 			{
 				label: "Notifications",

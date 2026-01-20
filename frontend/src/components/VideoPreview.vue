@@ -41,7 +41,7 @@ import {
 	micEnabled,
 	setCameraEnabled,
 	setMicEnabled,
-} from "@/data/mediaPreferences.js";
+} from "@/data/mediaPreferences";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useBackgroundEffects } from "../composables/useBackgroundEffects";
 import {
