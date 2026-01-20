@@ -74,7 +74,7 @@
 <script setup>
 import { computed, inject } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
-import { useScreenShareSidebar } from "../composables/useScreenShareSidebar.js";
+import { useScreenShareSidebar } from "../composables/useScreenShareSidebar";
 import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
 import AudioIndicator from "./AudioIndicator.vue";
 import GroupTile from "./GroupTile.vue";

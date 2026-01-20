@@ -1,5 +1,43 @@
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import {
+	type ComputedRef,
+	type Ref,
+	computed,
+	onMounted,
+	onUnmounted,
+	ref,
+} from "vue";
+import type { Participant } from "../types";
 import { useResponsiveGrid } from "./useResponsiveGrid";
+
+interface MeetingState {
+	raisedHands?: Ref<Record<string, string>>;
+}
+
+interface SidebarDisplayResult {
+	list: Participant[];
+	hidden: Participant[];
+	extra: number;
+}
+
+interface SidebarStyle {
+	display: string;
+	"grid-auto-rows": string;
+	maxHeight?: string;
+}
+
+interface SingleTileStyle {
+	minHeight?: string;
+}
+
+interface UseScreenShareSidebarReturn {
+	sidebarDisplay: ComputedRef<SidebarDisplayResult>;
+	sidebarClass: ComputedRef<string>;
+	sidebarStyle: ComputedRef<SidebarStyle>;
+	singleTileStyle: ComputedRef<SingleTileStyle>;
+	visibleTileCount: ComputedRef<number>;
+	hiddenParticipantsTooltip: ComputedRef<string>;
+	maxVisibleTiles: ComputedRef<number>;
+}
 
 /**
  * Composable for managing screen share sidebar layout
@@ -11,15 +49,15 @@ import { useResponsiveGrid } from "./useResponsiveGrid";
  * - Overflow participants go to grouped tile
  */
 export function useScreenShareSidebar(
-	participants,
-	activeSpeakerIds,
-	meetingState,
-) {
+	participants: Ref<Record<string, Participant>>,
+	activeSpeakerIds: Ref<string[]>,
+	meetingState: MeetingState,
+): UseScreenShareSidebarReturn {
 	const { sidebarMaxColumns } = useResponsiveGrid();
 
-	const windowWidth = ref(window.innerWidth || 1280);
+	const windowWidth = ref<number>(window.innerWidth || 1280);
 
-	const updateWidth = () => {
+	const updateWidth = (): void => {
 		windowWidth.value = window.innerWidth;
 	};
 
@@ -31,7 +69,7 @@ export function useScreenShareSidebar(
 		window.removeEventListener("resize", updateWidth);
 	});
 
-	const maxVisibleTiles = computed(() => {
+	const maxVisibleTiles = computed<number>(() => {
 		const isMobile = windowWidth.value < 768;
 
 		if (isMobile) {
@@ -43,10 +81,10 @@ export function useScreenShareSidebar(
 		return cols * maxRows;
 	});
 
-	const sidebarDisplay = computed(() => {
+	const sidebarDisplay = computed<SidebarDisplayResult>(() => {
 		const participantData = participants.value || participants;
 
-		let remotes;
+		let remotes: Participant[];
 		if (participantData instanceof Map) {
 			remotes = Array.from(participantData.values());
 		} else if (
@@ -66,15 +104,17 @@ export function useScreenShareSidebar(
 				remotes = participantData;
 			}
 		} else {
-			const arrayResult = Array.from(participantData);
+			const arrayResult = Array.from(participantData as Iterable<unknown>);
 			if (
 				arrayResult.length > 0 &&
 				Array.isArray(arrayResult[0]) &&
 				arrayResult[0].length === 2
 			) {
-				remotes = arrayResult.map(([key, value]) => value);
+				remotes = arrayResult.map(
+					(item) => (item as [unknown, Participant])[1],
+				);
 			} else {
-				remotes = arrayResult;
+				remotes = arrayResult as Participant[];
 			}
 		}
 		const total = remotes.length + 1; // include local user
@@ -86,7 +126,7 @@ export function useScreenShareSidebar(
 
 		// Get active speaker IDs
 		const activeSpeakers = activeSpeakerIds?.value || [];
-		const activeSpeakerSet = new Set(activeSpeakers);
+		const activeSpeakerSet = new Set<string>(activeSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
 
 		// 1 for local user and 1 for grouped tile
@@ -123,7 +163,7 @@ export function useScreenShareSidebar(
 			)
 			.sort((a, b) => a.user_id.localeCompare(b.user_id));
 
-		const visibleRemotes = [];
+		const visibleRemotes: Participant[] = [];
 
 		// Priority order:
 		// 1. Active speakers with video ON
@@ -168,7 +208,7 @@ export function useScreenShareSidebar(
 		return { list: visibleRemotes, hidden, extra: hidden.length };
 	});
 
-	const sidebarClass = computed(() => {
+	const sidebarClass = computed<string>(() => {
 		const isMobile = windowWidth.value < 768;
 
 		if (isMobile) {
@@ -183,8 +223,10 @@ export function useScreenShareSidebar(
 
 		// vertical sidebar for desktop/tablet
 		const participantData = participants.value || participants;
-		const participantCount =
-			participantData?.size || Object.keys(participantData).length || 0;
+		const participantCount: number =
+			participantData instanceof Map
+				? participantData.size
+				: Object.keys(participantData as Record<string, Participant>).length;
 		const total = participantCount + 1;
 
 		let columns = total > 4 ? 2 : 1;
@@ -202,7 +244,7 @@ export function useScreenShareSidebar(
 		return `${widthClass} grid-cols-${columns} grid-rows-${rows}`;
 	});
 
-	const sidebarStyle = computed(() => {
+	const sidebarStyle = computed<SidebarStyle>(() => {
 		const isMobile = windowWidth.value < 768;
 
 		if (isMobile) {
@@ -214,8 +256,10 @@ export function useScreenShareSidebar(
 		}
 
 		const participantData = participants.value || participants;
-		const participantCount =
-			participantData?.size || Object.keys(participantData).length || 0;
+		const participantCount: number =
+			participantData instanceof Map
+				? participantData.size
+				: Object.keys(participantData as Record<string, Participant>).length;
 		const total = participantCount + 1;
 
 		let columns = total > 4 ? 2 : 1;
@@ -248,7 +292,7 @@ export function useScreenShareSidebar(
 		};
 	});
 
-	const singleTileStyle = computed(() => {
+	const singleTileStyle = computed<SingleTileStyle>(() => {
 		const totalSidebarTiles =
 			1 +
 			sidebarDisplay.value.list.length +
@@ -260,7 +304,7 @@ export function useScreenShareSidebar(
 		return {};
 	});
 
-	const visibleTileCount = computed(() => {
+	const visibleTileCount = computed<number>(() => {
 		return (
 			1 +
 			sidebarDisplay.value.list.length +
@@ -268,7 +312,7 @@ export function useScreenShareSidebar(
 		);
 	});
 
-	const hiddenParticipantsTooltip = computed(() => {
+	const hiddenParticipantsTooltip = computed<string>(() => {
 		const hidden = sidebarDisplay.value.hidden || [];
 		if (!hidden.length) return "";
 
