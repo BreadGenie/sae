@@ -13,7 +13,7 @@
 					v-if="idx === 0"
 					:ref="setScreenShareVideoRef"
 					:data-participant-id="share.participantId"
-					class="w-full h-full object-contain bg-gray-900"
+					class="w-full h-full object-contain bg-gray-900 screen-share-video"
 					autoplay
 					playsinline
 					muted

@@ -90,6 +90,7 @@
 
 							<!-- People Panel -->
 							<PeoplePanel
+								class="people-panel"
 								v-if="activePanel === 'people'"
 								:open="true"
 								:currentUser="meetingState.currentUser.value"

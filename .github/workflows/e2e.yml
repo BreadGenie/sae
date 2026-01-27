@@ -1,0 +1,163 @@
+name: E2E Tests
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+
+concurrency:
+  group: e2e-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    name: E2E Tests
+
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          check-latest: true
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('e2e/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install MariaDB Client
+        run: |
+          sudo apt update
+          sudo apt-get install -y mariadb-client ffmpeg
+
+      - name: Setup Frappe Bench
+        run: |
+          pip install frappe-bench
+          bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+
+      - name: Install Meet App
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench get-app meet $GITHUB_WORKSPACE
+          bench setup requirements --dev
+          bench new-site --db-root-password root --admin-password admin test_site
+          bench --site test_site install-app meet
+          bench build
+
+      - name: Configure Site for E2E
+        working-directory: /home/runner/frappe-bench
+        run: |
+          # Set SFU configuration (shared secret)
+          bench --site test_site set-config sfu_secret "e2e-test-secret-key-12345"
+          bench --site test_site set-config sfu_server_url "http://localhost"
+          bench --site test_site set-config sfu_server_port "3000"
+          
+          # Create test users
+          bench --site test_site execute meet.utils.test_helpers.create_test_users
+
+      - name: Build SFU Server
+        working-directory: ${{ github.workspace }}/sfu-server
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install E2E Dependencies
+        working-directory: ${{ github.workspace }}/e2e
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Generate Fake Audio File
+        working-directory: ${{ github.workspace }}/e2e/resources
+        run: |
+          ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 10 -q:a 9 -acodec pcm_s16le fake-audio.wav
+
+      - name: Start Frappe Server
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench serve --port 8000 &
+          echo "Waiting for Frappe server..."
+          timeout 60 bash -c 'until curl -s http://localhost:8000 > /dev/null; do sleep 2; done'
+          echo "Frappe server is ready"
+        env:
+          FRAPPE_SITE_NAME: test_site
+
+      - name: Start SFU Server
+        working-directory: ${{ github.workspace }}/sfu-server
+        run: |
+          npm start &
+          echo "Waiting for SFU server..."
+          timeout 30 bash -c 'until curl -s http://localhost:3000/health > /dev/null 2>&1; do sleep 2; done'
+          echo "SFU server is ready"
+        env:
+          PORT: 3000
+          HOST: 0.0.0.0
+          JWT_SECRET: e2e-test-secret-key-12345
+          MEDIASOUP_ANNOUNCED_IP: 127.0.0.1
+
+      - name: Run E2E Tests
+        working-directory: ${{ github.workspace }}/e2e
+        run: npm test
+        env:
+          BASE_URL: http://test_site:8000
+          SFU_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Upload Test Videos
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-videos
+          path: e2e/test-results/**/*.webm
+          retention-days: 7

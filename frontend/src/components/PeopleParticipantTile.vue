@@ -1,5 +1,5 @@
 <template>
-	<div class="flex items-center gap-3 py-3 mx-4 border-b border-gray-200 last:border-b-0 transition-colors">
+	<div class="flex items-center gap-3 py-3 mx-4 border-b border-gray-200 last:border-b-0 transition-colors participant-tile">
 		<div class="flex-shrink-0">
 			<div
 				class="relative flex items-center justify-center rounded-full overflow-hidden bg-gradient-to-br from-gray-500 to-gray-600 text-white shadow-inner w-10 h-10"

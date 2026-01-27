@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Test results
+test-results/
+playwright-report/
+results.xml
+
+# Temporary files
+*.log
+.DS_Store
+
+# Generated resources
+resources/fake-audio.wav
+resources/fake-video.y4m
