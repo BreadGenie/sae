@@ -73,7 +73,6 @@ export class Participant {
 	): Promise<string> {
 		await this.loginAs(userKey);
 		const meetingId = await this.createMeeting(type);
-		await this.joinFromPreview();
 		return meetingId;
 	}
 
