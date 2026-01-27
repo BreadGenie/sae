@@ -172,10 +172,10 @@ jobs:
             e2e/test-results/
           retention-days: 7
 
-      - name: Upload Test Videos
+      - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: test-videos
-          path: e2e/test-results/**/*.webm
+          name: test-results
+          path: e2e/test-results/
           retention-days: 7
