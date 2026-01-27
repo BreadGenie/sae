@@ -53,5 +53,4 @@ def create_test_users():
 		user.add_roles("Meet User")
 		print(f"Created test user: {email}")
 
-	frappe.db.commit()
 	print("Test users created successfully!")
