@@ -56,6 +56,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: 'echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT'
+
+      - name: Cache yarn
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -64,7 +76,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
-      - name: Install MariaDB Client
+      - name: Install MariaDB Client and FFmpeg
         run: |
           sudo apt update
           sudo apt-get install -y mariadb-client ffmpeg
@@ -76,25 +88,28 @@ jobs:
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
-      - name: Install Meet App
+      - name: Install Meet
         working-directory: /home/runner/frappe-bench
         run: |
           bench get-app meet $GITHUB_WORKSPACE
           bench setup requirements --dev
-          bench new-site --db-root-password root --admin-password admin test_site
-          bench --site test_site install-app meet
+          bench new-site --db-root-password root --admin-password admin meet.test
+          bench --site meet.test install-app meet
           bench build
+        env:
+          CI: "Yes"
 
       - name: Configure Site for E2E
         working-directory: /home/runner/frappe-bench
         run: |
-          # Set SFU configuration (shared secret)
-          bench --site test_site set-config sfu_secret "e2e-test-secret-key-12345"
-          bench --site test_site set-config sfu_server_url "http://localhost"
-          bench --site test_site set-config sfu_server_port "3000"
+          bench --site meet.test set-config sfu_secret "e2e-test-secret-key-12345"
+          bench --site meet.test set-config sfu_server_url "http://localhost"
+          bench --site meet.test set-config sfu_server_port "3000"
+          bench --site meet.test set-config allow_tests true
+          bench --site meet.test set-config host_name "http://meet.test:8000"
           
           # Create test users
-          bench --site test_site execute meet.utils.test_helpers.create_test_users
+          bench --site meet.test execute meet.utils.test_helpers.create_test_users
 
       - name: Build SFU Server
         working-directory: ${{ github.workspace }}/sfu-server
@@ -116,12 +131,12 @@ jobs:
       - name: Start Frappe Server
         working-directory: /home/runner/frappe-bench
         run: |
-          bench serve --port 8000 &
-          echo "Waiting for Frappe server..."
-          timeout 60 bash -c 'until curl -s http://localhost:8000 > /dev/null; do sleep 2; done'
-          echo "Frappe server is ready"
-        env:
-          FRAPPE_SITE_NAME: test_site
+          sed -i 's/^watch:/# watch:/g' Procfile
+          sed -i 's/^schedule:/# schedule:/g' Procfile
+          bench start &> bench_start.log &
+          echo "Waiting for Frappe server to start..."
+          timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
+          echo "Frappe server is ready!"
 
       - name: Start SFU Server
         working-directory: ${{ github.workspace }}/sfu-server
@@ -140,7 +155,7 @@ jobs:
         working-directory: ${{ github.workspace }}/e2e
         run: npm test
         env:
-          BASE_URL: http://test_site:8000
+          BASE_URL: http://meet.test:8000
           SFU_URL: http://localhost:3000
           CI: true
 
