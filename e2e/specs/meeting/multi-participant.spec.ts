@@ -13,8 +13,13 @@ test.describe("Multi-Participant Meeting", () => {
 		await p2.loginAndJoinMeeting("user2", meetingId);
 
 		// Both should see controls
+<<<<<<< HEAD
 		await p1.toolbar.dismissBlockingToasts();
 		await p2.toolbar.dismissBlockingToasts();
+=======
+		await p1.toolbar.waitForToolbarReady();
+		await p2.toolbar.waitForToolbarReady();
+>>>>>>> 9694b54 (test: add e2e tests)
 
 		// Wait for participants to see each other
 		await p1.meeting.waitForRemoteParticipant();

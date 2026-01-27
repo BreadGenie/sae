@@ -9,9 +9,13 @@ export class HomePage {
 
 	constructor(page: Page) {
 		this.page = page;
+<<<<<<< HEAD
 		this.meetingCodeInput = page.getByRole("textbox", {
 			name: "abcd-efgh-ijkl",
 		});
+=======
+		this.meetingCodeInput = page.getByRole("textbox", { name: "Meeting Code" });
+>>>>>>> 9694b54 (test: add e2e tests)
 		this.joinButton = page.getByRole("button", { name: "Join" });
 		this.startMeetingButton = page.getByRole("button", {
 			name: "Start new meeting",
@@ -23,7 +27,10 @@ export class HomePage {
 
 	async goto() {
 		await this.page.goto("/meet/");
+<<<<<<< HEAD
 		await this.page.waitForLoadState("load");
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 	}
 
 	async createMeeting(type: "open" | "restricted" = "open"): Promise<string> {
@@ -36,7 +43,13 @@ export class HomePage {
 			await this.startMeetingButton.click();
 		}
 
+<<<<<<< HEAD
 		await this.page.waitForURL(/\/meet\/[a-z]{4}-[a-z]{4}-[a-z]{4}/);
+=======
+		await this.page.waitForURL(/\/meet\/[a-z]{4}-[a-z]{4}-[a-z]{4}/, {
+			timeout: 15000,
+		});
+>>>>>>> 9694b54 (test: add e2e tests)
 
 		const url = this.page.url();
 		const match = url.match(/\/meet\/([a-z]{4}-[a-z]{4}-[a-z]{4})/);
@@ -50,6 +63,10 @@ export class HomePage {
 	async joinMeeting(meetingCode: string) {
 		await this.meetingCodeInput.fill(meetingCode);
 		await this.joinButton.click();
+<<<<<<< HEAD
 		await this.page.waitForURL(`/meet/${meetingCode}`);
+=======
+		await this.page.waitForURL(`/meet/${meetingCode}`, { timeout: 10000 });
+>>>>>>> 9694b54 (test: add e2e tests)
 	}
 }

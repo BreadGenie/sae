@@ -8,8 +8,13 @@ End-to-end tests using Playwright.
 
 ```bash
 cd e2e
+<<<<<<< HEAD
 yarn install
 yarn install-browsers
+=======
+npm install
+npm run install-browsers
+>>>>>>> 9694b54 (test: add e2e tests)
 ```
 
 2. Generate fake audio file (requires ffmpeg):
@@ -39,6 +44,7 @@ Ensure all services are running:
 
 ```bash
 # Run all tests
+<<<<<<< HEAD
 yarn test
 
 # Run with browser visible
@@ -52,6 +58,21 @@ yarn test:ui
 
 # View test report
 yarn test:report
+=======
+npm test
+
+# Run with browser visible
+npm run test:headed
+
+# Run with debug mode (step through)
+npm run test:debug
+
+# Run with Playwright UI
+npm run test:ui
+
+# View test report
+npm run test:report
+>>>>>>> 9694b54 (test: add e2e tests)
 ```
 
 ## Test Structure
@@ -61,9 +82,12 @@ e2e/
 ├── fixtures/           # Test fixtures and helpers
 │   ├── participants.ts # Multi-browser participant management
 │   └── test-users.ts   # Test user credentials
+<<<<<<< HEAD
 ├── helpers/            # API helpers and utilities
 │   ├── auth.ts         # Authentication (API login)
 │   ├── index.ts
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 ├── page-objects/       # Page Object Model classes
 │   ├── LoginPage.ts
 │   ├── HomePage.ts

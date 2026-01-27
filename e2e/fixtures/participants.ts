@@ -13,7 +13,10 @@ import {
 	ChatPanel,
 	PeoplePanel,
 } from "../page-objects";
+<<<<<<< HEAD
 import { loginViaAPI } from "../helpers";
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 import { TEST_USERS, type TestUserKey } from "./test-users";
 
 export class Participant {
@@ -44,9 +47,14 @@ export class Participant {
 
 	async loginAs(userKey: TestUserKey) {
 		const user = TEST_USERS[userKey];
+<<<<<<< HEAD
 		await loginViaAPI(this.page.request, user.email, user.password);
 		await this.page.goto("/meet/");
 		await this.page.waitForLoadState("load");
+=======
+		await this.login.goto();
+		await this.login.loginAndWait(user.email, user.password);
+>>>>>>> 9694b54 (test: add e2e tests)
 		this._isLoggedIn = true;
 	}
 
@@ -75,6 +83,10 @@ export class Participant {
 	): Promise<string> {
 		await this.loginAs(userKey);
 		const meetingId = await this.createMeeting(type);
+<<<<<<< HEAD
+=======
+		await this.joinFromPreview();
+>>>>>>> 9694b54 (test: add e2e tests)
 		return meetingId;
 	}
 
@@ -110,6 +122,7 @@ export class Participant {
 
 async function createParticipant(browser: Browser): Promise<Participant> {
 	const context = await browser.newContext();
+<<<<<<< HEAD
 	// Inject a small init script to stub media APIs when running in CI/local test environments
 	// This prevents getUserMedia/getDisplayMedia failures when fake devices are unavailable
 	await context.addInitScript({
@@ -168,6 +181,8 @@ async function createParticipant(browser: Browser): Promise<Participant> {
 		})();`,
 	});
 
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 	const page = await context.newPage();
 	return new Participant(context, page);
 }

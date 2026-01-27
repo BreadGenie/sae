@@ -6,7 +6,10 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
 	workers: 1,
+<<<<<<< HEAD
 	maxFailures: process.env.CI ? 3 : 0,
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 	reporter: process.env.CI
 		? [
 				["github"],
@@ -14,6 +17,7 @@ export default defineConfig({
 				["junit", { outputFile: "results.xml" }],
 			]
 		: [["html", { open: "on-failure" }]],
+<<<<<<< HEAD
 	timeout: process.env.CI ? 120000 : 60000,
 	use: {
 		baseURL: process.env.BASE_URL || "http://localhost:8096",
@@ -23,6 +27,21 @@ export default defineConfig({
 		screenshot: "only-on-failure",
 		viewport: { width: 1280, height: 720 },
 	},
+=======
+
+	timeout: 60_000,
+	expect: {
+		timeout: 10_000,
+	},
+
+	use: {
+		baseURL: process.env.BASE_URL || "http://localhost:8096",
+		trace: "retain-on-failure",
+		video: "retain-on-failure",
+		screenshot: "only-on-failure",
+	},
+
+>>>>>>> 9694b54 (test: add e2e tests)
 	projects: [
 		{
 			name: "chromium",
@@ -34,6 +53,11 @@ export default defineConfig({
 						"--use-fake-ui-for-media-stream",
 						// Use fake camera/microphone devices
 						"--use-fake-device-for-media-stream",
+<<<<<<< HEAD
+=======
+						// Use a test audio file for consistent audio
+						"--use-file-for-fake-audio-capture=resources/fake-audio.wav",
+>>>>>>> 9694b54 (test: add e2e tests)
 						"--allow-insecure-localhost",
 						"--disable-web-security",
 						"--autoplay-policy=no-user-gesture-required",
@@ -43,6 +67,7 @@ export default defineConfig({
 						"--disable-gpu",
 						// Mute audio output
 						"--mute-audio",
+<<<<<<< HEAD
 						// Treat the base URL as a secure origin to allow getUserMedia in CI
 						`--unsafely-treat-insecure-origin-as-secure=${process.env.BASE_URL || "http://localhost:8096"}`,
 						"--disable-background-timer-throttling",
@@ -60,6 +85,8 @@ export default defineConfig({
 									"--disable-component-extensions-with-background-pages",
 								]
 							: []),
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 					],
 				},
 				permissions: ["camera", "microphone"],

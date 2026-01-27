@@ -6,9 +6,12 @@ test-results/
 playwright-report/
 results.xml
 
+<<<<<<< HEAD
 # Authentication state
 .auth/
 
+=======
+>>>>>>> 9694b54 (test: add e2e tests)
 # Temporary files
 *.log
 .DS_Store

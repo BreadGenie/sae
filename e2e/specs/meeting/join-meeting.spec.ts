@@ -3,8 +3,12 @@ import { test, expect } from "../../fixtures";
 test.describe("Join Meeting", () => {
 	test("should join meeting from preview screen", async ({ participant }) => {
 		const meetingId = await participant.loginAndCreateMeeting("user1");
+<<<<<<< HEAD
 		await participant.joinFromPreview();
 		await participant.toolbar.dismissBlockingToasts();
+=======
+		await participant.toolbar.waitForToolbarReady();
+>>>>>>> 9694b54 (test: add e2e tests)
 		const isInMeeting = await participant.toBeInMeeting(meetingId);
 		expect(isInMeeting).toBe(true);
 	});
@@ -32,6 +36,10 @@ test.describe("Join Meeting", () => {
 		// User 2 joins via meeting code
 		const p2 = await createParticipant();
 		await p2.loginAs("user2");
+<<<<<<< HEAD
+=======
+		await p2.home.goto();
+>>>>>>> 9694b54 (test: add e2e tests)
 		await p2.home.joinMeeting(meetingId);
 		await p2.joinFromPreview();
 
@@ -45,7 +53,11 @@ test.describe("Join Meeting", () => {
 		participant,
 	}) => {
 		await participant.loginAndCreateMeeting("user1");
+<<<<<<< HEAD
 		await participant.toolbar.dismissBlockingToasts();
+=======
+		await participant.toolbar.waitForToolbarReady();
+>>>>>>> 9694b54 (test: add e2e tests)
 
 		await participant.leaveMeeting();
 
