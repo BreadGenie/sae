@@ -33,9 +33,7 @@ export class HomePage {
 			await this.startMeetingButton.click();
 		}
 
-		await this.page.waitForURL(/\/meet\/[a-z]{4}-[a-z]{4}-[a-z]{4}/, {
-			timeout: 15000,
-		});
+		await this.page.waitForURL(/\/meet\/[a-z]{4}-[a-z]{4}-[a-z]{4}/);
 
 		const url = this.page.url();
 		const match = url.match(/\/meet\/([a-z]{4}-[a-z]{4}-[a-z]{4})/);
@@ -49,6 +47,6 @@ export class HomePage {
 	async joinMeeting(meetingCode: string) {
 		await this.meetingCodeInput.fill(meetingCode);
 		await this.joinButton.click();
-		await this.page.waitForURL(`/meet/${meetingCode}`, { timeout: 10000 });
+		await this.page.waitForURL(`/meet/${meetingCode}`);
 	}
 }

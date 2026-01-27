@@ -25,9 +25,7 @@ export class LoginPage {
 
 	async waitForLoginComplete() {
 		// Wait for redirect away from login page
-		await this.page.waitForURL((url) => !url.pathname.includes("/login"), {
-			timeout: 15000,
-		});
+		await this.page.waitForURL((url) => !url.pathname.includes("/login"));
 	}
 
 	async loginAndWait(email: string, password: string) {
