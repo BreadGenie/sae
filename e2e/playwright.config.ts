@@ -43,6 +43,7 @@ export default defineConfig({
 						"--mute-audio",
 						// Treat the base URL as a secure origin to allow getUserMedia in CI
 						`--unsafely-treat-insecure-origin-as-secure=${process.env.BASE_URL || "http://localhost:8096"}`,
+						"--headless=new", // see https://github.com/microsoft/playwright/issues/22944
 					],
 				},
 				permissions: ["camera", "microphone"],
