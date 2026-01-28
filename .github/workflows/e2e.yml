@@ -131,6 +131,11 @@ jobs:
         run: |
           ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 10 -q:a 9 -acodec pcm_s16le fake-audio.wav
 
+      - name: Generate Fake Video File
+        working-directory: ${{ github.workspace }}/e2e/resources
+        run: |
+          ffmpeg -f lavfi -i testsrc=size=640x480:rate=30 -t 10 -pix_fmt yuv420p fake-video.y4m
+
       - name: Start Frappe Server
         working-directory: /home/runner/frappe-bench
         run: |

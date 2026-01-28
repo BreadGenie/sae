@@ -30,8 +30,9 @@ export default defineConfig({
 						"--use-fake-ui-for-media-stream",
 						// Use fake camera/microphone devices
 						"--use-fake-device-for-media-stream",
-						// Use a test audio file for consistent audio
+						// Use dummy files for audio and video
 						"--use-file-for-fake-audio-capture=resources/fake-audio.wav",
+						"--use-file-for-fake-video-capture=resources/fake-video.y4m",
 						"--allow-insecure-localhost",
 						"--disable-web-security",
 						"--autoplay-policy=no-user-gesture-required",
