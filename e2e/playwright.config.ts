@@ -13,19 +13,12 @@ export default defineConfig({
 				["junit", { outputFile: "results.xml" }],
 			]
 		: [["html", { open: "on-failure" }]],
-
-	timeout: 60_000,
-	expect: {
-		timeout: 10_000,
-	},
-
 	use: {
 		baseURL: process.env.BASE_URL || "http://localhost:8096",
 		trace: "retain-on-failure",
 		video: "retain-on-failure",
 		screenshot: "only-on-failure",
 	},
-
 	projects: [
 		{
 			name: "chromium",
@@ -48,6 +41,8 @@ export default defineConfig({
 						"--disable-gpu",
 						// Mute audio output
 						"--mute-audio",
+						// Treat the base URL as a secure origin to allow getUserMedia in CI
+						`--unsafely-treat-insecure-origin-as-secure=${process.env.BASE_URL || "http://localhost:8096"}`,
 					],
 				},
 				permissions: ["camera", "microphone"],
