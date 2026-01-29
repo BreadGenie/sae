@@ -89,6 +89,7 @@ export class ToolbarControls {
 	}
 
 	async isMicMuted(): Promise<boolean> {
+		await this.revealToolbar();
 		// Check if mic button has "off" indicator
 		const micBtn = this.toolbar
 			.getByRole("button", { name: "Toggle Audio" })
@@ -98,6 +99,7 @@ export class ToolbarControls {
 	}
 
 	async isCameraMuted(): Promise<boolean> {
+		await this.revealToolbar();
 		// Check if camera button has "off" indicator
 		const camBtn = this.toolbar
 			.getByRole("button", { name: "Toggle Video" })
