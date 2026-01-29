@@ -3,7 +3,7 @@
 	"version": "1.0.0",
 	"description": "E2E tests for Frappe Meet",
 	"scripts": {
-		"test": "playwright test specs/media/video-audio-toggle.spec.ts",
+		"test": "playwright test",
 		"test:headed": "playwright test --headed",
 		"test:debug": "playwright test --debug",
 		"test:ui": "playwright test --ui",
