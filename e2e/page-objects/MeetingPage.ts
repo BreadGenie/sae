@@ -32,20 +32,23 @@ export class MeetingPage {
 	}
 
 	async waitForConnected() {
-		// Wait until we're in the actual meeting (not preview or loading)
-		await this.page.waitForFunction(
-			() => {
-				// Find the meeting container and ensure the end call button is present
-				const meeting = document.querySelector("[data-meeting-component]");
-				if (!meeting) return false;
-				const hasEndCall = !!meeting.querySelector(
-					'button[title="End Call"], button[aria-label="End Call"]',
-				);
-				const notLoading = !document.body.innerText.includes("Joining meeting");
-				return hasEndCall && notLoading;
-			},
-			{ timeout: 30000 },
+		// move mouse to show toolbar
+		const vp = this.page.viewportSize() || { width: 1280, height: 800 };
+		await this.page.mouse.move(
+			(vp.width || 1280) / 2,
+			(vp.height || 800) * 0.85,
 		);
+		await this.page.mouse.move(
+			(vp.width || 1280) / 2,
+			(vp.height || 800) * 0.9,
+		);
+
+		const endCall = this.page
+			.getByRole("button", { name: /End Call/i })
+			.first();
+		await endCall.waitFor({ state: "visible", timeout: 30000 });
+
+		await this.page.waitForTimeout(250);
 	}
 
 	async isConnected(): Promise<boolean> {

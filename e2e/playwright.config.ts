@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import path from "node:path";
 
 export default defineConfig({
 	testDir: "./specs",
@@ -31,8 +32,8 @@ export default defineConfig({
 						// Use fake camera/microphone devices
 						"--use-fake-device-for-media-stream",
 						// Use dummy files for audio and video
-						"--use-file-for-fake-audio-capture=resources/fake-audio.wav",
-						"--use-file-for-fake-video-capture=resources/fake-video.y4m",
+						`--use-file-for-fake-audio-capture=${path.join(__dirname, "resources", "fake-audio.wav")}`,
+						`--use-file-for-fake-video-capture=${path.join(__dirname, "resources", "fake-video.y4m")}`,
 						"--allow-insecure-localhost",
 						"--disable-web-security",
 						"--autoplay-policy=no-user-gesture-required",
@@ -44,7 +45,6 @@ export default defineConfig({
 						"--mute-audio",
 						// Treat the base URL as a secure origin to allow getUserMedia in CI
 						`--unsafely-treat-insecure-origin-as-secure=${process.env.BASE_URL || "http://localhost:8096"}`,
-						"--headless=new", // see https://github.com/microsoft/playwright/issues/22944
 					],
 				},
 				permissions: ["camera", "microphone"],

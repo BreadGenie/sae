@@ -96,14 +96,20 @@ export class ToolbarControls {
 
 	async isMicMuted(): Promise<boolean> {
 		// Check if mic button has "off" indicator
-		const micIcon = this.page.locator('button:has(svg[class*="mic-off"])');
-		return (await micIcon.count()) > 0;
+		const micBtn = this.toolbar
+			.getByRole("button", { name: "Toggle Audio" })
+			.first();
+		const html = await micBtn.innerHTML();
+		return html.includes("lucide-mic-off");
 	}
 
 	async isCameraMuted(): Promise<boolean> {
 		// Check if camera button has "off" indicator
-		const cameraIcon = this.page.locator('button:has(svg[class*="video-off"])');
-		return (await cameraIcon.count()) > 0;
+		const camBtn = this.toolbar
+			.getByRole("button", { name: "Toggle Video" })
+			.first();
+		const html = await camBtn.innerHTML();
+		return html.includes("lucide-video-off");
 	}
 
 	async waitForToolbarReady() {
