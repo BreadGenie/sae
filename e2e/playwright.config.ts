@@ -1,5 +1,4 @@
 import { defineConfig, devices } from "@playwright/test";
-import path from "node:path";
 
 export default defineConfig({
 	testDir: "./specs",
@@ -31,9 +30,6 @@ export default defineConfig({
 						"--use-fake-ui-for-media-stream",
 						// Use fake camera/microphone devices
 						"--use-fake-device-for-media-stream",
-						// Use dummy files for audio and video
-						`--use-file-for-fake-audio-capture=${path.join(__dirname, "resources", "fake-audio.wav")}`,
-						`--use-file-for-fake-video-capture=${path.join(__dirname, "resources", "fake-video.y4m")}`,
 						"--allow-insecure-localhost",
 						"--disable-web-security",
 						"--autoplay-policy=no-user-gesture-required",
