@@ -3,7 +3,7 @@ import { test, expect } from "../../fixtures";
 test.describe("Join Meeting", () => {
 	test("should join meeting from preview screen", async ({ participant }) => {
 		const meetingId = await participant.loginAndCreateMeeting("user1");
-		await participant.toolbar.waitForToolbarReady();
+		await participant.toolbar.dismissBlockingToasts();
 		const isInMeeting = await participant.toBeInMeeting(meetingId);
 		expect(isInMeeting).toBe(true);
 	});
@@ -45,7 +45,7 @@ test.describe("Join Meeting", () => {
 		participant,
 	}) => {
 		await participant.loginAndCreateMeeting("user1");
-		await participant.toolbar.waitForToolbarReady();
+		await participant.toolbar.dismissBlockingToasts();
 
 		await participant.leaveMeeting();
 

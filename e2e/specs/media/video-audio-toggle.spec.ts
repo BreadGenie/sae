@@ -5,7 +5,7 @@ test.describe("Video Toggle", () => {
 		participant,
 	}) => {
 		await participant.loginAndCreateMeeting("user1");
-		await participant.toolbar.waitForToolbarReady();
+		await participant.toolbar.dismissBlockingToasts();
 
 		// Camera should start on (based on preview settings)
 		const initiallyMuted = await participant.toolbar.isCameraMuted();
@@ -71,7 +71,7 @@ test.describe("Audio Toggle", () => {
 		participant,
 	}) => {
 		await participant.loginAndCreateMeeting("user1");
-		await participant.toolbar.waitForToolbarReady();
+		await participant.toolbar.dismissBlockingToasts();
 
 		const initiallyMuted = await participant.toolbar.isMicMuted();
 

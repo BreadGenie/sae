@@ -112,29 +112,6 @@ export class ToolbarControls {
 		return html.includes("lucide-video-off");
 	}
 
-	async waitForToolbarReady() {
-		await this.dismissBlockingToasts();
-		// Wait for at least one primary control (mic/camera/people/end-call) to be visible.
-		// Wrap the wait so we can give better diagnostics if the page/context closes while waiting.
-		try {
-			await this.page.waitForFunction(
-				() => {
-					const sel =
-						'[data-meeting-component] button:has(svg[class*="mic"]), [data-meeting-component] button:has(svg[class*="video"]), [data-meeting-component] button:has(svg[class*="users"]), [data-meeting-component] button:has(svg[class*="phone-off"]), [data-meeting-component] button[class*="red"]';
-					const els = Array.from(
-						document.querySelectorAll(sel),
-					) as HTMLElement[];
-					for (const el of els) {
-						const r = el.getBoundingClientRect();
-						if (r.width > 0 && r.height > 0) return true;
-					}
-					return false;
-				},
-				{ timeout: 10000 },
-			);
-		} catch {}
-	}
-
 	async waitForToolbarVisible() {
 		// Move mouse to keep controls alive (prevent auto-hide)
 		const viewport = this.page.viewportSize();
@@ -143,7 +120,7 @@ export class ToolbarControls {
 		}
 
 		// Ensure toolbar and primary controls are visible
-		await this.waitForToolbarReady();
+		await this.dismissBlockingToasts();
 		await expect(this.cameraButton).toBeVisible({ timeout: 5000 });
 	}
 
