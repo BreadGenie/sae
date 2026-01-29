@@ -1048,7 +1048,11 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 			// Initialize SFU connection
 			console.log("Starting SFU connection setup...");
-			await setupSFUConnection(guestName, joinResult?.is_host || false);
+			await setupSFUConnection(
+				guestName,
+				joinResult?.is_host || false,
+				joinResult?.is_cohost || false,
+			);
 
 			setupFrappeRealtimeEventListeners();
 			console.log("Updating meeting state after successful SFU setup...");
@@ -1083,7 +1087,11 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	/**
 	 * Setup SFU connection and media publishing
 	 */
-	const setupSFUConnection = async (guestName = null, isHost = false) => {
+	const setupSFUConnection = async (
+		guestName = null,
+		isHost = false,
+		isCohost = false,
+	) => {
 		if (meetingState.isSetupComplete.value) {
 			console.log("SFU setup already complete");
 			// Still need to update meeting state even if SFU is already set up
@@ -1183,7 +1191,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			meetingState.isSetupComplete.value = true;
 			console.log("SFU connection setup complete");
 
-			if (!guestName) {
+			if (!guestName && (isHost || isCohost)) {
 				fetchExistingWaitingRoomUsers();
 			}
 		} catch (error) {
@@ -1267,7 +1275,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					meetingState.guestSfuUrl.value = response.sfu_url || null;
 					meetingState.guestSfuPort.value = response.sfu_port || null;
 
-					await setupSFUConnection(guestName, false);
+					await setupSFUConnection(guestName, false, false);
 
 					meetingState.isInPreview.value = false;
 					meetingState.isConnecting.value = false;
@@ -1370,7 +1378,11 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					});
 
 					if (sfuResult) {
-						await setupSFUConnection(null, sfuResult.is_host);
+						await setupSFUConnection(
+							null,
+							sfuResult.is_host,
+							sfuResult.is_cohost,
+						);
 						meetingState.isInPreview.value = false;
 					} else {
 						console.error("Failed to get SFU connection:", sfuResult);
