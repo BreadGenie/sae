@@ -158,6 +158,7 @@ jobs:
           HOST: 0.0.0.0
           JWT_SECRET: e2e-test-secret-key-12345
           MEDIASOUP_ANNOUNCED_IP: 127.0.0.1
+          MEDIASOUP_NUM_WORKERS: 1
 
       - name: Run E2E Tests
         working-directory: ${{ github.workspace }}/e2e
