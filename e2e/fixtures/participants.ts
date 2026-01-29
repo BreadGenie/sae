@@ -108,6 +108,64 @@ export class Participant {
 
 async function createParticipant(browser: Browser): Promise<Participant> {
 	const context = await browser.newContext();
+	// Inject a small init script to stub media APIs when running in CI/local test environments
+	// This prevents getUserMedia/getDisplayMedia failures when fake devices are unavailable
+	await context.addInitScript({
+		content: `(() => {
+			try {
+				if (!window.navigator.mediaDevices) {
+					// @ts-ignore
+					window.navigator.mediaDevices = {};
+				}
+
+				function createFakeStream() {
+					try {
+						const canvas = document.createElement('canvas');
+						canvas.width = 640;
+						canvas.height = 480;
+						const ctx = canvas.getContext('2d');
+						let t = 0;
+						function draw() {
+							if (!ctx) return;
+							ctx.fillStyle = '#000';
+							ctx.fillRect(0,0,640,480);
+							ctx.fillStyle = '#fff';
+							ctx.font = '16px sans-serif';
+							ctx.fillText('fake-video ' + (++t), 10, 20);
+							requestAnimationFrame(draw);
+						}
+						draw();
+
+						const videoStream = canvas.captureStream(30);
+						// try to create an audio track
+						let audioTracks = [];
+						try {
+							const AudioCtx = window.AudioContext || window.webkitAudioContext;
+							const ac = new AudioCtx();
+							const dest = ac.createMediaStreamDestination();
+							const o = ac.createOscillator();
+							o.frequency.value = 440;
+							o.connect(dest);
+							o.start();
+							audioTracks = dest.stream.getAudioTracks();
+						} catch (e) {
+							audioTracks = [];
+						}
+
+						const tracks = [...videoStream.getVideoTracks(), ...audioTracks];
+						return new MediaStream(tracks);
+					} catch (e) { return new MediaStream(); }
+				}
+
+				const shared = createFakeStream();
+				// @ts-ignore
+				window.navigator.mediaDevices.getUserMedia = (constraints) => Promise.resolve(shared);
+				// @ts-ignore
+				window.navigator.mediaDevices.getDisplayMedia = (constraints) => Promise.resolve(shared);
+			} catch (e) { /* ignore */ }
+		})();`,
+	});
+
 	const page = await context.newPage();
 	return new Participant(context, page);
 }
