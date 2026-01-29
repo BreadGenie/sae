@@ -115,8 +115,11 @@ export class ToolbarControls {
 		// Move mouse to bottom center to trigger activity and reveal toolbar
 		await this.page.mouse.move(viewport.width / 2, viewport.height - 50);
 
-		// Wait for toolbar to appear
-		await this.cameraButton.waitFor({ state: "attached", timeout: 5000 });
+		// Wait for the toolbar container itself to be visible first
+		await this.toolbar.waitFor({ state: "visible", timeout: 5000 });
+
+		// Then wait for camera button to be attached and visible
+		await this.cameraButton.waitFor({ state: "visible", timeout: 5000 });
 
 		// Hover directly over the toolbar to keep it visible (triggers onMouseEnter)
 		const toolbarBox = await this.toolbar.boundingBox();
