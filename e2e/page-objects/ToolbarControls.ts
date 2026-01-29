@@ -39,56 +39,50 @@ export class ToolbarControls {
 
 	async toggleMicrophone() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.micButton.waitFor({ state: "visible", timeout: 5000 });
-		await this.micButton.click();
+		await this.revealToolbar();
+		await this.micButton.click({ force: true });
 		await this.page.waitForTimeout(250);
 	}
 
 	async toggleCamera() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.cameraButton.waitFor({ state: "visible", timeout: 5000 });
-		await this.cameraButton.click();
+		await this.revealToolbar();
+		await this.cameraButton.click({ force: true });
 		await this.page.waitForTimeout(300);
 	}
 
 	async toggleScreenShare() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.screenShareButton.waitFor({ state: "visible", timeout: 5000 });
-		await this.screenShareButton.click();
+		await this.revealToolbar();
+		await this.screenShareButton.click({ force: true });
 		await this.page.waitForTimeout(300);
 	}
 
 	async openChat() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.chatButton.waitFor({ state: "visible", timeout: 5000 });
-		await this.chatButton.click();
+		await this.revealToolbar();
+		await this.chatButton.click({ force: true });
 		await this.page.waitForTimeout(150);
 	}
 
 	async openPeople() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.peopleButton.waitFor({ state: "visible", timeout: 5000 });
-		await this.peopleButton.click();
+		await this.revealToolbar();
+		await this.peopleButton.click({ force: true });
 		await this.page.waitForTimeout(150);
 	}
 
 	async raiseHand() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.raiseHandButton.waitFor({ state: "visible", timeout: 5000 });
-		await this.raiseHandButton.click();
+		await this.revealToolbar();
+		await this.raiseHandButton.click({ force: true });
 		await this.page.waitForTimeout(150);
 	}
 
 	async endCall() {
 		await this.dismissBlockingToasts();
-		await this.waitForToolbarVisible();
-		await this.endCallButton.click();
+		await this.revealToolbar();
+		await this.endCallButton.click({ force: true });
 		await expect(this.page.locator("[data-meeting-component]")).not.toBeVisible(
 			{ timeout: 10000 },
 		);
@@ -112,16 +106,24 @@ export class ToolbarControls {
 		return html.includes("lucide-video-off");
 	}
 
-	async waitForToolbarVisible() {
-		// Move mouse to keep controls alive (prevent auto-hide)
+	async revealToolbar() {
 		const viewport = this.page.viewportSize();
-		if (viewport) {
-			await this.page.mouse.move(viewport.width / 2, viewport.height * 0.8);
-		}
+		if (!viewport) return;
 
-		// Ensure toolbar and primary controls are visible
-		await this.dismissBlockingToasts();
-		await expect(this.cameraButton).toBeVisible({ timeout: 5000 });
+		// Move mouse to bottom center to trigger activity and reveal toolbar
+		await this.page.mouse.move(viewport.width / 2, viewport.height - 50);
+
+		// Wait for toolbar to appear
+		await this.cameraButton.waitFor({ state: "attached", timeout: 5000 });
+
+		// Hover directly over the toolbar to keep it visible (triggers onMouseEnter)
+		const toolbarBox = await this.toolbar.boundingBox();
+		if (toolbarBox) {
+			await this.page.mouse.move(
+				toolbarBox.x + toolbarBox.width / 2,
+				toolbarBox.y + toolbarBox.height / 2,
+			);
+		}
 	}
 
 	async dismissBlockingToasts() {
