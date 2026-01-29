@@ -6,6 +6,7 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
 	workers: 1,
+	maxFailures: process.env.CI ? 5 : 0,
 	reporter: process.env.CI
 		? [
 				["github"],
