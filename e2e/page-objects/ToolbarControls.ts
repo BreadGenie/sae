@@ -46,6 +46,7 @@ export class ToolbarControls {
 
 	async toggleCamera() {
 		await this.dismissBlockingToasts();
+		await this.debugToolbarState(); // Add this
 		await this.revealToolbar();
 		await this.cameraButton.click({ force: true });
 		await this.page.waitForTimeout(300);
@@ -158,5 +159,31 @@ export class ToolbarControls {
 				}
 			}
 		} catch {}
+	}
+
+	async debugToolbarState() {
+		console.log("🔍 Debugging toolbar state...");
+
+		// Check if meeting component exists
+		const meetingComponent = await this.page.locator('[data-meeting-component]').count();
+		console.log("Meeting component count:", meetingComponent);
+
+		// Check all buttons with "End Call" title
+		const endCallButtons = await this.page.locator('button[title="End Call"]').count();
+		console.log("End Call buttons count:", endCallButtons);
+
+		// Check toolbar matches
+		const toolbarMatches = await this.toolbar.count();
+		console.log("Toolbar matches:", toolbarMatches);
+
+		// Dump toolbar HTML
+		if (toolbarMatches > 0) {
+			const html = await this.toolbar.innerHTML();
+			console.log("Toolbar HTML:", html.substring(0, 500));
+		}
+
+		// Check camera button
+		const cameraButtons = await this.cameraButton.count();
+		console.log("Camera button matches:", cameraButtons);
 	}
 }

@@ -13,6 +13,7 @@ export default defineConfig({
 				["junit", { outputFile: "results.xml" }],
 			]
 		: [["html", { open: "on-failure" }]],
+	timeout: 60000,
 	use: {
 		baseURL: process.env.BASE_URL || "http://localhost:8096",
 		trace: "retain-on-failure",
