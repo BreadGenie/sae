@@ -38,56 +38,56 @@ export class ToolbarControls {
 	}
 
 	async toggleMicrophone() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.micButton.waitFor({ state: "visible", timeout: 5000 });
 		await this.micButton.click();
 		await this.page.waitForTimeout(250);
 	}
 
 	async toggleCamera() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.cameraButton.waitFor({ state: "visible", timeout: 5000 });
 		await this.cameraButton.click();
 		await this.page.waitForTimeout(300);
 	}
 
 	async toggleScreenShare() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.screenShareButton.waitFor({ state: "visible", timeout: 5000 });
 		await this.screenShareButton.click();
 		await this.page.waitForTimeout(300);
 	}
 
 	async openChat() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.chatButton.waitFor({ state: "visible", timeout: 5000 });
 		await this.chatButton.click();
 		await this.page.waitForTimeout(150);
 	}
 
 	async openPeople() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.peopleButton.waitFor({ state: "visible", timeout: 5000 });
 		await this.peopleButton.click();
 		await this.page.waitForTimeout(150);
 	}
 
 	async raiseHand() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.raiseHandButton.waitFor({ state: "visible", timeout: 5000 });
 		await this.raiseHandButton.click();
 		await this.page.waitForTimeout(150);
 	}
 
 	async endCall() {
-		await this.waitForToolbarVisible();
 		await this.dismissBlockingToasts();
+		await this.waitForToolbarVisible();
 		await this.endCallButton.click();
 		await expect(this.page.locator("[data-meeting-component]")).not.toBeVisible(
 			{ timeout: 10000 },
