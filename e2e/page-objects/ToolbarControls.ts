@@ -46,7 +46,6 @@ export class ToolbarControls {
 
 	async toggleCamera() {
 		await this.dismissBlockingToasts();
-		await this.debugToolbarState(); // Add this
 		await this.revealToolbar();
 		await this.cameraButton.click({ force: true });
 		await this.page.waitForTimeout(300);
@@ -115,11 +114,9 @@ export class ToolbarControls {
 
 		// Move mouse to bottom center to trigger activity and reveal toolbar
 		await this.page.mouse.move(viewport.width / 2, viewport.height - 50);
+		await this.page.waitForTimeout(500);
 
-		// Wait for the toolbar container itself to be visible first
-		await this.toolbar.waitFor({ state: "visible", timeout: 5000 });
-
-		// Then wait for camera button to be attached and visible
+		// Then wait for camera button to be visible (confirms all toolbar buttons are ready)
 		await this.cameraButton.waitFor({ state: "visible", timeout: 5000 });
 
 		// Hover directly over the toolbar to keep it visible (triggers onMouseEnter)
@@ -130,6 +127,8 @@ export class ToolbarControls {
 				toolbarBox.y + toolbarBox.height / 2,
 			);
 		}
+
+		await this.page.waitForTimeout(200);
 	}
 
 	async dismissBlockingToasts() {
@@ -159,31 +158,5 @@ export class ToolbarControls {
 				}
 			}
 		} catch {}
-	}
-
-	async debugToolbarState() {
-		console.log("🔍 Debugging toolbar state...");
-
-		// Check if meeting component exists
-		const meetingComponent = await this.page.locator('[data-meeting-component]').count();
-		console.log("Meeting component count:", meetingComponent);
-
-		// Check all buttons with "End Call" title
-		const endCallButtons = await this.page.locator('button[title="End Call"]').count();
-		console.log("End Call buttons count:", endCallButtons);
-
-		// Check toolbar matches
-		const toolbarMatches = await this.toolbar.count();
-		console.log("Toolbar matches:", toolbarMatches);
-
-		// Dump toolbar HTML
-		if (toolbarMatches > 0) {
-			const html = await this.toolbar.innerHTML();
-			console.log("Toolbar HTML:", html.substring(0, 500));
-		}
-
-		// Check camera button
-		const cameraButtons = await this.cameraButton.count();
-		console.log("Camera button matches:", cameraButtons);
 	}
 }
