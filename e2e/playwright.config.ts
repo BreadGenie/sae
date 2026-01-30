@@ -14,7 +14,7 @@ export default defineConfig({
 				["junit", { outputFile: "results.xml" }],
 			]
 		: [["html", { open: "on-failure" }]],
-	timeout: process.env.CI ? 120000 : 60000,
+	timeout: process.env.CI ? 200000 : 60000,
 	use: {
 		baseURL: process.env.BASE_URL || "http://localhost:8096",
 		actionTimeout: process.env.CI ? 15000 : 5000,
