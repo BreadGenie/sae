@@ -13,6 +13,7 @@ import {
 	ChatPanel,
 	PeoplePanel,
 } from "../page-objects";
+import { loginViaAPI } from "../helpers";
 import { TEST_USERS, type TestUserKey } from "./test-users";
 
 export class Participant {
@@ -43,8 +44,9 @@ export class Participant {
 
 	async loginAs(userKey: TestUserKey) {
 		const user = TEST_USERS[userKey];
-		await this.login.goto();
-		await this.login.loginAndWait(user.email, user.password);
+		await loginViaAPI(this.page.request, user.email, user.password);
+		await this.page.goto("/meet/");
+		await this.page.waitForLoadState("load");
 		this._isLoggedIn = true;
 	}
 

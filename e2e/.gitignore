@@ -6,6 +6,9 @@ test-results/
 playwright-report/
 results.xml
 
+# Authentication state
+.auth/
+
 # Temporary files
 *.log
 .DS_Store

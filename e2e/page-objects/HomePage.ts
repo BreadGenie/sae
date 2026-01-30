@@ -9,7 +9,9 @@ export class HomePage {
 
 	constructor(page: Page) {
 		this.page = page;
-		this.meetingCodeInput = page.getByRole("textbox", { name: "Meeting Code" });
+		this.meetingCodeInput = page.getByRole("textbox", {
+			name: "abcd-efgh-ijkl",
+		});
 		this.joinButton = page.getByRole("button", { name: "Join" });
 		this.startMeetingButton = page.getByRole("button", {
 			name: "Start new meeting",
@@ -21,6 +23,7 @@ export class HomePage {
 
 	async goto() {
 		await this.page.goto("/meet/");
+		await this.page.waitForLoadState("load");
 	}
 
 	async createMeeting(type: "open" | "restricted" = "open"): Promise<string> {

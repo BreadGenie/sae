@@ -61,6 +61,9 @@ e2e/
 ├── fixtures/           # Test fixtures and helpers
 │   ├── participants.ts # Multi-browser participant management
 │   └── test-users.ts   # Test user credentials
+├── helpers/            # API helpers and utilities
+│   ├── auth.ts         # Authentication (API login)
+│   ├── index.ts
 ├── page-objects/       # Page Object Model classes
 │   ├── LoginPage.ts
 │   ├── HomePage.ts
