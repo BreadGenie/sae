@@ -8,8 +8,8 @@ End-to-end tests using Playwright.
 
 ```bash
 cd e2e
-npm install
-npm run install-browsers
+yarn install
+yarn install-browsers
 ```
 
 2. Generate fake audio file (requires ffmpeg):
@@ -39,19 +39,19 @@ Ensure all services are running:
 
 ```bash
 # Run all tests
-npm test
+yarn test
 
 # Run with browser visible
-npm run test:headed
+yarn test:headed
 
 # Run with debug mode (step through)
-npm run test:debug
+yarn test:debug
 
 # Run with Playwright UI
-npm run test:ui
+yarn test:ui
 
 # View test report
-npm run test:report
+yarn test:report
 ```
 
 ## Test Structure

@@ -154,8 +154,8 @@ jobs:
       - name: Install E2E Dependencies
         working-directory: ${{ github.workspace }}/e2e
         run: |
-          npm ci
-          npx playwright install chromium --with-deps
+          yarn install --frozen-lockfile
+          yarn playwright install chromium --with-deps
 
       - name: Generate Fake Audio File
         working-directory: ${{ github.workspace }}/e2e/resources
@@ -193,7 +193,7 @@ jobs:
 
       - name: Run E2E Tests
         working-directory: ${{ github.workspace }}/e2e
-        run: npm test
+        run: yarn test
         env:
           BASE_URL: http://meet.test:8000
           SFU_URL: http://localhost:3000
