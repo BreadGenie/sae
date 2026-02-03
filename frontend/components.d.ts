@@ -6,6 +6,154 @@
 export {}
 
 /* prettier-ignore */
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+declare module "vue" {
+	export interface GlobalComponents {
+		AudioIndicator: typeof import(
+			"./src/components/AudioIndicator.vue",
+		)["default"];
+		AudioSettingsTab: typeof import(
+			"./src/components/settings/AudioSettingsTab.vue",
+		)["default"];
+		BackgroundSettingsTab: typeof import(
+			"./src/components/settings/BackgroundSettingsTab.vue",
+		)["default"];
+		ChatNotification: typeof import(
+			"./src/components/ChatNotification.vue",
+		)["default"];
+		ChatNotificationQueue: typeof import(
+			"./src/components/ChatNotificationQueue.vue",
+		)["default"];
+		ChatPanel: typeof import("./src/components/ChatPanel.vue")["default"];
+		ClickToCopyField: typeof import(
+			"./src/components/ClickToCopyField.vue",
+		)["default"];
+		DeviceSettingsTab: typeof import(
+			"./src/components/settings/DeviceSettingsTab.vue",
+		)["default"];
+		EmojiPicker: typeof import("./src/components/EmojiPicker.vue")["default"];
+		FloatingReactions: typeof import(
+			"./src/components/FloatingReactions.vue",
+		)["default"];
+		GroupTile: typeof import("./src/components/GroupTile.vue")["default"];
+		JoinRequestNotifications: typeof import(
+			"./src/components/JoinRequestNotifications.vue",
+		)["default"];
+		KickParticipantDialog: typeof import(
+			"./src/components/KickParticipantDialog.vue",
+		)["default"];
+		LayoutSettingsTab: typeof import(
+			"./src/components/settings/LayoutSettingsTab.vue",
+		)["default"];
+		LobbyOverlay: typeof import("./src/components/LobbyOverlay.vue")["default"];
+		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
+		LucideAlertTriangle: typeof import(
+			"~icons/lucide/alert-triangle",
+		)["default"];
+		LucideCheck: typeof import("~icons/lucide/check")["default"];
+		LucideCircleUserRound: typeof import(
+			"~icons/lucide/circle-user-round",
+		)["default"];
+		LucideClock: typeof import("~icons/lucide/clock")["default"];
+		LucideHand: typeof import("~icons/lucide/hand")["default"];
+		LucideHome: typeof import("~icons/lucide/home")["default"];
+		LucideLoader: typeof import("~icons/lucide/loader")["default"];
+		LucideMessageSquare: typeof import(
+			"~icons/lucide/message-square",
+		)["default"];
+		LucideMessageSquareDot: typeof import(
+			"~icons/lucide/message-square-dot",
+		)["default"];
+		LucideMessageSquareOff: typeof import(
+			"~icons/lucide/message-square-off",
+		)["default"];
+		LucideMic: typeof import("~icons/lucide/mic")["default"];
+		LucideMicOff: typeof import("~icons/lucide/mic-off")["default"];
+		LucideMonitorPause: typeof import("~icons/lucide/monitor-pause")["default"];
+		LucideMonitorUp: typeof import("~icons/lucide/monitor-up")["default"];
+		LucideMoreHorizontal: typeof import(
+			"~icons/lucide/more-horizontal",
+		)["default"];
+		LucideMoreVertical: typeof import("~icons/lucide/more-vertical")["default"];
+		LucidePhoneOff: typeof import("~icons/lucide/phone-off")["default"];
+		LucidePin: typeof import("~icons/lucide/pin")["default"];
+		LucidePinOff: typeof import("~icons/lucide/pin-off")["default"];
+		LucidePlay: typeof import("~icons/lucide/play")["default"];
+		LucidePlayCircle: typeof import("~icons/lucide/play-circle")["default"];
+		LucidePlus: typeof import("~icons/lucide/plus")["default"];
+		LucideSearch: typeof import("~icons/lucide/search")["default"];
+		LucideSettings: typeof import("~icons/lucide/settings")["default"];
+		LucideSmile: typeof import("~icons/lucide/smile")["default"];
+		LucideUserCheck: typeof import("~icons/lucide/user-check")["default"];
+		LucideUserMinus: typeof import("~icons/lucide/user-minus")["default"];
+		LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"];
+		LucideUsers: typeof import("~icons/lucide/users")["default"];
+		LucideUserX: typeof import("~icons/lucide/user-x")["default"];
+		LucideVideo: typeof import("~icons/lucide/video")["default"];
+		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
+		LucideX: typeof import("~icons/lucide/x")["default"];
+		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
+		MeetingAccessSettingsTab: typeof import(
+			"./src/components/settings/MeetingAccessSettingsTab.vue",
+		)["default"];
+		MeetingAvatar: typeof import(
+			"./src/components/MeetingAvatar.vue",
+		)["default"];
+		MeetingInfoDialog: typeof import(
+			"./src/components/MeetingInfoDialog.vue",
+		)["default"];
+		MeetingLayout: typeof import(
+			"./src/components/MeetingLayout.vue",
+		)["default"];
+		MeetingPreview: typeof import(
+			"./src/components/MeetingPreview.vue",
+		)["default"];
+		MeetingToolbar: typeof import(
+			"./src/components/MeetingToolbar.vue",
+		)["default"];
+		NamePill: typeof import("./src/components/NamePill.vue")["default"];
+		NotificationSettingsTab: typeof import(
+			"./src/components/settings/NotificationSettingsTab.vue",
+		)["default"];
+		ParticipantAvatarGroup: typeof import(
+			"./src/components/ParticipantAvatarGroup.vue",
+		)["default"];
+		ParticipantTile: typeof import(
+			"./src/components/ParticipantTile.vue",
+		)["default"];
+		PeoplePanel: typeof import("./src/components/PeoplePanel.vue")["default"];
+		PeopleParticipantTile: typeof import(
+			"./src/components/PeopleParticipantTile.vue",
+		)["default"];
+		PeopleWaitingSection: typeof import(
+			"./src/components/PeopleWaitingSection.vue",
+		)["default"];
+		PreviewToolbar: typeof import(
+			"./src/components/PreviewToolbar.vue",
+		)["default"];
+		ReactionPicker: typeof import(
+			"./src/components/ReactionPicker.vue",
+		)["default"];
+		RejectionOverlay: typeof import(
+			"./src/components/RejectionOverlay.vue",
+		)["default"];
+		RouterLink: typeof import("vue-router")["RouterLink"];
+		RouterView: typeof import("vue-router")["RouterView"];
+		SettingsDialog: typeof import(
+			"./src/components/settings/SettingsDialog.vue",
+		)["default"];
+		SettingsLayoutBase: typeof import(
+			"./src/components/settings/SettingsLayoutBase.vue",
+		)["default"];
+		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
+		Spinner: typeof import("./src/components/Spinner.vue")["default"];
+		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];
+		VideoPreview: typeof import("./src/components/VideoPreview.vue")["default"];
+	}
+=======
+>>>>>>> 309fcce (uncommit this please)
 declare module 'vue' {
   export interface GlobalComponents {
     AudioIndicator: typeof import('./src/components/AudioIndicator.vue')['default']
@@ -17,11 +165,18 @@ declare module 'vue' {
     ClickToCopyField: typeof import('./src/components/ClickToCopyField.vue')['default']
     DeviceSettingsTab: typeof import('./src/components/settings/DeviceSettingsTab.vue')['default']
     EmojiPicker: typeof import('./src/components/EmojiPicker.vue')['default']
+<<<<<<< HEAD
+=======
+    FloatingControls: typeof import('./src/components/FloatingControls.vue')['default']
+>>>>>>> 309fcce (uncommit this please)
     FloatingReactions: typeof import('./src/components/FloatingReactions.vue')['default']
     GroupTile: typeof import('./src/components/GroupTile.vue')['default']
     JoinRequestNotifications: typeof import('./src/components/JoinRequestNotifications.vue')['default']
     KickParticipantDialog: typeof import('./src/components/KickParticipantDialog.vue')['default']
+<<<<<<< HEAD
     LayoutSettingsTab: typeof import('./src/components/settings/LayoutSettingsTab.vue')['default']
+=======
+>>>>>>> 309fcce (uncommit this please)
     LobbyOverlay: typeof import('./src/components/LobbyOverlay.vue')['default']
     LucideAlertCircle: typeof import('~icons/lucide/alert-circle')['default']
     LucideAlertTriangle: typeof import('~icons/lucide/alert-triangle')['default']
@@ -41,8 +196,11 @@ declare module 'vue' {
     LucideMoreHorizontal: typeof import('~icons/lucide/more-horizontal')['default']
     LucideMoreVertical: typeof import('~icons/lucide/more-vertical')['default']
     LucidePhoneOff: typeof import('~icons/lucide/phone-off')['default']
+<<<<<<< HEAD
     LucidePin: typeof import('~icons/lucide/pin')['default']
     LucidePinOff: typeof import('~icons/lucide/pin-off')['default']
+=======
+>>>>>>> 309fcce (uncommit this please)
     LucidePlay: typeof import("~icons/lucide/play")["default"]
     LucidePlayCircle: typeof import("~icons/lucide/play-circle")["default"]
     LucidePlus: typeof import('~icons/lucide/plus')['default']
@@ -50,20 +208,33 @@ declare module 'vue' {
     LucideSettings: typeof import('~icons/lucide/settings')['default']
     LucideSmile: typeof import('~icons/lucide/smile')['default']
     LucideUserCheck: typeof import("~icons/lucide/user-check")["default"]
+<<<<<<< HEAD
     LucideUserMinus: typeof import('~icons/lucide/user-minus')['default']
     LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"]
     LucideUsers: typeof import('~icons/lucide/users')['default']
     LucideUserX: typeof import('~icons/lucide/user-x')['default']
     LucideVideo: typeof import('~icons/lucide/video')['default']
     LucideVideoOff: typeof import('~icons/lucide/video-off')['default']
+=======
+    LucideUserMinus: typeof import("~icons/lucide/user-minus")["default"]
+    LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"]
+    LucideUsers: typeof import('~icons/lucide/users')['default']
+    LucideVideo: typeof import('~icons/lucide/video')['default']
+    LucideVideoOff: typeof import('~icons/lucide/video-off')['default']
+    LucideWifiOff: typeof import('~icons/lucide/wifi-off')['default']
+>>>>>>> 309fcce (uncommit this please)
     LucideX: typeof import('~icons/lucide/x')['default']
     LucideXCircle: typeof import('~icons/lucide/x-circle')['default']
     MeetingAccessSettingsTab: typeof import('./src/components/settings/MeetingAccessSettingsTab.vue')['default']
     MeetingAvatar: typeof import('./src/components/MeetingAvatar.vue')['default']
     MeetingInfoDialog: typeof import('./src/components/MeetingInfoDialog.vue')['default']
+<<<<<<< HEAD
     MeetingLayout: typeof import('./src/components/MeetingLayout.vue')['default']
     MeetingPreview: typeof import('./src/components/MeetingPreview.vue')['default']
     MeetingToolbar: typeof import('./src/components/MeetingToolbar.vue')['default']
+=======
+    MeetingPreview: typeof import('./src/components/MeetingPreview.vue')['default']
+>>>>>>> 309fcce (uncommit this please)
     NamePill: typeof import('./src/components/NamePill.vue')['default']
     NotificationSettingsTab: typeof import('./src/components/settings/NotificationSettingsTab.vue')['default']
     ParticipantAvatarGroup: typeof import('./src/components/ParticipantAvatarGroup.vue')['default']
@@ -71,11 +242,19 @@ declare module 'vue' {
     PeoplePanel: typeof import('./src/components/PeoplePanel.vue')['default']
     PeopleParticipantTile: typeof import('./src/components/PeopleParticipantTile.vue')['default']
     PeopleWaitingSection: typeof import('./src/components/PeopleWaitingSection.vue')['default']
+<<<<<<< HEAD
     PreviewToolbar: typeof import('./src/components/PreviewToolbar.vue')['default']
+=======
+>>>>>>> 309fcce (uncommit this please)
     ReactionPicker: typeof import('./src/components/ReactionPicker.vue')['default']
     RejectionOverlay: typeof import('./src/components/RejectionOverlay.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+<<<<<<< HEAD
+=======
+    ScreenShareLayout: typeof import('./src/components/ScreenShareLayout.vue')['default']
+<<<<<<< HEAD
+>>>>>>> 56de451 (uncommit this please)
     SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SettingsLayoutBase: typeof import('./src/components/settings/SettingsLayoutBase.vue')['default']
     SFUDashboard: typeof import('./src/components/SFUDashboard.vue')['default']
@@ -83,4 +262,15 @@ declare module 'vue' {
     VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"]
     VideoPreview: typeof import('./src/components/VideoPreview.vue')['default']
   }
+=======
+    ScreenShareSidebar: typeof import('./src/components/ScreenShareSidebar.vue')['default']
+    ScreenShareSidebarParticipantTile: typeof import('./src/components/ScreenShareSidebarParticipantTile.vue')['default']
+    SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
+    SettingsLayoutBase: typeof import('./src/components/settings/SettingsLayoutBase.vue')['default']
+    SFUDashboard: typeof import('./src/components/SFUDashboard.vue')['default']
+    VideoGrid: typeof import('./src/components/VideoGrid.vue')['default']
+    VideoPreview: typeof import('./src/components/VideoPreview.vue')['default']
+  }
+>>>>>>> 9a6ff34 (uncommit this please)
+>>>>>>> 309fcce (uncommit this please)
 }

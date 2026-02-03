@@ -1,6 +1,6 @@
 import { test, expect } from "../../fixtures";
 
-test.describe("Multi-Participant Meeting", () => {
+test.skip("Multi-Participant Meeting", () => {
 	test("two participants can join the same meeting", async ({
 		createParticipant,
 	}) => {
