@@ -123,6 +123,35 @@ export class MediasoupManager {
 		);
 	}
 
+	async createPlainTransport(
+		roomId: string,
+		peerId: string,
+	): Promise<{
+		id: string;
+		ip: string;
+		port: number;
+		rtcpPort: number | undefined;
+	}> {
+		const room = this.roomManager.getRoom(roomId);
+		if (!room) {
+			throw new Error(`Room ${roomId} not found`);
+		}
+
+		const peer = room.peers.get(peerId);
+		if (!peer) {
+			throw new Error(`Peer ${peerId} not found in room ${roomId}`);
+		}
+
+		const listenIp =
+			mediasoupConfig.webRtcTransport.listenIps[0]?.ip || '0.0.0.0';
+		return this.transportManager.createPlainTransport(
+			roomId,
+			peerId,
+			room.router,
+			listenIp,
+		);
+	}
+
 	async createProducer(
 		transportId: string,
 		rtpParameters: RtpParameters,

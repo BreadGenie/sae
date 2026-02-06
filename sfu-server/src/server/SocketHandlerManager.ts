@@ -558,6 +558,35 @@ export class SocketHandlerManager {
 			}
 		});
 
+		socket.on('create_plain_transport', async (_data, callback) => {
+			try {
+				const isDev = process.env.NODE_ENV === 'development';
+				if (!isDev) {
+					throw new Error(
+						'PlainTransport creation is not allowed in this environment',
+					);
+				}
+
+				this.authManager.ensureFullAccess(socket);
+
+				const roomId = socket.meetingId;
+				const userId = socket.userId;
+
+				const transportParams = await this.mediasoup.createPlainTransport(
+					roomId,
+					userId,
+				);
+
+				callback({ success: true, ...transportParams });
+			} catch (error) {
+				loggers.socketHandler.error(
+					'Error creating PlainTransport: %s',
+					(error as Error).message,
+				);
+				callback({ success: false, error: (error as Error).message });
+			}
+		});
+
 		socket.on('create_producer', async (data, callback) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
