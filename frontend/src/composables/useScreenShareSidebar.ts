@@ -178,7 +178,11 @@ export function useScreenShareSidebar(
 		for (const p of candidates) {
 			if (slotAssignments.value.has(p.user_id)) {
 				const oldSlot = slotAssignments.value.get(p.user_id);
-				if (oldSlot !== undefined && oldSlot < remoteCapacity && !slotsTaken.has(oldSlot)) {
+				if (
+					oldSlot !== undefined &&
+					oldSlot < remoteCapacity &&
+					!slotsTaken.has(oldSlot)
+				) {
 					newSlots.set(p.user_id, oldSlot);
 					slotsTaken.add(oldSlot);
 				}
