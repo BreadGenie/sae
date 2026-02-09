@@ -69,7 +69,6 @@ export function useVideoGridLayout(
 
 	// store position in map participant ID -> assigned slot index
 	let slotAssignments: Map<string, number> = new Map();
-	let lastVisibleIds: Set<string> = new Set();
 
 	// cache the last result to avoid triggering re-renders when order unchanged
 	let lastResult: DisplayParticipantsResult | null = null;
@@ -108,10 +107,8 @@ export function useVideoGridLayout(
 		};
 
 		// priority map
-		const participantMap = new Map<string, Participant>();
 		const priorityMap = new Map<string, number>();
 		for (const p of remotes) {
-			participantMap.set(p.user_id, p);
 			priorityMap.set(p.user_id, getPriority(p));
 		}
 
@@ -154,7 +151,6 @@ export function useVideoGridLayout(
 		// Take top N as visible
 		const visibleRemotes = sortedByPriority.slice(0, remoteCapacity);
 		const hidden = sortedByPriority.slice(remoteCapacity);
-		const newVisibleIds = new Set(visibleRemotes.map((p) => p.user_id));
 
 		const usedSlots = new Set<number>();
 		const newSlotAssignments = new Map<string, number>();
@@ -184,7 +180,6 @@ export function useVideoGridLayout(
 		}
 
 		slotAssignments = newSlotAssignments;
-		lastVisibleIds = newVisibleIds;
 
 		// sort by slot
 		const orderedVisible = [...visibleRemotes].sort((a, b) => {
