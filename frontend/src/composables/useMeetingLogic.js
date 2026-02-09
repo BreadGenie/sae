@@ -1573,7 +1573,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 				meetingState.activeSpeakerIds.value = participantIds;
 
-				const STABLE_THRESHOLD_MS = 2000;
+				const STABLE_THRESHOLD_MS = 1000;
 				const DEMOTE_THRESHOLD_MS = 3000;
 				let stabilityCheckTimeout = null;
 
