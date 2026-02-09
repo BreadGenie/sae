@@ -132,7 +132,9 @@ export function useScreenShareSidebar(
 		}
 
 		const threshold = maxVisibleTiles.value;
-		const remoteCapacity = Math.max(0, threshold - 2);
+		const totalTiles = remotes.length + 1; // include local tile
+		const remoteCapacity =
+			totalTiles <= threshold ? remotes.length : Math.max(0, threshold - 2);
 
 		// Get active speaker IDs
 		const activeSpeakers = speakerIds?.value || [];
