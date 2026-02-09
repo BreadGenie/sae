@@ -826,32 +826,3 @@ watch(
 	{ immediate: true },
 );
 </script>
-
-<style scoped>
-/* Transition styles for participant tiles */
-.tile-enter-from,
-.tile-leave-to {
-	opacity: 0;
-	transform: scale(0.85) translateY(8px);
-}
-
-.tile-enter-active,
-.tile-leave-active {
-	transition:
-		opacity 200ms ease,
-		transform 200ms ease;
-}
-
-.tile-move {
-	transition: transform 200ms ease;
-}
-
-.tile-leave-active {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
-}
-</style>

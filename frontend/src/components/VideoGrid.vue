@@ -3,7 +3,7 @@
 		<TransitionGroup
 			name="tile"
 			tag="div"
-			class="h-full grid gap-2 call-grid transition-all duration-300 ease-out"
+			class="h-full grid gap-2 call-grid"
 			:class="gridClass"
 			:style="gridStyle"
 		>
@@ -21,14 +21,15 @@
 
 			<!-- Remote participants -->
 			<ParticipantTile
-				v-for="participant in displayParticipants.list"
-				:key="'grid-' + participant.user_id"
+				v-for="participant in allParticipants"
+				:class="{ 'hidden-tile': !participant.isVisible }"
+				:key="'tile-' + participant.user_id"
 				:participant="participant"
 				:isLocal="false"
 				:isVideoEnabled="participant.video_enabled"
 				:isAudioEnabled="participant.audio_enabled"
 				:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
-				:videoRef="(el) => handleRemoteVideoRef(participant.user_id, el)"
+				:videoRef="getRemoteVideoRef(participant.user_id)"
 				:tileCount="visibleTileCount"
 			/>
 
@@ -77,6 +78,18 @@ const handleRemoteVideoRef = (participantId, el) => {
 	registerTile(participantId, el);
 };
 
+const videoRefHandlers = new Map();
+
+// cache ref handlers to avoid UI flicker
+const getRemoteVideoRef = (participantId) => {
+	if (!videoRefHandlers.has(participantId)) {
+		videoRefHandlers.set(participantId, (el) => {
+			handleRemoteVideoRef(participantId, el);
+		});
+	}
+	return videoRefHandlers.get(participantId);
+};
+
 const gridContainer = ref(null);
 
 const participants = computed(() => meetingState.participants.value);
@@ -119,6 +132,7 @@ const localParticipant = computed(() => {
 
 const {
 	displayParticipants,
+	allParticipants,
 	gridClass,
 	gridStyle,
 	visibleTileCount,
@@ -162,3 +176,37 @@ const hiddenParticipantReactions = computed(() => {
 	return sorted.slice(0, 6);
 });
 </script>
+
+<style scoped>
+/* Hidden tiles are kept mounted to not affect grid layout animations. */
+.hidden-tile {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+	transform: scale(0);
+	bottom: 0;
+	right: 0;
+	z-index: 0;
+}
+
+/* Animation styles */
+.tile-enter-from,
+.tile-leave-to {
+	opacity: 0;
+	transform: scale(0.85);
+}
+
+.tile-enter-active,
+.tile-leave-active {
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tile-move {
+	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tile-leave-active {
+	position: absolute;
+	z-index: 0;
+}
+</style>

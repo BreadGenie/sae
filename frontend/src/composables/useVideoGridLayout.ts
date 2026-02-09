@@ -4,12 +4,18 @@ import { useResponsiveGrid } from "./useResponsiveGrid";
 
 interface MeetingState {
 	raisedHands?: Ref<Record<string, string>>;
+	stableSpeakerIds?: Ref<string[]>;
 }
 
 interface DisplayParticipantsResult {
 	list: Participant[];
 	hidden: Participant[];
 	extra: number;
+}
+
+interface DisplayParticipant extends Participant {
+	isVisible: boolean;
+	slotIndex: number;
 }
 
 interface GridStyle {
@@ -19,6 +25,7 @@ interface GridStyle {
 
 interface UseVideoGridLayoutReturn {
 	displayParticipants: ComputedRef<DisplayParticipantsResult>;
+	allParticipants: ComputedRef<DisplayParticipant[]>;
 	gridClass: ComputedRef<string>;
 	gridStyle: ComputedRef<GridStyle>;
 	visibleTileCount: ComputedRef<number>;
@@ -61,6 +68,14 @@ export function useVideoGridLayout(
 		return cols * maxRows; // e.g., 2 cols = 8 tiles, 3 cols = 12, 4 cols = 16
 	});
 
+	// store position in map participant ID -> assigned slot index
+	let slotAssignments: Map<string, number> = new Map();
+	let lastVisibleIds: Set<string> = new Set();
+
+	// cache the last result to avoid triggering re-renders when order unchanged
+	let lastResult: DisplayParticipantsResult | null = null;
+	let lastOrderKey = "";
+
 	// cap visible tiles based on screen size (cols × 4 rows)
 	// extra participants are grouped
 	const displayParticipants = computed<DisplayParticipantsResult>(() => {
@@ -74,105 +89,124 @@ export function useVideoGridLayout(
 
 		const total = remotes.length + 1; // +1 for local user
 		const threshold = maxVisibleTiles.value;
+		const remoteCapacity = total <= threshold ? remotes.length : threshold - 2;
 
-		// Get active speaker IDs
-		const activeSpeakers = activeSpeakerIds?.value || [];
-		const activeSpeakerSet = new Set<string>(activeSpeakers);
+		// Use stableSpeakerIds for tile ordering (stable after 2s)
+		const stableSpeakers = meetingState.stableSpeakerIds?.value || [];
+		const stableSpeakerSet = new Set<string>(stableSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
 
-		// If within threshold, show all
-		if (total <= threshold) {
-			return { list: remotes, hidden: [], extra: 0 };
+		const getPriority = (p: Participant) => {
+			const isStable = stableSpeakerSet.has(p.user_id);
+			const hasVideo = !!p.video_enabled;
+			const hasHand = !!raisedHands[p.user_id];
+
+			if (isStable && hasVideo) return 0;
+			if (isStable) return 1;
+			if (hasVideo) return 2;
+			if (hasHand) return 3;
+			return 4;
+		};
+
+		// priority map
+		const participantMap = new Map<string, Participant>();
+		const priorityMap = new Map<string, number>();
+		for (const p of remotes) {
+			participantMap.set(p.user_id, p);
+			priorityMap.set(p.user_id, getPriority(p));
 		}
 
-		// 1 for local user and 1 for grouped tile
-		const remoteCapacity = threshold - 2;
+		const currentIds = new Set(remotes.map((p) => p.user_id));
 
-		// Separate participants by video state and active speaker status
-		// Sort by user_id for stable ordering within each category
-		const videoOnActiveSpeakers = remotes
-			.filter((p) => p.video_enabled && activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const videoOnNonSpeakers = remotes
-			.filter((p) => p.video_enabled && !activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const videoOffActiveSpeakers = remotes
-			.filter((p) => !p.video_enabled && activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const raisedHandsParticipants = remotes
-			.filter((p) => raisedHands[p.user_id] && !activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => {
-				const aTime = new Date(raisedHands[a.user_id]).getTime();
-				const bTime = new Date(raisedHands[b.user_id]).getTime();
-				// First sort by timestamp (earliest first), then by user_id for stability
-				if (aTime !== bTime) {
-					return aTime - bTime;
-				}
-				return a.user_id.localeCompare(b.user_id);
-			});
-		const videoOffNonSpeakers = remotes
-			.filter(
-				(p) =>
-					!p.video_enabled &&
-					!activeSpeakerSet.has(p.user_id) &&
-					!raisedHands[p.user_id],
-			)
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-
-		const visibleRemotes: Participant[] = [];
-
-		// Priority order:
-		// 1. Active speakers with video ON
-		// 2. Non-active speakers with video ON
-		// 3. Active speakers with video OFF (ensure they're visible)
-		// 4. Raised hands
-		// 5. Non-active speakers with video OFF
-
-		for (const p of videoOnActiveSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
+		// remove slots for participants who left
+		for (const id of slotAssignments.keys()) {
+			if (!currentIds.has(id)) {
+				slotAssignments.delete(id);
 			}
 		}
 
-		for (const p of videoOnNonSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
+		// get currently visible participants
+		const currentlyVisible = new Set<string>();
+		for (const [id, slot] of slotAssignments.entries()) {
+			if (slot < remoteCapacity) {
+				currentlyVisible.add(id);
 			}
 		}
 
-		for (const p of videoOffActiveSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
+		// sort all participants by priority, then by existing slot (to avoid needless moving around)
+		const sortedByPriority = [...remotes].sort((a, b) => {
+			const aPriority = priorityMap.get(a.user_id) ?? 4;
+			const bPriority = priorityMap.get(b.user_id) ?? 4;
+			if (aPriority !== bPriority) return aPriority - bPriority;
+
+			// Both same priority: prefer already visible
+			const aVisible = currentlyVisible.has(a.user_id);
+			const bVisible = currentlyVisible.has(b.user_id);
+			if (aVisible !== bVisible) return aVisible ? -1 : 1;
+
+			// Both visible or both hidden: keep existing order
+			const aSlot = slotAssignments.get(a.user_id) ?? 9999;
+			const bSlot = slotAssignments.get(b.user_id) ?? 9999;
+			if (aSlot !== bSlot) return aSlot - bSlot;
+
+			return a.user_id.localeCompare(b.user_id);
+		});
+
+		// Take top N as visible
+		const visibleRemotes = sortedByPriority.slice(0, remoteCapacity);
+		const hidden = sortedByPriority.slice(remoteCapacity);
+		const newVisibleIds = new Set(visibleRemotes.map((p) => p.user_id));
+
+		const usedSlots = new Set<number>();
+		const newSlotAssignments = new Map<string, number>();
+
+		// 1. keep existing slots for existing visible participants
+		for (const p of visibleRemotes) {
+			const existingSlot = slotAssignments.get(p.user_id);
+			if (
+				existingSlot !== undefined &&
+				existingSlot < remoteCapacity &&
+				!usedSlots.has(existingSlot)
+			) {
+				newSlotAssignments.set(p.user_id, existingSlot);
+				usedSlots.add(existingSlot);
 			}
 		}
 
-		for (const p of raisedHandsParticipants) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
+		// 2. assign free slots to newcomers
+		let nextFreeSlot = 0;
+		for (const p of visibleRemotes) {
+			if (!newSlotAssignments.has(p.user_id)) {
+				while (usedSlots.has(nextFreeSlot)) nextFreeSlot++;
+				newSlotAssignments.set(p.user_id, nextFreeSlot);
+				usedSlots.add(nextFreeSlot);
+				nextFreeSlot++;
 			}
 		}
 
-		for (const p of videoOffNonSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
-			}
+		slotAssignments = newSlotAssignments;
+		lastVisibleIds = newVisibleIds;
+
+		// sort by slot
+		const orderedVisible = [...visibleRemotes].sort((a, b) => {
+			const aSlot = newSlotAssignments.get(a.user_id) ?? 999;
+			const bSlot = newSlotAssignments.get(b.user_id) ?? 999;
+			return aSlot - bSlot;
+		});
+
+		// order key to compare with previous result
+		const visibleOrderKey = orderedVisible.map((p) => p.user_id).join(",");
+		const hiddenOrderKey = hidden.map((p) => p.user_id).join(",");
+		const newOrderKey = `${visibleOrderKey}|${hiddenOrderKey}`;
+
+		// if order hasn't changed, return cached result to prevent re-render
+		if (lastResult && newOrderKey === lastOrderKey) {
+			return lastResult;
 		}
 
-		// Hidden are all remaining not in visibleRemotes
-		const visibleIds = new Set(visibleRemotes.map((p) => p.user_id));
-		const hidden = remotes.filter((p) => !visibleIds.has(p.user_id));
-
-		return { list: visibleRemotes, hidden, extra: hidden.length };
+		lastOrderKey = newOrderKey;
+		lastResult = { list: orderedVisible, hidden, extra: hidden.length };
+		return lastResult;
 	});
 
 	// Calculate grid columns based on total visible tiles and screen size
@@ -228,8 +262,39 @@ export function useVideoGridLayout(
 		return `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
 	});
 
+	const allParticipants = computed<DisplayParticipant[]>(() => {
+		const dp = displayParticipants.value;
+
+		// map of visible participants to their slot index
+		const slotMap = new Map<string, number>();
+		dp.list.forEach((p, idx) => slotMap.set(p.user_id, idx));
+
+		const allWithVisibility: DisplayParticipant[] = [];
+
+		// add visible ones first
+		for (const p of dp.list) {
+			allWithVisibility.push({
+				...p,
+				isVisible: true,
+				slotIndex: slotMap.get(p.user_id) ?? 999,
+			});
+		}
+
+		// then hidden ones
+		for (const p of dp.hidden) {
+			allWithVisibility.push({
+				...p,
+				isVisible: false,
+				slotIndex: 999,
+			});
+		}
+
+		return allWithVisibility;
+	});
+
 	return {
 		displayParticipants,
+		allParticipants,
 		gridClass,
 		gridStyle,
 		visibleTileCount,

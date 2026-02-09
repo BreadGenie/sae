@@ -1573,6 +1573,64 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 				meetingState.activeSpeakerIds.value = participantIds;
 
+				const STABLE_THRESHOLD_MS = 2000;
+				const DEMOTE_THRESHOLD_MS = 3000;
+				let stabilityCheckTimeout = null;
+
+				const checkStability = () => {
+					const now = Date.now();
+					const currentSet = new Set(meetingState.activeSpeakerIds.value);
+					const startTimes = { ...meetingState.speakerStartTimes.value };
+					const currentStable = new Set(
+						meetingState.stableSpeakerIds.value || [],
+					);
+					let hasPendingCandidates = false;
+
+					// 1. Handle stopped speakers (demotion logic)
+					for (const id of Object.keys(startTimes)) {
+						if (!currentSet.has(id)) {
+							if (startTimes[id] > 0) {
+								startTimes[id] = -now; // Mark stopped
+							} else if (now - Math.abs(startTimes[id]) > DEMOTE_THRESHOLD_MS) {
+								delete startTimes[id];
+								currentStable.delete(id);
+							}
+						} else if (startTimes[id] < 0) {
+							startTimes[id] = now; // Resume
+						}
+					}
+
+					// 2. Add new speakers
+					for (const id of currentSet) {
+						if (startTimes[id] === undefined) {
+							startTimes[id] = now;
+						}
+					}
+
+					// 3. Promote stable speakers
+					for (const id of currentSet) {
+						const startTime = startTimes[id];
+						if (startTime > 0) {
+							if (now - startTime >= STABLE_THRESHOLD_MS) {
+								currentStable.add(id);
+							} else {
+								hasPendingCandidates = true;
+							}
+						}
+					}
+
+					meetingState.speakerStartTimes.value = startTimes;
+					meetingState.stableSpeakerIds.value = Array.from(currentStable);
+
+					// Schedule re-check if we have candidates waiting to become stable
+					if (hasPendingCandidates) {
+						if (stabilityCheckTimeout) clearTimeout(stabilityCheckTimeout);
+						stabilityCheckTimeout = setTimeout(checkStability, 200);
+					}
+				};
+
+				checkStability();
+
 				if (participantIds.length > 0) {
 					activeSpeakerTimeout.value = setTimeout(() => {
 						meetingState.activeSpeakerIds.value = [];

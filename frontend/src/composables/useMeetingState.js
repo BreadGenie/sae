@@ -41,6 +41,8 @@ export function useMeetingState() {
 	const participants = ref({});
 	const remoteVideos = ref({});
 	const activeSpeakerIds = ref([]);
+	const stableSpeakerIds = ref([]);
+	const speakerStartTimes = ref({});
 
 	// Waiting room states
 	const isWaitingForApproval = ref(false);
@@ -138,6 +140,8 @@ export function useMeetingState() {
 		localStream.value = null;
 		cameraPermissionGranted.value = false;
 		microphonePermissionGranted.value = false;
+		stableSpeakerIds.value = [];
+		speakerStartTimes.value = {};
 	};
 
 	const setMediaState = (mic, camera) => {
@@ -197,6 +201,8 @@ export function useMeetingState() {
 		participants,
 		remoteVideos,
 		activeSpeakerIds,
+		stableSpeakerIds,
+		speakerStartTimes,
 		isWaitingForApproval,
 		isJoinRequestRejected,
 		waitingUsers,
