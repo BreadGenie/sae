@@ -73,6 +73,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const { applyNoiseCancellation } = useNoiseCancellation();
 
 	let noiseCancellationSession = null;
+	let stabilityCheckTimeout = null;
 
 	const replacePublishedVideoTrack = async (
 		stream,
@@ -1570,12 +1571,15 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					clearTimeout(activeSpeakerTimeout.value);
 					activeSpeakerTimeout.value = null;
 				}
+				if (stabilityCheckTimeout) {
+					clearTimeout(stabilityCheckTimeout);
+					stabilityCheckTimeout = null;
+				}
 
 				meetingState.activeSpeakerIds.value = participantIds;
 
 				const STABLE_THRESHOLD_MS = 1000;
 				const DEMOTE_THRESHOLD_MS = 3000;
-				let stabilityCheckTimeout = null;
 
 				const checkStability = () => {
 					const now = Date.now();
@@ -1626,6 +1630,8 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					if (hasPendingCandidates) {
 						if (stabilityCheckTimeout) clearTimeout(stabilityCheckTimeout);
 						stabilityCheckTimeout = setTimeout(checkStability, 200);
+					} else {
+						stabilityCheckTimeout = null;
 					}
 				};
 
@@ -2177,6 +2183,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 		if (activeSpeakerTimeout.value) {
 			clearTimeout(activeSpeakerTimeout.value);
 			activeSpeakerTimeout.value = null;
+		}
+		if (stabilityCheckTimeout) {
+			clearTimeout(stabilityCheckTimeout);
+			stabilityCheckTimeout = null;
 		}
 
 		// Cleanup SFU manager (disconnect and free resources)
