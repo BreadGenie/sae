@@ -284,13 +284,6 @@ export function useScreenShareSidebar(
 
 		const widthClass = columns === 2 ? "w-72" : "w-64";
 
-		const visible =
-			1 +
-			sidebarDisplay.value.list.length +
-			(sidebarDisplay.value.extra > 0 ? 1 : 0);
-
-		const rows = Math.min(4, Math.ceil(visible / columns));
-
 		return `${widthClass} grid-cols-${columns}`;
 	});
 
