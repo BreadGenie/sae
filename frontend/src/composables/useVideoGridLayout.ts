@@ -44,7 +44,6 @@ interface UseVideoGridLayoutReturn {
  */
 export function useVideoGridLayout(
 	participants: Ref<Record<string, Participant>>,
-	activeSpeakerIds: Ref<string[]>,
 	meetingState: MeetingState,
 ): UseVideoGridLayoutReturn {
 	const { maxColumns, windowWidth, BREAKPOINTS } = useResponsiveGrid();

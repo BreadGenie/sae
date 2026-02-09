@@ -137,7 +137,7 @@ const {
 	gridStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useVideoGridLayout(participants, activeSpeakerIds, meetingState);
+} = useVideoGridLayout(participants, meetingState);
 
 const hiddenParticipantReactions = computed(() => {
 	const reactions = meetingState.reactions?.value || {};
