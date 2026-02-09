@@ -85,7 +85,7 @@ export function useVideoGridLayout(
 		const threshold = maxVisibleTiles.value;
 		const remoteCapacity = total <= threshold ? remotes.length : threshold - 2;
 
-		// Use stableSpeakerIds for tile ordering (stable after 2s)
+		// Use stableSpeakerIds for tile ordering (recently stable speakers)
 		const stableSpeakers = meetingState.stableSpeakerIds?.value || [];
 		const stableSpeakerSet = new Set<string>(stableSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
