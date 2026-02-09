@@ -70,10 +70,6 @@ export function useVideoGridLayout(
 	// store position in map participant ID -> assigned slot index
 	let slotAssignments: Map<string, number> = new Map();
 
-	// cache the last result to avoid triggering re-renders when order unchanged
-	let lastResult: DisplayParticipantsResult | null = null;
-	let lastOrderKey = "";
-
 	// cap visible tiles based on screen size (cols × 4 rows)
 	// extra participants are grouped
 	const displayParticipants = computed<DisplayParticipantsResult>(() => {
@@ -187,20 +183,7 @@ export function useVideoGridLayout(
 			const bSlot = newSlotAssignments.get(b.user_id) ?? 999;
 			return aSlot - bSlot;
 		});
-
-		// order key to compare with previous result
-		const visibleOrderKey = orderedVisible.map((p) => p.user_id).join(",");
-		const hiddenOrderKey = hidden.map((p) => p.user_id).join(",");
-		const newOrderKey = `${visibleOrderKey}|${hiddenOrderKey}`;
-
-		// if order hasn't changed, return cached result to prevent re-render
-		if (lastResult && newOrderKey === lastOrderKey) {
-			return lastResult;
-		}
-
-		lastOrderKey = newOrderKey;
-		lastResult = { list: orderedVisible, hidden, extra: hidden.length };
-		return lastResult;
+		return { list: orderedVisible, hidden, extra: hidden.length };
 	});
 
 	// Calculate grid columns based on total visible tiles and screen size
