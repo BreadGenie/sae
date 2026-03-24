@@ -16,7 +16,7 @@
 				<Switch
 					class="w-full !px-0"
 					label="Push to Talk"
-					description="Hold Spacebar to temporarily unmute your microphone"
+					description="Hold spacebar to unmute your microphone"
 					v-model="pushToTalkEnabledLocal"
 				/>
 			</div>
