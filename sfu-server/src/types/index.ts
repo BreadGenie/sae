@@ -37,6 +37,7 @@ import type {
 	MediaControlAction,
 	MediaControlRequest,
 	MediaControlUpdateEvent,
+	NetworkQualityUpdateEvent,
 	ParticipantInfo,
 	ParticipantJoinedEvent,
 	ParticipantLeftEvent,
@@ -111,6 +112,7 @@ export type {
 	UpdateTokenRequest,
 	UserData,
 	WebRTCSignalData,
+	NetworkQualityUpdateEvent,
 };
 
 // Socket.IO types
@@ -134,6 +136,7 @@ export interface ServerToClientEvents {
 	'auth:expired': (data: AuthExpiredEvent) => void;
 	hand_raised: (data: HandRaisedEvent) => void;
 	existing_raised_hands: (data: ExistingRaisedHandsEvent) => void;
+	network_quality_update: (data: NetworkQualityUpdateEvent) => void;
 }
 
 export interface ClientToServerEvents {

@@ -6,7 +6,7 @@
 import { ConsumerManager } from "./media/ConsumerManager.js";
 import { MediaStreamHandler } from "./media/MediaStreamHandler.js";
 import { ParticipantManager } from "./media/ParticipantManager.js";
-import { TransportManager } from "./media/TransportManager.js";
+import { TransportManager } from "./media/TransportManager.ts";
 import { VideoElementManager } from "./media/VideoElementManager.js";
 import { getSFUClient } from "./sfu-client.js";
 
@@ -640,6 +640,14 @@ export class SFUMeetingManager {
 
 			if (Object.keys(updates).length) {
 				this.participantManager.updateMediaState(data.participantId, updates);
+			}
+		});
+
+		this.sfuClient.on("network_quality_update", (data) => {
+			if (data?.participantId && data?.quality) {
+				this.participantManager.updateParticipant(data.participantId, {
+					networkQuality: data.quality,
+				});
 			}
 		});
 

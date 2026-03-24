@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type * as mediasoup from 'mediasoup';
 import type { AppData } from '../types';
 import type {
@@ -8,7 +9,7 @@ import type {
 } from '../types';
 import { loggers } from '../utils/logger';
 
-export class ProducerManager {
+export class ProducerManager extends EventEmitter {
 	private producers = new Map<string, ProducerData>();
 
 	async createProducer(
@@ -44,6 +45,10 @@ export class ProducerManager {
 			kind,
 			peerId,
 		);
+
+		producer.on('score', (scores) => {
+			this.emit('score', roomId, peerId, scores);
+		});
 
 		return {
 			id: producer.id,

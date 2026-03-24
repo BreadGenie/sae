@@ -39,6 +39,13 @@ export class SocketHandlerManager {
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
 		this.rateLimiter = new RateLimiter();
+
+		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
+			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
+				participantId: peerId,
+				quality,
+			});
+		});
 	}
 
 	private isRealParticipant(participantId: string): boolean {

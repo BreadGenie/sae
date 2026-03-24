@@ -31,6 +31,47 @@ export class MediasoupManager {
 	private producerManager = new ProducerManager();
 	private consumerManager = new ConsumerManager();
 
+	private networkQualityListeners: Array<
+		(
+			roomId: string,
+			peerId: string,
+			quality: 'good' | 'poor' | 'critical',
+		) => void
+	> = [];
+
+	constructor() {
+		this.producerManager.on(
+			'score',
+			(roomId: string, peerId: string, scores: Array<{ score: number }>) => {
+				if (!scores || scores.length === 0) return;
+				// take avg of scores
+				const total = scores.reduce((sum, s) => sum + s.score, 0);
+				const avg = total / scores.length;
+
+				let quality: 'good' | 'poor' | 'critical' = 'good';
+				if (avg < 5) {
+					quality = 'critical';
+				} else if (avg < 8) {
+					quality = 'poor';
+				}
+
+				for (const listener of this.networkQualityListeners) {
+					listener(roomId, peerId, quality);
+				}
+			},
+		);
+	}
+
+	onNetworkQualityUpdate(
+		listener: (
+			roomId: string,
+			peerId: string,
+			quality: 'good' | 'poor' | 'critical',
+		) => void,
+	) {
+		this.networkQualityListeners.push(listener);
+	}
+
 	async init(): Promise<void> {
 		loggers.mediasoupManager.info('Initializing Mediasoup');
 

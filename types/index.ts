@@ -139,6 +139,11 @@ export interface AuthExpiredEvent {
 	reason: string;
 }
 
+export interface NetworkQualityUpdateEvent {
+	participantId: string;
+	quality: "good" | "poor" | "critical";
+}
+
 export interface HandRaisedEvent {
 	participantId: string;
 	raised: boolean;

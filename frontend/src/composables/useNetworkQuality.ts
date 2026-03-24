@@ -1,95 +1,90 @@
 import { onMounted, onUnmounted, ref } from "vue";
+import { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
 
-/**
- * Network connection information from navigator
- */
-export interface NetworkConnectionInfo {
-	effectiveType: string; // 'slow-2g', '2g', '3g', '4g'
-	downlink: number; // Mbps
-	rtt: number; // ms
-	saveData: boolean;
-}
+type NetworkQuality = "good" | "poor" | "critical";
 
-/**
- * Navigator connection API interface
- */
-interface NavigatorConnection extends EventTarget {
-	effectiveType: string;
-	downlink: number;
+export interface NetworkStats {
 	rtt: number;
-	saveData: boolean;
-	addEventListener(type: "change", listener: () => void): void;
-	removeEventListener(type: "change", listener: () => void): void;
+	packetLoss: number;
+	availableOutgoingBitrate: number;
+	timestamp: number;
+	isValid: boolean;
 }
 
-declare global {
-	interface Navigator {
-		connection?: NavigatorConnection;
-		mozConnection?: NavigatorConnection;
-		webkitConnection?: NavigatorConnection;
-	}
-}
-
-/**
- * Composable for monitoring client-side network quality
- */
 export function useNetworkQuality() {
-	const networkConnectionInfo = ref<NetworkConnectionInfo | null>(null);
+	const networkQuality = ref<NetworkQuality>("good");
+	const isPolling = ref(false);
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-	/**
-	 * Get current network connection information from navigator
-	 */
-	const getNetworkConnectionInfo = (): NetworkConnectionInfo | null => {
-		const connection =
-			navigator.connection ||
-			navigator.mozConnection ||
-			navigator.webkitConnection;
-		if (!connection) return null;
+	const pollIntervalMs = 3000;
 
-		return {
-			effectiveType: connection.effectiveType,
-			downlink: connection.downlink,
-			rtt: connection.rtt,
-			saveData: connection.saveData,
-		};
+	const updateQuality = (stats: NetworkStats) => {
+		if (!stats.isValid) {
+			return;
+		}
+
+		// Threshold
+		// critical: rtt > 600ms or packet loss > 15%
+		const isCritical = stats.rtt > 600 || stats.packetLoss > 15;
+		// poor: rtt > 300ms or packet loss > 5%
+		const isPoor = stats.rtt > 300 || stats.packetLoss > 5;
+
+		if (isCritical) {
+			networkQuality.value = "critical";
+		} else if (isPoor) {
+			networkQuality.value = "poor";
+		} else {
+			networkQuality.value = "good";
+		}
 	};
 
-	const updateConnectionInfo = () => {
-		networkConnectionInfo.value = getNetworkConnectionInfo();
+	const pollStats = async () => {
+		if (isPolling.value) return;
+
+		try {
+			isPolling.value = true;
+			const sfuManager = getSFUMeetingManager();
+			const transportManager = sfuManager?.transportManager;
+
+			if (transportManager) {
+				// check for transport failure initially
+				const tStats = transportManager.getTransportStats();
+				const sendState = tStats?.sendTransport?.state;
+				const recvState = tStats?.recvTransport?.state;
+
+				const isFailed =
+					["failed", "disconnected"].includes(sendState) ||
+					["failed", "disconnected"].includes(recvState);
+
+				if (isFailed) {
+					networkQuality.value = "critical";
+					return;
+				}
+
+				if (transportManager.getNetworkStats) {
+					const stats = await transportManager.getNetworkStats();
+					updateQuality(stats);
+				}
+			}
+		} catch (error) {
+			console.warn("Failed to poll SFU network stats:", error);
+		} finally {
+			isPolling.value = false;
+		}
 	};
 
 	onMounted(() => {
-		updateConnectionInfo();
-
-		const connection =
-			navigator.connection ||
-			navigator.mozConnection ||
-			navigator.webkitConnection;
-
-		if (connection) {
-			connection.addEventListener("change", updateConnectionInfo);
-		}
-
-		window.addEventListener("online", updateConnectionInfo);
-		window.addEventListener("offline", updateConnectionInfo);
+		pollInterval = setInterval(pollStats, pollIntervalMs);
 	});
 
 	onUnmounted(() => {
-		const connection =
-			navigator.connection ||
-			navigator.mozConnection ||
-			navigator.webkitConnection;
-
-		if (connection) {
-			connection.removeEventListener("change", updateConnectionInfo);
+		if (pollInterval) {
+			clearInterval(pollInterval);
+			pollInterval = null;
 		}
-
-		window.removeEventListener("online", updateConnectionInfo);
-		window.removeEventListener("offline", updateConnectionInfo);
 	});
 
 	return {
-		networkConnectionInfo,
-		getNetworkConnectionInfo,
+		networkQuality,
 	};
 }
