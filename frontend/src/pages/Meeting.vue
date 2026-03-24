@@ -241,6 +241,7 @@ const {
 	setupRaiseHandEvents,
 	toggleRaiseHand,
 	handleKeyDown,
+	handleKeyUp,
 	sfuManager,
 	applySpeakerDevice,
 	processedStream,
@@ -657,6 +658,7 @@ const handleDeviceChanged = async (event) => {
 // Lifecycle
 onMounted(async () => {
 	window.addEventListener("keydown", handleKeyDown);
+	window.addEventListener("keyup", handleKeyUp);
 
 	// Clear any stale error/connection state from previous navigations
 	if (typeof meetingState.resetConnectionState === "function") {
@@ -736,6 +738,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
 	window.removeEventListener("keydown", handleKeyDown);
+	window.removeEventListener("keyup", handleKeyUp);
 
 	// Cleanup will be handled by the meeting logic composable
 });

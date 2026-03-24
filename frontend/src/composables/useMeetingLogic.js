@@ -5,6 +5,7 @@ import {
 	noiseCancellationEnabled,
 	cameraEnabled as prefCameraEnabled,
 	micEnabled as prefMicEnabled,
+	pushToTalkEnabled,
 	selectedCameraId,
 	selectedMicId,
 	selectedSpeakerId,
@@ -62,6 +63,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const realtimeListenersSetup = ref(false);
 	const activeSpeakerTimeout = ref(null);
 	const joiningInProgress = ref(false);
+	const unmutedByPushToTalk = ref(false);
 
 	// Background effects
 	const { applyBackgroundEffects, stopProcessing, processedStream } =
@@ -2119,6 +2121,25 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	 * Handle keyboard shortcuts
 	 */
 	const handleKeyDown = (event) => {
+		const targetTag = event.target?.tagName?.toLowerCase();
+		const isInput =
+			targetTag === "input" ||
+			targetTag === "textarea" ||
+			event.target?.isContentEditable;
+
+		if (
+			pushToTalkEnabled.value &&
+			event.code === "Space" &&
+			!isInput &&
+			!event.repeat
+		) {
+			event.preventDefault();
+			if (!meetingState.isMicOn.value) {
+				unmutedByPushToTalk.value = true;
+				toggleMicrophone();
+			}
+		}
+
 		if ((event.metaKey || event.ctrlKey) && event.key === "d") {
 			event.preventDefault();
 			toggleMicrophone();
@@ -2126,6 +2147,23 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 		if ((event.metaKey || event.ctrlKey) && event.key === "e") {
 			event.preventDefault();
 			toggleCamera();
+		}
+	};
+
+	const handleKeyUp = (event) => {
+		const targetTag = event.target?.tagName?.toLowerCase();
+		const isInput =
+			targetTag === "input" ||
+			targetTag === "textarea" ||
+			event.target?.isContentEditable;
+
+		if (pushToTalkEnabled.value && event.code === "Space" && !isInput) {
+			if (unmutedByPushToTalk.value) {
+				unmutedByPushToTalk.value = false;
+				if (meetingState.isMicOn.value) {
+					toggleMicrophone();
+				}
+			}
 		}
 	};
 
@@ -2286,5 +2324,6 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 		// Methods - Keyboard
 		handleKeyDown,
+		handleKeyUp,
 	};
 }
