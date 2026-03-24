@@ -1,7 +1,5 @@
 <template>
-	<SettingsLayoutBase
-		:description="'Configure audio processing options for your microphone'"
-	>
+	<SettingsLayoutBase :description="'Configure your audio and microphone settings'">
 		<template #title>
 			Audio
 		</template>
