@@ -47,7 +47,7 @@ export class MediasoupManager {
 				// take avg of scores
 				const total = scores.reduce((sum, s) => sum + s.score, 0);
 				const avg = total / scores.length;
-
+				console.log('Network quality for peer', peerId, 'is', avg, scores);
 				let quality: 'good' | 'poor' | 'critical' = 'good';
 				if (avg < 5) {
 					quality = 'critical';

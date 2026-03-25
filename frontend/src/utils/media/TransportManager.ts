@@ -224,7 +224,6 @@ export class TransportManager {
 	setupSendTransportHandlers() {
 		if (!this.sendTransport) return;
 		const client = this.getClient();
-		if (!client) return;
 		const sendTransport: TransportLike = this.sendTransport;
 		const sendTransportId = sendTransport.id;
 		sendTransport.on(
@@ -297,7 +296,6 @@ export class TransportManager {
 	setupReceiveTransportHandlers() {
 		if (!this.recvTransport) return;
 		const client = this.getClient();
-		if (!client) return;
 		const recvTransport: TransportLike = this.recvTransport;
 		recvTransport.on(
 			"connect",
