@@ -62,7 +62,7 @@
 			class="absolute top-2 right-12 bg-gray-700 rounded-full p-1.5"
 			:title="networkQualityMessage"
 		>
-			<lucide-wifi-off class="w-4 h-4 text-white" />
+			<WifiAlertIcon class="w-4 h-4 text-white" />
 		</div>
 
 		<div v-if="!isAudioEnabled" class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5">
@@ -75,6 +75,7 @@
 import { computed, inject, ref, watch } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import { useNetworkQuality } from "../composables/useNetworkQuality";
+import WifiAlertIcon from "../icons/WifiAlertIcon.vue";
 import AudioIndicator from "./AudioIndicator.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 import NamePill from "./NamePill.vue";
@@ -130,7 +131,7 @@ const showNetworkIndicator = computed(() => {
 const networkQualityMessage = computed(() => {
 	const quality = computedNetworkQuality.value;
 	const isLocal = props.isLocal;
-	const name = props.participant.info?.name || "This participant";
+	const name = props.participant.user_name || "This participant";
 
 	if (quality === "critical") {
 		return isLocal
