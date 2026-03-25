@@ -47,7 +47,7 @@ export class ProducerManager extends EventEmitter {
 		);
 
 		producer.on('score', (scores) => {
-			this.emit('score', roomId, peerId, scores);
+			this.emit('score', roomId, peerId, kind, scores);
 		});
 
 		return {
@@ -80,6 +80,14 @@ export class ProducerManager extends EventEmitter {
 			'Producer closed: %s%s',
 			producerId,
 			isScreen ? ' (screen)' : '',
+		);
+
+		this.emit(
+			'producer_closed',
+			producerData.roomId,
+			producerData.peerId,
+			producer.kind,
+			producerId,
 		);
 
 		return { isScreen, removedConsumers: [] };

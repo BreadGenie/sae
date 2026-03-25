@@ -75,7 +75,6 @@ const mediaCodecs = [
 		mimeType: 'video/VP9',
 		clockRate: 90000,
 		parameters: {
-			'profile-id': 2,
 			'x-google-start-bitrate': 1000,
 		},
 	},

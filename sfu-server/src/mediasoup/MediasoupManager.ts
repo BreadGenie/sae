@@ -39,27 +39,88 @@ export class MediasoupManager {
 		) => void
 	> = [];
 
+	private peerScores = new Map<
+		string,
+		{
+			audio?: number;
+			video?: number;
+			lastOverallQuality?: 'good' | 'poor' | 'critical';
+		}
+	>();
+
 	constructor() {
 		this.producerManager.on(
 			'score',
-			(roomId: string, peerId: string, scores: Array<{ score: number }>) => {
+			(
+				roomId: string,
+				peerId: string,
+				kind: 'audio' | 'video',
+				scores: Array<{ score: number }>,
+			) => {
 				if (!scores || scores.length === 0) return;
 				// take avg of scores
 				const total = scores.reduce((sum, s) => sum + s.score, 0);
 				const avg = total / scores.length;
-				console.log('Network quality for peer', peerId, 'is', avg, scores);
-				let quality: 'good' | 'poor' | 'critical' = 'good';
-				if (avg < 5) {
-					quality = 'critical';
-				} else if (avg < 8) {
-					quality = 'poor';
+
+				let peerState = this.peerScores.get(peerId);
+				if (!peerState) {
+					peerState = {};
+					this.peerScores.set(peerId, peerState);
 				}
 
-				for (const listener of this.networkQualityListeners) {
-					listener(roomId, peerId, quality);
+				peerState[kind] = avg;
+
+				this.evaluateAndEmitNetworkQuality(roomId, peerId);
+			},
+		);
+
+		this.producerManager.on(
+			'producer_closed',
+			(roomId: string, peerId: string, kind: 'audio' | 'video') => {
+				const peerState = this.peerScores.get(peerId);
+				if (peerState) {
+					delete peerState[kind];
+					this.evaluateAndEmitNetworkQuality(roomId, peerId);
 				}
 			},
 		);
+	}
+
+	private evaluateAndEmitNetworkQuality(roomId: string, peerId: string) {
+		const peerState = this.peerScores.get(peerId);
+		if (!peerState) return;
+
+		let minScore = 10;
+		if (peerState.audio !== undefined)
+			minScore = Math.min(minScore, peerState.audio);
+		if (peerState.video !== undefined)
+			minScore = Math.min(minScore, peerState.video);
+
+		if (peerState.audio === undefined && peerState.video === undefined) {
+			minScore = 10;
+		}
+
+		let quality: 'good' | 'poor' | 'critical' = 'good';
+		if (minScore < 5) {
+			quality = 'critical';
+		} else if (minScore < 8) {
+			quality = 'poor';
+		}
+
+		if (peerState.lastOverallQuality !== quality) {
+			loggers.mediasoupManager.debug(
+				'Network quality for peer %s changed to %s (audio: %s, video: %s)',
+				peerId,
+				quality,
+				peerState.audio,
+				peerState.video,
+			);
+			peerState.lastOverallQuality = quality;
+
+			for (const listener of this.networkQualityListeners) {
+				listener(roomId, peerId, quality);
+			}
+		}
 	}
 
 	onNetworkQualityUpdate(
@@ -123,6 +184,7 @@ export class MediasoupManager {
 		if (!room) return;
 
 		this.peerManager.removePeer(room, peerId);
+		this.peerScores.delete(peerId);
 	}
 
 	async createWebRtcTransport(
