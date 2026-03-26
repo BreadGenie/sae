@@ -57,6 +57,9 @@ declare module "vue" {
 		LucideHand: typeof import("~icons/lucide/hand")["default"];
 		LucideHome: typeof import("~icons/lucide/home")["default"];
 		LucideLoader: typeof import("~icons/lucide/loader")["default"];
+		LucideMessageCircle: typeof import(
+			"~icons/lucide/message-circle",
+		)["default"];
 		LucideMessageSquare: typeof import(
 			"~icons/lucide/message-square",
 		)["default"];
@@ -87,7 +90,6 @@ declare module "vue" {
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
-		LucideWifiOff: typeof import("~icons/lucide/wifi-off")["default"];
 		LucideX: typeof import("~icons/lucide/x")["default"];
 		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
 		MeetingAccessSettingsTab: typeof import(
@@ -143,6 +145,7 @@ declare module "vue" {
 			"./src/components/settings/SettingsLayoutBase.vue",
 		)["default"];
 		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
+		Spinner: typeof import("./src/components/Spinner.vue")["default"];
 		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];
 		VideoPreview: typeof import("./src/components/VideoPreview.vue")["default"];
 	}

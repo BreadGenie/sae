@@ -168,7 +168,7 @@
 </template>
 
 <script setup>
-import { Button, Spinner, frappeRequest } from "frappe-ui";
+import { Button, frappeRequest } from "frappe-ui";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -181,6 +181,7 @@ import MeetingPreview from "../components/MeetingPreview.vue";
 import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
 import ScreenShareLayout from "../components/ScreenShareLayout.vue";
+import Spinner from "../components/Spinner.vue";
 import VideoGrid from "../components/VideoGrid.vue";
 
 import { provideMeetingContext } from "../composables/useMeetingContext.js";

@@ -34,7 +34,7 @@ const routes = [
 ];
 
 const router = createRouter({
-	history: createWebHistory("/meet"),
+	history: createWebHistory(`${__FRONTEND_ROUTE__}/`),
 	routes,
 });
 
