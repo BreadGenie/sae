@@ -4,13 +4,12 @@
 			<slot name="trigger" />
 		</PopoverTrigger>
 
-		<PopoverPortal>
-			<PopoverContent
-				:side="'top'"
-				:align="'center'"
-				:side-offset="12"
-				class="bg-black/90 rounded-2xl p-3 shadow-xl border border-white/10 max-w-sm w-full z-50"
-			>
+		<PopoverContent
+			:side="'top'"
+			:align="'center'"
+			:side-offset="12"
+			class="bg-black/90 rounded-2xl p-3 shadow-xl border border-white/10 max-w-sm w-full z-[70]"
+		>
 			<div class="text-center">
 				<div class="grid grid-cols-5 gap-3 mb-4">
 					<button
@@ -32,18 +31,12 @@
 					{{ isHandRaised ? "Lower Hand" : "Raise Hand" }}
 				</button>
 			</div>
-			</PopoverContent>
-		</PopoverPortal>
+		</PopoverContent>
 	</PopoverRoot>
 </template>
 
 <script setup>
-import {
-	PopoverContent,
-	PopoverPortal,
-	PopoverRoot,
-	PopoverTrigger,
-} from "reka-ui";
+import { PopoverContent, PopoverRoot, PopoverTrigger } from "reka-ui";
 
 const props = defineProps({
 	isOpen: {

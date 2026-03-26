@@ -1,5 +1,10 @@
 <template>
-	<div class="h-[100dvh] bg-gray-900 flex flex-col" data-meeting-component>
+	<div
+		ref="meetingContainer"
+		class="h-[100dvh] bg-gray-900 flex flex-col"
+		data-meeting-component
+		id="meetingContainer"
+	>
 		<!-- Loading state -->
 		<div v-if="isConnecting" class="flex-1 flex items-center justify-center">
 			<div class="flex items-center justify-center text-white space-x-4">
@@ -65,6 +70,7 @@
 							:isMicOn="meetingState.isMicOn.value"
 							:isCameraOn="meetingState.isCameraOn.value"
 							:isScreenSharing="meetingState.isScreenSharing.value"
+							:isFullscreen="isFullscreen"
 							:isHandRaised="isHandRaised"
 							:isReactionPickerOpen="isReactionPickerOpen"
 							@update:isReactionPickerOpen="isReactionPickerOpen = $event"
@@ -79,6 +85,7 @@
 							@toggle-microphone="toggleMicrophone"
 							@toggle-camera="toggleCamera"
 							@toggle-screen-share="toggleScreenShare"
+							@toggle-fullscreen="toggleFullscreen"
 							@toggle-raise-hand="toggleRaiseHand"
 							@end-call="endCall"
 							@device-changed="handleDeviceChanged"
@@ -356,6 +363,8 @@ const lobbyUsersForNotifications = computed(() => {
 // Refs
 const chatNotificationQueue = ref(null);
 const isReactionPickerOpen = ref(false);
+const meetingContainer = ref(null);
+const isFullscreen = ref(false);
 
 // Methods
 const resetToPreview = () => {
@@ -574,6 +583,31 @@ const handleNotificationClick = () => {
 	}
 };
 
+const syncFullscreenState = () => {
+	isFullscreen.value = !!document.fullscreenElement;
+};
+
+const toggleFullscreen = async () => {
+	try {
+		if (!document.fullscreenElement) {
+			const targetElement = meetingContainer.value;
+
+			if (targetElement?.requestFullscreen) {
+				await targetElement.requestFullscreen();
+			}
+			return;
+		}
+
+		if (document.exitFullscreen) {
+			await document.exitFullscreen();
+		}
+	} catch (error) {
+		console.error("Failed to toggle fullscreen:", error);
+	} finally {
+		syncFullscreenState();
+	}
+};
+
 const setSinkIdOnVideoElements = async (sinkId) => {
 	// Set speaker output on all video elements
 	const videoElements = document.querySelectorAll("video");
@@ -663,6 +697,8 @@ const handleDeviceChanged = async (event) => {
 onMounted(async () => {
 	window.addEventListener("keydown", handleKeyDown);
 	window.addEventListener("keyup", handleKeyUp);
+	document.addEventListener("fullscreenchange", syncFullscreenState);
+	syncFullscreenState();
 
 	// Clear any stale error/connection state from previous navigations
 	if (typeof meetingState.resetConnectionState === "function") {
@@ -743,6 +779,7 @@ onMounted(async () => {
 onUnmounted(() => {
 	window.removeEventListener("keydown", handleKeyDown);
 	window.removeEventListener("keyup", handleKeyUp);
+	document.removeEventListener("fullscreenchange", syncFullscreenState);
 
 	// Cleanup will be handled by the meeting logic composable
 });

@@ -1,6 +1,6 @@
 <template>
 	<div
-		class="w-full overflow-hidden shrink-0 transition-[height,margin] duration-300 ease-in-out"
+		class="w-full overflow-visible shrink-0 transition-[height,margin] duration-300 ease-in-out relative z-40"
 		:style="{ height: toolbarHeight }"
 	>
 		<div
@@ -151,7 +151,11 @@
 					ref="dropdownContainer"
 					@click="handleDropdownClick"
 				>
-					<Dropdown :options="moreOptions" placement="top">
+					<Dropdown
+						:options="moreOptions"
+						placement="top"
+						:portal-to="dropdownPortalTarget"
+					>
 						<template #default>
 							<Button
 								variant="solid"
@@ -259,6 +263,10 @@ const props = defineProps({
 		type: Object,
 		default: null,
 	},
+	isFullscreen: {
+		type: Boolean,
+		default: false,
+	},
 	cameraPermissionGranted: {
 		type: Boolean,
 		default: false,
@@ -282,6 +290,7 @@ const emit = defineEmits([
 	"toggle-microphone",
 	"toggle-camera",
 	"toggle-screen-share",
+	"toggle-fullscreen",
 	"toggle-raise-hand",
 	"end-call",
 	"device-changed",
@@ -290,6 +299,9 @@ const emit = defineEmits([
 
 const { windowWidth } = useResponsiveGrid();
 const isMobile = computed(() => windowWidth.value < 768);
+const dropdownPortalTarget = computed(() =>
+	props.isFullscreen ? "#meetingContainer" : "body",
+);
 
 const moreOptions = computed(() => [
 	{
@@ -305,6 +317,14 @@ const moreOptions = computed(() => [
 		label: "Meeting information",
 		onClick: () => {
 			showMeetingInfoDialog.value = true;
+			resetHideTimer();
+		},
+	},
+	{
+		icon: props.isFullscreen ? "minimize" : "maximize",
+		label: props.isFullscreen ? "Exit full screen" : "Enter full screen",
+		onClick: () => {
+			emit("toggle-fullscreen");
 			resetHideTimer();
 		},
 	},
