@@ -42,16 +42,47 @@
 						gridTemplateColumns: 'minmax(0, 1fr) var(--panel-width)',
 					}"
 				>
-					<!-- Video area -->
-					<div class="p-4 flex flex-col min-h-0 overflow-auto text-white">
-						<!-- Screen share active view -->
-						<ScreenShareLayout
-							v-if="meetingState.displayScreenShares.value.length"
-							@open-people-panel="togglePeople"
-						/>
+					<!-- Video column: video area + toolbar -->
+					<div class="flex flex-col min-h-0">
+						<!-- Video area -->
+						<div class="p-4 flex flex-col flex-1 min-h-0 overflow-auto text-white">
+							<!-- Screen share active view -->
+							<ScreenShareLayout
+								v-if="meetingState.displayScreenShares.value.length"
+								@open-people-panel="togglePeople"
+							/>
 
-						<!-- Normal video grid -->
-						<VideoGrid v-else @open-people-panel="togglePeople" />
+							<!-- Normal video grid -->
+							<VideoGrid v-else @open-people-panel="togglePeople" />
+						</div>
+
+						<!-- Meeting controls -->
+						<MeetingToolbar
+							:isChatOpen="meetingState.isChatOpen.value"
+							:isPeopleOpen="meetingState.isPeopleOpen.value"
+							:hasUnread="meetingState.hasUnreadMessages.value"
+							:lobbyUserCount="meetingState.lobbyUsers?.value?.length || 0"
+							:isMicOn="meetingState.isMicOn.value"
+							:isCameraOn="meetingState.isCameraOn.value"
+							:isScreenSharing="meetingState.isScreenSharing.value"
+							:isHandRaised="isHandRaised"
+							:isReactionPickerOpen="isReactionPickerOpen"
+							@update:isReactionPickerOpen="isReactionPickerOpen = $event"
+							:meetingId="meetingId"
+							:meetingTitle="meetingTitle.value"
+							:currentUser="meetingState.currentUser.value"
+							:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
+							:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
+							@toggle-chat="toggleChat"
+							@toggle-people="togglePeople"
+							@toggle-reactions="toggleReactions($event)"
+							@toggle-microphone="toggleMicrophone"
+							@toggle-camera="toggleCamera"
+							@toggle-screen-share="toggleScreenShare"
+							@toggle-raise-hand="toggleRaiseHand"
+							@end-call="endCall"
+							@device-changed="handleDeviceChanged"
+						/>
 					</div>
 
 					<!-- Panel Container -->
@@ -110,34 +141,6 @@
 						</div>
 					</Transition>
 				</div>
-
-				<!-- Floating controls -->
-				<FloatingControls
-					:isChatOpen="meetingState.isChatOpen.value"
-					:isPeopleOpen="meetingState.isPeopleOpen.value"
-					:hasUnread="meetingState.hasUnreadMessages.value"
-					:lobbyUserCount="meetingState.lobbyUsers?.value?.length || 0"
-					:isMicOn="meetingState.isMicOn.value"
-					:isCameraOn="meetingState.isCameraOn.value"
-					:isScreenSharing="meetingState.isScreenSharing.value"
-					:isHandRaised="isHandRaised"
-					:isReactionPickerOpen="isReactionPickerOpen"
-					@update:isReactionPickerOpen="isReactionPickerOpen = $event"
-					:meetingId="meetingId"
-					:meetingTitle="meetingTitle.value"
-					:currentUser="meetingState.currentUser.value"
-					:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
-					:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
-					@toggle-chat="toggleChat"
-					@toggle-people="togglePeople"
-					@toggle-reactions="toggleReactions($event)"
-					@toggle-microphone="toggleMicrophone"
-					@toggle-camera="toggleCamera"
-					@toggle-screen-share="toggleScreenShare"
-					@toggle-raise-hand="toggleRaiseHand"
-					@end-call="endCall"
-					@device-changed="handleDeviceChanged"
-				/>
 			</div>
 
 			<LobbyOverlay
@@ -174,10 +177,10 @@ import { useRoute, useRouter } from "vue-router";
 
 import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
-import FloatingControls from "../components/FloatingControls.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import LobbyOverlay from "../components/LobbyOverlay.vue";
 import MeetingPreview from "../components/MeetingPreview.vue";
+import MeetingToolbar from "../components/MeetingToolbar.vue";
 import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
 import ScreenShareLayout from "../components/ScreenShareLayout.vue";

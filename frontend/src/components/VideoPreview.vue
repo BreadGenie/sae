@@ -25,10 +25,9 @@
 		</div>
 
 		<!-- Floating controls overlaid on video -->
-		<FloatingControls
+		<PreviewToolbar
 			:is-mic-on="!isMuted"
 			:is-camera-on="!isVideoOff"
-			:is-preview="true"
 			@toggle-microphone="toggleMute"
 			@toggle-camera="toggleVideo"
 		/>
@@ -50,8 +49,8 @@ import {
 	blurIntensity,
 	selectedBackgroundImage,
 } from "../data/backgroundEffects";
-import FloatingControls from "./FloatingControls.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
+import PreviewToolbar from "./PreviewToolbar.vue";
 
 const props = defineProps({
 	cameraDeviceId: {

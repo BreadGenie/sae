@@ -1,27 +1,14 @@
 <template>
-	<Transition
-		enter-active-class="transition-all duration-300 ease-out"
-		enter-from-class="opacity-0 transform translate-y-4"
-		enter-to-class="opacity-100 transform translate-y-0"
-		:leave-active-class="
-			instantHide
-				? 'duration-0'
-				: 'transition-all duration-300 ease-in'
-		"
-		leave-from-class="opacity-100 transform translate-y-0"
-		:leave-to-class="
-			instantHide ? 'opacity-0' : 'opacity-0 transform translate-y-4'
-		"
+	<div
+		class="w-full overflow-hidden shrink-0 transition-[height,margin] duration-300 ease-in-out"
+		:style="{ height: toolbarHeight }"
 	>
 		<div
-			v-show="isVisible"
-			:class="[
-				'z-5 pointer-events-none w-auto max-w-3xl px-4 md:px-0 bottom-4 left-1/2 transform -translate-x-1/2',
-				isPreview ? 'absolute' : 'fixed',
-			]"
+			class="flex justify-center px-4 transition-transform duration-300 ease-in-out"
+			:class="isVisible ? 'translate-y-0' : 'translate-y-full'"
 		>
 			<div
-				class="flex items-center gap-3 px-6 py-3 bg-black/80 backdrop-blur-md rounded-full border border-white/10 shadow-xl pointer-events-auto transition-all duration-300 mx-auto"
+				class="flex items-center gap-3 px-6 py-3 bg-black/80 backdrop-blur-md rounded-full border border-white/10 shadow-xl pointer-events-auto transition-all duration-300"
 				@mouseenter="onMouseEnter"
 				@mouseleave="onMouseLeave"
 			>
@@ -62,7 +49,7 @@
 
 				<!-- Screen Share -->
 				<Button
-					v-if="!isPreview && canScreenShare()"
+					v-if="canScreenShare()"
 					@click="$emit('toggle-screen-share')"
 					variant="solid"
 					:theme="isScreenSharing ? 'orange' : 'gray'"
@@ -89,7 +76,6 @@
 				>
 					<template #trigger>
 						<Button
-							v-if="!isPreview"
 							variant="solid"
 							theme="gray"
 							size="2xl"
@@ -106,11 +92,8 @@
 					</template>
 				</ReactionPicker>
 
-				<!-- Raise Hand -->
-
-
 				<!-- Chat -->
-				<div v-if="!isPreview && !isMobile" class="relative">
+				<div v-if="!isMobile" class="relative">
 					<Button
 						@click="$emit('toggle-chat')"
 						variant="solid"
@@ -139,7 +122,7 @@
 				</div>
 
 				<!-- People -->
-				<div class="relative" v-if="!isPreview && !isMobile">
+				<div class="relative" v-if="!isMobile">
 					<Button
 						@click="$emit('toggle-people')"
 						variant="solid"
@@ -162,24 +145,8 @@
 					/>
 				</div>
 
-				<!-- Settings -->
-				<Button
-					v-if="isPreview && (cameraPermissionGranted || microphonePermissionGranted)"
-					@click="showSettingsDialog = true"
-					variant="solid"
-					theme="gray"
-					size="2xl"
-					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
-					title="Settings"
-				>
-					<template #icon>
-						<lucide-settings class="w-5 h-5 text-white" />
-					</template>
-				</Button>
-
 				<!-- More Options -->
 				<div
-					v-if="!isPreview"
 					class="relative"
 					ref="dropdownContainer"
 					@click="handleDropdownClick"
@@ -203,7 +170,6 @@
 
 				<!-- End Call -->
 				<Button
-					v-if="!isPreview"
 					@click="$emit('end-call')"
 					variant="solid"
 					theme="red"
@@ -217,7 +183,7 @@
 				</Button>
 			</div>
 		</div>
-	</Transition>
+	</div>
 
 	<MeetingInfoDialog
 		v-model="showMeetingInfoDialog"
@@ -225,20 +191,20 @@
 		:meetingTitle="meetingTitle"
 	/>
 
-
 	<SettingsDialog
 		v-model="showSettingsDialog"
 		:meetingId="meetingId"
-		:isPreview="isPreview"
+		:isPreview="false"
 		@device-changed="$emit('device-changed', $event)"
 	/>
 </template>
 
 <script setup>
 import { Button, Dropdown } from "frappe-ui";
-import { computed, onMounted, onUnmounted, ref, toRefs } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useResponsiveGrid } from "../composables/useResponsiveGrid";
+import { autoHideToolbar } from "../data/mediaPreferences";
 import { canScreenShare } from "../utils/device";
 import MeetingInfoDialog from "./MeetingInfoDialog.vue";
 import ReactionPicker from "./ReactionPicker.vue";
@@ -281,10 +247,6 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
-	isPreview: {
-		type: Boolean,
-		default: false,
-	},
 	meetingId: {
 		type: String,
 		default: "",
@@ -313,8 +275,6 @@ if (props.meetingId) {
 	getMeetingDoc(props.meetingId);
 }
 
-const { isPreview } = toRefs(props);
-
 const emit = defineEmits([
 	"toggle-chat",
 	"toggle-people",
@@ -335,10 +295,6 @@ const moreOptions = computed(() => [
 	{
 		icon: "settings",
 		label: "Settings",
-		condition: () =>
-			props.cameraPermissionGranted ||
-			props.microphonePermissionGranted ||
-			!isPreview.value,
 		onClick: () => {
 			showSettingsDialog.value = true;
 			resetHideTimer();
@@ -359,11 +315,7 @@ const moreOptions = computed(() => [
 					label: "People",
 					onClick: () => {
 						emit("toggle-people");
-						instantHide.value = true;
 						isVisible.value = false;
-						setTimeout(() => {
-							instantHide.value = false;
-						}, 300);
 					},
 				},
 				{
@@ -371,11 +323,7 @@ const moreOptions = computed(() => [
 					label: "Chat",
 					onClick: () => {
 						emit("toggle-chat");
-						instantHide.value = true;
 						isVisible.value = false;
-						setTimeout(() => {
-							instantHide.value = false;
-						}, 300);
 					},
 				},
 			]
@@ -383,13 +331,17 @@ const moreOptions = computed(() => [
 ]);
 
 const isVisible = ref(true);
-const instantHide = ref(false);
 const isHovering = ref(false);
 const isDropdownOpen = ref(false);
 const dropdownContainer = ref(null);
 const showMeetingInfoDialog = ref(false);
 const showSettingsDialog = ref(false);
 let hideTimeout = null;
+
+const TOOLBAR_VISIBLE_HEIGHT = "5.5rem";
+const toolbarHeight = computed(() =>
+	isVisible.value ? TOOLBAR_VISIBLE_HEIGHT : "0px",
+);
 
 const showControls = () => {
 	isVisible.value = true;
@@ -399,7 +351,13 @@ const showControls = () => {
 const resetHideTimer = (force = false) => {
 	if (hideTimeout) {
 		clearTimeout(hideTimeout);
+		hideTimeout = null;
 	}
+
+	if (!autoHideToolbar.value) {
+		return;
+	}
+
 	if (
 		!force &&
 		(isDropdownOpen.value || isHovering.value || props.isReactionPickerOpen)
@@ -440,7 +398,6 @@ const handleShortcut = (event) => {
 };
 
 const handleDropdownClick = (event) => {
-	// for not hiding controls when clicked on dropdown
 	isDropdownOpen.value = !isDropdownOpen.value;
 
 	if (isDropdownOpen.value) {
@@ -477,6 +434,18 @@ const handleReactionSelect = (emoji) => {
 const updateReactionPickerOpen = (value) => {
 	emit("update:isReactionPickerOpen", value);
 };
+
+watch(autoHideToolbar, (shouldAutoHide) => {
+	if (!shouldAutoHide) {
+		if (hideTimeout) {
+			clearTimeout(hideTimeout);
+			hideTimeout = null;
+		}
+		isVisible.value = true;
+	} else {
+		resetHideTimer();
+	}
+});
 
 onMounted(() => {
 	resetHideTimer();

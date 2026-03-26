@@ -31,9 +31,6 @@ declare module "vue" {
 			"./src/components/settings/DeviceSettingsTab.vue",
 		)["default"];
 		EmojiPicker: typeof import("./src/components/EmojiPicker.vue")["default"];
-		FloatingControls: typeof import(
-			"./src/components/FloatingControls.vue",
-		)["default"];
 		FloatingReactions: typeof import(
 			"./src/components/FloatingReactions.vue",
 		)["default"];
@@ -43,6 +40,9 @@ declare module "vue" {
 		)["default"];
 		KickParticipantDialog: typeof import(
 			"./src/components/KickParticipantDialog.vue",
+		)["default"];
+		LayoutSettingsTab: typeof import(
+			"./src/components/settings/LayoutSettingsTab.vue",
 		)["default"];
 		LobbyOverlay: typeof import("./src/components/LobbyOverlay.vue")["default"];
 		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
@@ -101,6 +101,9 @@ declare module "vue" {
 		MeetingPreview: typeof import(
 			"./src/components/MeetingPreview.vue",
 		)["default"];
+		MeetingToolbar: typeof import(
+			"./src/components/MeetingToolbar.vue",
+		)["default"];
 		NamePill: typeof import("./src/components/NamePill.vue")["default"];
 		NotificationSettingsTab: typeof import(
 			"./src/components/settings/NotificationSettingsTab.vue",
@@ -117,6 +120,9 @@ declare module "vue" {
 		)["default"];
 		PeopleWaitingSection: typeof import(
 			"./src/components/PeopleWaitingSection.vue",
+		)["default"];
+		PreviewToolbar: typeof import(
+			"./src/components/PreviewToolbar.vue",
 		)["default"];
 		ReactionPicker: typeof import(
 			"./src/components/ReactionPicker.vue",

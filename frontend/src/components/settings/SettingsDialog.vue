@@ -90,6 +90,7 @@ import { computed, h, markRaw, ref, watch } from "vue";
 import LucideAudioLines from "~icons/lucide/audio-lines";
 import LucideBell from "~icons/lucide/bell";
 import LucideCamera from "~icons/lucide/camera";
+import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideMonitorSmartphone from "~icons/lucide/monitor-smartphone";
 import LucideUser from "~icons/lucide/user";
 import { useMeetingDoc } from "../../composables/useMeetingDoc";
@@ -97,6 +98,7 @@ import { isMobile } from "../../utils/device";
 import AudioSettingsTab from "./AudioSettingsTab.vue";
 import BackgroundSettingsTab from "./BackgroundSettingsTab.vue";
 import DeviceSettingsTab from "./DeviceSettingsTab.vue";
+import LayoutSettingsTab from "./LayoutSettingsTab.vue";
 import MeetingAccessSettingsTab from "./MeetingAccessSettingsTab.vue";
 import NotificationSettingsTab from "./NotificationSettingsTab.vue";
 
@@ -130,6 +132,10 @@ const show = computed({
 	get: () => props.modelValue,
 	set: (value) => emit("update:modelValue", value),
 });
+
+function isTabVisible(tab) {
+	return typeof tab.condition === "function" ? tab.condition() : true;
+}
 
 // Settings tabs structure
 const tabs = computed(() => {
@@ -179,10 +185,22 @@ const tabs = computed(() => {
 				icon: h(LucideBell),
 				component: markRaw(NotificationSettingsTab),
 			},
+			{
+				label: "Layout",
+				value: "layout",
+				icon: h(LucideLayoutDashboard),
+				condition: () => !props.isPreview,
+				component: markRaw(LayoutSettingsTab),
+			},
 		],
 	});
 
-	return allTabs;
+	return allTabs
+		.map((group) => ({
+			...group,
+			items: group.items.filter(isTabVisible),
+		}))
+		.filter((group) => group.items.length > 0);
 });
 
 const flatTabs = computed(() =>
@@ -194,20 +212,42 @@ const flatTabs = computed(() =>
 	),
 );
 
-const tabIndex = ref(0);
-const activeTab = computed(() => flatTabs.value[tabIndex.value]);
+const activeTabValue = ref(null);
+const tabIndex = computed({
+	get: () => {
+		const index = flatTabs.value.findIndex(
+			(tab) => tab.value === activeTabValue.value,
+		);
 
-watch(flatTabs, (newTabs) => {
-	if (!newTabs.length) return;
-	if (tabIndex.value >= newTabs.length) {
-		tabIndex.value = 0;
-	}
+		return index === -1 ? 0 : index;
+	},
+	set: (index) => {
+		activeTabValue.value = flatTabs.value[index]?.value ?? null;
+	},
 });
+const activeTab = computed(
+	() =>
+		flatTabs.value.find((tab) => tab.value === activeTabValue.value) ?? null,
+);
+
+watch(
+	flatTabs,
+	(newTabs) => {
+		if (!newTabs.length) {
+			activeTabValue.value = null;
+			return;
+		}
+
+		if (!newTabs.some((tab) => tab.value === activeTabValue.value)) {
+			activeTabValue.value = newTabs[0].value;
+		}
+	},
+	{ immediate: true },
+);
 
 function onTabChange(tab) {
-	const index = flatTabs.value.findIndex((item) => item.value === tab.value);
-	if (index !== -1) {
-		tabIndex.value = index;
+	if (flatTabs.value.some((item) => item.value === tab.value)) {
+		activeTabValue.value = tab.value;
 	}
 }
 </script>

@@ -32,6 +32,10 @@ export const pushToTalkEnabled: Ref<boolean> = ref(
 	readBool("mediaPref.pushToTalk", false),
 );
 
+export const autoHideToolbar: Ref<boolean> = ref(
+	readBool("mediaPref.autoHideToolbar", true),
+);
+
 export function setNoiseCancellationEnabled(val: boolean): void {
 	noiseCancellationEnabled.value = !!val;
 	localStorage.setItem(
@@ -45,6 +49,14 @@ export function setPushToTalkEnabled(val: boolean): void {
 	localStorage.setItem(
 		"mediaPref.pushToTalk",
 		pushToTalkEnabled.value ? "1" : "0",
+	);
+}
+
+export function setAutoHideToolbar(val: boolean): void {
+	autoHideToolbar.value = !!val;
+	localStorage.setItem(
+		"mediaPref.autoHideToolbar",
+		autoHideToolbar.value ? "1" : "0",
 	);
 }
 
@@ -84,4 +96,5 @@ export function loadMediaPreferences(): void {
 		false,
 	);
 	pushToTalkEnabled.value = readBool("mediaPref.pushToTalk", false);
+	autoHideToolbar.value = readBool("mediaPref.autoHideToolbar", true);
 }
