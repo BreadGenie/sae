@@ -16,18 +16,32 @@ interface DisplayParticipantsResult {
 interface DisplayParticipant extends Participant {
 	isVisible: boolean;
 	slotIndex: number;
+	tileStyle: Record<string, string>;
+	needsBreakAfter: boolean;
 }
 
 interface GridStyle {
-	"grid-auto-rows": string;
-	"grid-template-columns": string;
+	display: string;
+	"flex-wrap": string;
+	"justify-content": string;
+	"align-content": string;
+	"column-gap": string;
+	overflow: string;
+}
+
+interface TileStyle {
+	width: string;
+	height: string;
+	minWidth: string;
+	minHeight: string;
+	[key: string]: string;
 }
 
 interface UseVideoGridLayoutReturn {
 	displayParticipants: ComputedRef<DisplayParticipantsResult>;
 	allParticipants: ComputedRef<DisplayParticipant[]>;
-	gridClass: ComputedRef<string>;
 	gridStyle: ComputedRef<GridStyle>;
+	tileStyle: ComputedRef<TileStyle>;
 	visibleTileCount: ComputedRef<number>;
 	hiddenParticipantsTooltip: ComputedRef<string>;
 	maxVisibleTiles: ComputedRef<number>;
@@ -41,6 +55,8 @@ interface UseVideoGridLayoutReturn {
  * - Maximum 4 rows at any screen size
  * - Columns adapt to screen size (2 mobile, 3 tablet, 4 desktop)
  * - Overflow participants go to grouped tile
+ * - Tiles are distributed evenly across rows (e.g. 7 → [3,2,2])
+ * - Shorter rows are centered via justify-content with flex breaks
  */
 export function useVideoGridLayout(
 	participants: Ref<Record<string, Participant>>,
@@ -59,6 +75,27 @@ export function useVideoGridLayout(
 		if (tileCount <= 9) return Math.min(3, maxCols); // up to 3x3
 		if (tileCount <= 12) return Math.min(4, maxCols); // up to 3x4
 		return Math.min(4, maxCols); // 4x4 max
+	};
+
+	/**
+	 * Distribute totalTiles evenly across rows.
+	 * E.g. 7 tiles, 3 max cols → [3, 2, 2] instead of [3, 3, 1]
+	 */
+	const getRowDistribution = (
+		totalTiles: number,
+		maxCols: number,
+	): number[] => {
+		if (totalTiles <= 0) return [];
+		const cols = getOptimalColumns(totalTiles, maxCols);
+		const rows = Math.ceil(totalTiles / cols);
+		const base = Math.floor(totalTiles / rows);
+		const extra = totalTiles % rows;
+
+		const distribution: number[] = [];
+		for (let i = 0; i < rows; i++) {
+			distribution.push(base + (i < extra ? 1 : 0));
+		}
+		return distribution;
 	};
 
 	const maxVisibleTiles = computed<number>(() => {
@@ -186,32 +223,14 @@ export function useVideoGridLayout(
 		return { list: orderedVisible, hidden, extra: hidden.length };
 	});
 
-	// Calculate grid columns based on total visible tiles and screen size
-	const gridClass = computed<string>(() => {
-		const totalVisibleTiles =
-			1 + // local
-			displayParticipants.value.list.length +
-			(displayParticipants.value.extra > 0 ? 1 : 0); // grouped tile if present
-
-		const cols = getOptimalColumns(totalVisibleTiles, maxColumns.value);
-
-		return `grid-cols-${cols}`;
-	});
-
-	// Calculate grid style for equal row heights
-	const gridStyle = computed<GridStyle>(() => {
-		const totalVisibleTiles =
-			1 +
-			displayParticipants.value.list.length +
-			(displayParticipants.value.extra > 0 ? 1 : 0);
-
-		const cols = getOptimalColumns(totalVisibleTiles, maxColumns.value);
-
-		return {
-			"grid-auto-rows": "1fr",
-			"grid-template-columns": `repeat(${cols}, minmax(0, 1fr))`,
-		};
-	});
+	const gridStyle = computed<GridStyle>(() => ({
+		display: "flex",
+		"flex-wrap": "wrap",
+		"justify-content": "center",
+		"align-content": "start",
+		"column-gap": "0.5rem",
+		overflow: "hidden",
+	}));
 
 	// Total visible tile count for avatar sizing
 	const visibleTileCount = computed<number>(() => {
@@ -220,6 +239,46 @@ export function useVideoGridLayout(
 			displayParticipants.value.list.length +
 			(displayParticipants.value.extra > 0 ? 1 : 0)
 		);
+	});
+
+	/**
+	 * Row break indices: visible tile indices after which a flex line-break
+	 * element should be inserted. This forces the desired row distribution.
+	 *
+	 * E.g. for distribution [3, 2, 2], breaks = {2, 4}
+	 *   → break after vis index 2 (end of row 1)
+	 *   → break after vis index 4 (end of row 2)
+	 */
+	const rowBreakIndices = computed<Set<number>>(() => {
+		const total = visibleTileCount.value;
+		const distribution = getRowDistribution(total, maxColumns.value);
+		const breaks = new Set<number>();
+		let cumulative = 0;
+		for (let r = 0; r < distribution.length - 1; r++) {
+			cumulative += distribution[r];
+			breaks.add(cumulative - 1);
+		}
+		return breaks;
+	});
+
+	// all tiles get the same dimensions based on
+	// the first row's column count and total number of rows.
+	const tileStyle = computed<TileStyle>(() => {
+		const total = visibleTileCount.value;
+		const distribution = getRowDistribution(total, maxColumns.value);
+		const firstRowCols = distribution[0] || 1;
+		const rows = distribution.length || 1;
+		const gap = "0.5rem";
+
+		const verticalGaps = rows - 1;
+
+		return {
+			width: `calc((100% - ${firstRowCols - 1} * ${gap}) / ${firstRowCols})`,
+			height: `calc((100% - ${verticalGaps} * ${gap}) / ${rows})`,
+			minWidth: "0",
+			minHeight: "0",
+			marginBottom: gap,
+		};
 	});
 
 	const hiddenParticipantsTooltip = computed<string>(() => {
@@ -241,28 +300,32 @@ export function useVideoGridLayout(
 
 	const allParticipants = computed<DisplayParticipant[]>(() => {
 		const dp = displayParticipants.value;
-
-		// map of visible participants to their slot index
-		const slotMap = new Map<string, number>();
-		dp.list.forEach((p, idx) => slotMap.set(p.user_id, idx));
+		const ts = tileStyle.value;
+		const breaks = rowBreakIndices.value;
 
 		const allWithVisibility: DisplayParticipant[] = [];
 
-		// add visible ones first
-		for (const p of dp.list) {
+		// visible ones — vis index = i + 1 (local is vis 0)
+		for (let i = 0; i < dp.list.length; i++) {
+			const p = dp.list[i];
+			const visIndex = i + 1;
 			allWithVisibility.push({
 				...p,
 				isVisible: true,
-				slotIndex: slotMap.get(p.user_id) ?? 999,
+				slotIndex: i,
+				tileStyle: ts,
+				needsBreakAfter: breaks.has(visIndex),
 			});
 		}
 
-		// then hidden ones
+		// hidden ones don't need tile styles or breaks
 		for (const p of dp.hidden) {
 			allWithVisibility.push({
 				...p,
 				isVisible: false,
 				slotIndex: 999,
+				tileStyle: {},
+				needsBreakAfter: false,
 			});
 		}
 
@@ -272,8 +335,8 @@ export function useVideoGridLayout(
 	return {
 		displayParticipants,
 		allParticipants,
-		gridClass,
 		gridStyle,
+		tileStyle,
 		visibleTileCount,
 		hiddenParticipantsTooltip,
 		maxVisibleTiles,

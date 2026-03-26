@@ -3,8 +3,7 @@
 		<TransitionGroup
 			name="tile"
 			tag="div"
-			class="h-full grid gap-2 call-grid"
-			:class="gridClass"
+			class="h-full call-grid"
 			:style="gridStyle"
 		>
 			<!-- Local user video -->
@@ -17,21 +16,32 @@
 				:isActiveSpeaker="activeSpeakerIds.includes(localParticipant.user_id)"
 				:videoRef="setLocalVideoRef"
 				:tileCount="visibleTileCount"
+				:style="tileStyle"
 			/>
 
 			<!-- Remote participants -->
-			<ParticipantTile
+			<template
 				v-for="participant in allParticipants"
-				:class="{ 'hidden-tile': !participant.isVisible }"
-				:key="'tile-' + participant.user_id"
-				:participant="participant"
-				:isLocal="false"
-				:isVideoEnabled="participant.video_enabled"
-				:isAudioEnabled="participant.audio_enabled"
-				:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
-				:videoRef="getRemoteVideoRef(participant.user_id)"
-				:tileCount="visibleTileCount"
-			/>
+				:key="'group-' + participant.user_id"
+			>
+				<ParticipantTile
+					:class="{ 'hidden-tile': !participant.isVisible }"
+					:participant="participant"
+					:isLocal="false"
+					:isVideoEnabled="participant.video_enabled"
+					:isAudioEnabled="participant.audio_enabled"
+					:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
+					:videoRef="getRemoteVideoRef(participant.user_id)"
+					:tileCount="visibleTileCount"
+					:style="participant.isVisible ? tileStyle : undefined"
+				/>
+				<!-- needed for dynamic row breaks -->
+				<div
+					v-if="participant.isVisible && participant.needsBreakAfter"
+					:key="'break-' + participant.user_id"
+					class="flex-break"
+				/>
+			</template>
 
 			<!-- Grouping tile for overflow participants -->
 			<GroupTile
@@ -41,6 +51,7 @@
 				:tooltip="hiddenParticipantsTooltip"
 				:participants="displayParticipants.hidden"
 				size="medium"
+				:style="tileStyle"
 				@click="handleGroupTileClick"
 			/>
 		</TransitionGroup>
@@ -133,8 +144,8 @@ const localParticipant = computed(() => {
 const {
 	displayParticipants,
 	allParticipants,
-	gridClass,
 	gridStyle,
+	tileStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
 } = useVideoGridLayout(participants, meetingState);
@@ -187,6 +198,16 @@ const hiddenParticipantReactions = computed(() => {
 	bottom: 0;
 	right: 0;
 	z-index: 0;
+}
+
+/* Invisible element that forces flexbox to start a new line. */
+.flex-break {
+	flex-basis: 100%;
+	height: 0;
+	overflow: hidden;
+	padding: 0;
+	margin: 0;
+	border: 0;
 }
 
 /* Animation styles */
