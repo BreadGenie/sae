@@ -5,11 +5,10 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build --base=/assets/meet/frontend/ && yarn copy-html-entry",
+		"build": "vite build",
 		"preview": "vite preview",
 		"lint": "biome check --write .",
-		"format": "biome check --fix .",
-		"copy-html-entry": "cp ../meet/public/frontend/index.html ../meet/www/meet.html"
+		"format": "biome check --fix ."
 	},
 	"dependencies": {
 		"@emoji-mart/data": "^1.2.1",
