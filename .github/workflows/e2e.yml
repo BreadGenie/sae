@@ -20,8 +20,7 @@ jobs:
 >>>>>>> parent of 0d55f17 (ci: use macos)
     name: E2E Tests
     env:
-      EXTERNAL_SFU_URL: ${{ secrets.EXTERNAL_SFU_URL }}
-      EXTERNAL_SFU_SECRET: ${{ secrets.EXTERNAL_SFU_SECRET }}
+      EXTERNAL_SFU_URL: ${{ vars.EXTERNAL_SFU_URL }}
 
     services:
       redis-cache:
@@ -134,13 +133,7 @@ jobs:
              SFU_PORT="3000"
           fi
 
-          if [ -n "$EXTERNAL_SFU_SECRET" ]; then
-             SFU_SECRET="$EXTERNAL_SFU_SECRET"
-          else
-             SFU_SECRET="e2e-test-secret-key-12345"
-          fi
-
-          bench --site meet.test set-config sfu_secret "$SFU_SECRET"
+          bench --site meet.test set-config sfu_secret "e2e-test-secret-key-12345"
           bench --site meet.test set-config sfu_server_url "$SFU_URL"
           bench --site meet.test set-config sfu_server_port "$SFU_PORT"
           bench --site meet.test set-config allow_tests true
