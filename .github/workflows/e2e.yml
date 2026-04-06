@@ -14,10 +14,14 @@ concurrency:
 jobs:
   e2e:
 <<<<<<< HEAD
+<<<<<<< HEAD
     runs-on: macos-latest # TODO: use ubuntu-latest once open sourced
 =======
     runs-on: ubuntu-latest
 >>>>>>> parent of 0d55f17 (ci: use macos)
+=======
+    runs-on: macos-15-intel # TODO: use ubuntu-latest once open sourced
+>>>>>>> parent of 936e016 (ci: use macos with apple silicon)
     name: E2E Tests
 
     services:
@@ -74,18 +78,6 @@ jobs:
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
-
-      - name: Get npm cache directory path
-        id: npm-cache-dir-path
-        run: 'echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT'
-
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.npm-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
