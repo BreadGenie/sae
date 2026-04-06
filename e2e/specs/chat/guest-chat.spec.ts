@@ -7,6 +7,9 @@ test.describe("Guest Chat & Visibility", () => {
 		const host = await createParticipant();
 		const meetingId = await host.loginAndCreateMeeting("user1");
 
+		const p2 = await createParticipant();
+		await p2.loginAndJoinMeeting("user2", meetingId);
+
 		const guest = await createParticipant();
 		await guest.joinMeeting(meetingId);
 
@@ -17,7 +20,7 @@ test.describe("Guest Chat & Visibility", () => {
 
 		await guest.meetingPreview.joinAsGuest("Guest One");
 
-		await host.meeting.waitForParticipantCount(2);
+		await host.meeting.waitForParticipantCount(3);
 
 		// Guest sends a chat
 		await guest.toolbar.openChat();
@@ -26,6 +29,8 @@ test.describe("Guest Chat & Visibility", () => {
 
 		// Others should see the message
 		await host.toolbar.openChat();
+		await p2.toolbar.openChat();
 		await host.chat.waitForMessage("Hello from guest");
+		await p2.chat.waitForMessage("Hello from guest");
 	});
 });

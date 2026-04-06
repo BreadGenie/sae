@@ -1,7 +1,7 @@
 import { test } from "../../fixtures";
 
 test.describe("Chat", () => {
-	test.skip("chat messages should be visible to other participants", async ({
+	test("chat messages should be visible to other participants", async ({
 		createParticipant,
 	}) => {
 		// User 1 creates and joins meeting

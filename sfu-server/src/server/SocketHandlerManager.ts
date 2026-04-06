@@ -363,13 +363,13 @@ export class SocketHandlerManager {
 			try {
 				this.authManager.ensurePresenceAccess(socket);
 
-				// if (!this.checkSocketRateLimits(socket, 10, 10, 60 * 1000)) {
-				// 	callback({
-				// 		success: false,
-				// 		error: 'Too many requests. Please try again later.',
-				// 	});
-				// 	return;
-				// }
+				if (!this.checkSocketRateLimits(socket, 10, 10, 60 * 1000)) {
+					callback({
+						success: false,
+						error: 'Too many requests. Please try again later.',
+					});
+					return;
+				}
 
 				const roomId = socket.meetingId;
 				loggers.socketHandler.debug(

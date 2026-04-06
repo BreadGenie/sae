@@ -10,10 +10,14 @@ test.describe("Screen Share", () => {
 		const p2 = await createParticipant();
 		await p2.loginAndJoinMeeting("user2", meetingId);
 
+		const p3 = await createParticipant();
+		await p3.loginAndJoinMeeting("user3", meetingId);
+
 		// Presenter starts screen share
 		await presenter.toolbar.toggleScreenShare();
 
 		// Remote participants should see screen share layout
 		await p2.meeting.waitForScreenShareVisible();
+		await p3.meeting.waitForScreenShareVisible();
 	});
 });
