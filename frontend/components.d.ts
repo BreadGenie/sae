@@ -31,12 +31,6 @@ declare module "vue" {
 			"./src/components/settings/DeviceSettingsTab.vue",
 		)["default"];
 		EmojiPicker: typeof import("./src/components/EmojiPicker.vue")["default"];
-<<<<<<< HEAD
-=======
-		FloatingControls: typeof import(
-			"./src/components/FloatingControls.vue",
-		)["default"];
->>>>>>> parent of 9a6ff34 (uncommit this please)
 		FloatingReactions: typeof import(
 			"./src/components/FloatingReactions.vue",
 		)["default"];
@@ -47,12 +41,9 @@ declare module "vue" {
 		KickParticipantDialog: typeof import(
 			"./src/components/KickParticipantDialog.vue",
 		)["default"];
-<<<<<<< HEAD
 		LayoutSettingsTab: typeof import(
 			"./src/components/settings/LayoutSettingsTab.vue",
 		)["default"];
-=======
->>>>>>> parent of 9a6ff34 (uncommit this please)
 		LobbyOverlay: typeof import("./src/components/LobbyOverlay.vue")["default"];
 		LucideAlertCircle: typeof import("~icons/lucide/alert-circle")["default"];
 		LucideAlertTriangle: typeof import(
@@ -96,10 +87,6 @@ declare module "vue" {
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
-<<<<<<< HEAD
-=======
-		LucideWifiOff: typeof import("~icons/lucide/wifi-off")["default"];
->>>>>>> parent of 9a6ff34 (uncommit this please)
 		LucideX: typeof import("~icons/lucide/x")["default"];
 		LucideXCircle: typeof import("~icons/lucide/x-circle")["default"];
 		MeetingAccessSettingsTab: typeof import(
@@ -114,12 +101,9 @@ declare module "vue" {
 		MeetingPreview: typeof import(
 			"./src/components/MeetingPreview.vue",
 		)["default"];
-<<<<<<< HEAD
 		MeetingToolbar: typeof import(
 			"./src/components/MeetingToolbar.vue",
 		)["default"];
-=======
->>>>>>> parent of 9a6ff34 (uncommit this please)
 		NamePill: typeof import("./src/components/NamePill.vue")["default"];
 		NotificationSettingsTab: typeof import(
 			"./src/components/settings/NotificationSettingsTab.vue",
@@ -137,12 +121,9 @@ declare module "vue" {
 		PeopleWaitingSection: typeof import(
 			"./src/components/PeopleWaitingSection.vue",
 		)["default"];
-<<<<<<< HEAD
 		PreviewToolbar: typeof import(
 			"./src/components/PreviewToolbar.vue",
 		)["default"];
-=======
->>>>>>> parent of 9a6ff34 (uncommit this please)
 		ReactionPicker: typeof import(
 			"./src/components/ReactionPicker.vue",
 		)["default"];
@@ -167,10 +148,7 @@ declare module "vue" {
 			"./src/components/settings/SettingsLayoutBase.vue",
 		)["default"];
 		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
-<<<<<<< HEAD
 		Spinner: typeof import("./src/components/Spinner.vue")["default"];
-=======
->>>>>>> parent of 9a6ff34 (uncommit this please)
 		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];
 		VideoPreview: typeof import("./src/components/VideoPreview.vue")["default"];
 	}

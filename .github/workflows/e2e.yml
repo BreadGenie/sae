@@ -13,15 +13,7 @@ concurrency:
 
 jobs:
   e2e:
-<<<<<<< HEAD
-<<<<<<< HEAD
-    runs-on: macos-latest # TODO: use ubuntu-latest once open sourced
-=======
     runs-on: ubuntu-latest
->>>>>>> parent of 0d55f17 (ci: use macos)
-=======
-    runs-on: macos-15-intel # TODO: use ubuntu-latest once open sourced
->>>>>>> parent of 936e016 (ci: use macos with apple silicon)
     name: E2E Tests
 
     services:
