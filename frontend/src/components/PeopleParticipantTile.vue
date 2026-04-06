@@ -73,7 +73,6 @@
 					</template>
 				</Dropdown>
 			</div>
-            <div v-else-if="isHost" class="w-8 h-8"/>
 		</div>
 	</div>
 

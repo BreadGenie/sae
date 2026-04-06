@@ -22,7 +22,7 @@ export function useMeetingState() {
 	const connectionError = ref(null);
 	const isInPreview = ref(true);
 	const isSetupComplete = ref(false);
-	const codecStrategy = ref("auto");
+	const codecStrategy = ref("svc");
 
 	// Network quality states
 	const networkQuality = ref("good");
@@ -41,6 +41,8 @@ export function useMeetingState() {
 	const participants = ref({});
 	const remoteVideos = ref({});
 	const activeSpeakerIds = ref([]);
+	const stableSpeakerIds = ref([]);
+	const speakerStartTimes = ref({});
 
 	// Waiting room states
 	const isWaitingForApproval = ref(false);
@@ -118,7 +120,7 @@ export function useMeetingState() {
 		isConnecting.value = false;
 		isInPreview.value = true;
 		isSetupComplete.value = false;
-		codecStrategy.value = "auto";
+		codecStrategy.value = "svc";
 		networkQuality.value = "good";
 		connectionIssues.value = [];
 		participants.value = {};
@@ -138,6 +140,8 @@ export function useMeetingState() {
 		localStream.value = null;
 		cameraPermissionGranted.value = false;
 		microphonePermissionGranted.value = false;
+		stableSpeakerIds.value = [];
+		speakerStartTimes.value = {};
 	};
 
 	const setMediaState = (mic, camera) => {
@@ -197,6 +201,8 @@ export function useMeetingState() {
 		participants,
 		remoteVideos,
 		activeSpeakerIds,
+		stableSpeakerIds,
+		speakerStartTimes,
 		isWaitingForApproval,
 		isJoinRequestRejected,
 		waitingUsers,

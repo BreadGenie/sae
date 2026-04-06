@@ -108,6 +108,14 @@ export class RoomManager {
 			created: room.created,
 			peerCount: room.peers.size,
 			peers: Array.from(room.peers.keys()),
+			producerCount: Array.from(room.peers.values()).reduce(
+				(count, peer) => count + peer.producers.size,
+				0,
+			),
+			consumerCount: Array.from(room.peers.values()).reduce(
+				(count, peer) => count + peer.consumers.size,
+				0,
+			),
 		};
 	}
 

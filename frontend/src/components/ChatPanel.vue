@@ -12,7 +12,7 @@
 				class="w-80 sm:w-96 bg-white border border-gray-200 shadow-xl flex flex-col z-40 h-full rounded-lg mr-4"
 			>
 				<div class="flex items-center justify-between p-4 border-b border-gray-200">
-					<div class="text-gray-900 font-medium">Chat</div>
+					<div class="text-gray-900 text-base font-medium">Chat</div>
 					<lucide-x
 						@click="$emit('close')"
 						class="w-4 h-4 text-gray-900 cursor-pointer hover:text-gray-600"
@@ -102,6 +102,7 @@ const defaultEmojis = [
 const recentlyUsedEmojis = ref(defaultEmojis.slice());
 
 onMounted(async () => {
+	await scrollToBottom();
 	try {
 		await init({ data });
 		isEmojiDataReady.value = true;
@@ -293,15 +294,11 @@ function handleSend() {
 	draft.value = "";
 }
 
-watch(
-	messages,
-	async () => {
-		await nextTick();
-		try {
-			const el = listEl.value;
-			el.scrollTop = el.scrollHeight;
-		} catch {}
-	},
-	{ deep: true },
-);
+async function scrollToBottom() {
+	await nextTick();
+	const el = listEl.value;
+	el.scrollTop = el.scrollHeight;
+}
+
+watch(messages, scrollToBottom, { deep: true });
 </script>

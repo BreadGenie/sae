@@ -42,16 +42,47 @@
 						gridTemplateColumns: 'minmax(0, 1fr) var(--panel-width)',
 					}"
 				>
-					<!-- Video area -->
-					<div class="p-4 flex flex-col min-h-0 overflow-auto text-white">
-						<!-- Screen share active view -->
-						<ScreenShareLayout
-							v-if="meetingState.displayScreenShares.value.length"
-							@open-people-panel="togglePeople"
-						/>
+					<!-- Video column: video area + toolbar -->
+					<div class="flex flex-col min-h-0">
+						<!-- Video area -->
+						<div class="p-4 flex flex-col flex-1 min-h-0 overflow-auto text-white">
+							<!-- Screen share active view -->
+							<ScreenShareLayout
+								v-if="meetingState.displayScreenShares.value.length"
+								@open-people-panel="togglePeople"
+							/>
 
-						<!-- Normal video grid -->
-						<VideoGrid v-else @open-people-panel="togglePeople" />
+							<!-- Normal video grid -->
+							<VideoGrid v-else @open-people-panel="togglePeople" />
+						</div>
+
+						<!-- Meeting controls -->
+						<MeetingToolbar
+							:isChatOpen="meetingState.isChatOpen.value"
+							:isPeopleOpen="meetingState.isPeopleOpen.value"
+							:hasUnread="meetingState.hasUnreadMessages.value"
+							:lobbyUserCount="meetingState.lobbyUsers?.value?.length || 0"
+							:isMicOn="meetingState.isMicOn.value"
+							:isCameraOn="meetingState.isCameraOn.value"
+							:isScreenSharing="meetingState.isScreenSharing.value"
+							:isHandRaised="isHandRaised"
+							:isReactionPickerOpen="isReactionPickerOpen"
+							@update:isReactionPickerOpen="isReactionPickerOpen = $event"
+							:meetingId="meetingId"
+							:meetingTitle="meetingTitle.value"
+							:currentUser="meetingState.currentUser.value"
+							:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
+							:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
+							@toggle-chat="toggleChat"
+							@toggle-people="togglePeople"
+							@toggle-reactions="toggleReactions($event)"
+							@toggle-microphone="toggleMicrophone"
+							@toggle-camera="toggleCamera"
+							@toggle-screen-share="toggleScreenShare"
+							@toggle-raise-hand="toggleRaiseHand"
+							@end-call="endCall"
+							@device-changed="handleDeviceChanged"
+						/>
 					</div>
 
 					<!-- Panel Container -->
@@ -111,34 +142,6 @@
 						</div>
 					</Transition>
 				</div>
-
-				<!-- Floating controls -->
-				<FloatingControls
-					:isChatOpen="meetingState.isChatOpen.value"
-					:isPeopleOpen="meetingState.isPeopleOpen.value"
-					:hasUnread="meetingState.hasUnreadMessages.value"
-					:lobbyUserCount="meetingState.lobbyUsers?.value?.length || 0"
-					:isMicOn="meetingState.isMicOn.value"
-					:isCameraOn="meetingState.isCameraOn.value"
-					:isScreenSharing="meetingState.isScreenSharing.value"
-					:isHandRaised="isHandRaised"
-					:isReactionPickerOpen="isReactionPickerOpen"
-					@update:isReactionPickerOpen="isReactionPickerOpen = $event"
-					:meetingId="meetingId"
-					:meetingTitle="meetingTitle.value"
-					:currentUser="meetingState.currentUser.value"
-					:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
-					:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
-					@toggle-chat="toggleChat"
-					@toggle-people="togglePeople"
-					@toggle-reactions="toggleReactions($event)"
-					@toggle-microphone="toggleMicrophone"
-					@toggle-camera="toggleCamera"
-					@toggle-screen-share="toggleScreenShare"
-					@toggle-raise-hand="toggleRaiseHand"
-					@end-call="endCall"
-					@device-changed="handleDeviceChanged"
-				/>
 			</div>
 
 			<LobbyOverlay
@@ -169,19 +172,20 @@
 </template>
 
 <script setup>
-import { Button, Spinner, frappeRequest } from "frappe-ui";
+import { Button, frappeRequest } from "frappe-ui";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
-import FloatingControls from "../components/FloatingControls.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import LobbyOverlay from "../components/LobbyOverlay.vue";
 import MeetingPreview from "../components/MeetingPreview.vue";
+import MeetingToolbar from "../components/MeetingToolbar.vue";
 import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
 import ScreenShareLayout from "../components/ScreenShareLayout.vue";
+import Spinner from "../components/Spinner.vue";
 import VideoGrid from "../components/VideoGrid.vue";
 
 import { provideMeetingContext } from "../composables/useMeetingContext.js";
@@ -224,6 +228,7 @@ const meetingDoc = getMeetingDoc(meetingId.value);
 // Meeting logic composable
 const {
 	initializeCamera,
+	acquireUserMedia,
 	joinMeetingRoom,
 	toggleMicrophone,
 	toggleCamera,
@@ -241,6 +246,7 @@ const {
 	setupRaiseHandEvents,
 	toggleRaiseHand,
 	handleKeyDown,
+	handleKeyUp,
 	sfuManager,
 	applySpeakerDevice,
 	processedStream,
@@ -618,35 +624,17 @@ const handleDeviceChanged = async (event) => {
 				}
 			}
 
-			const constraints = {};
+			// Use selected devices unless this event overrides a specific one
+			const cameraDeviceId =
+				event.type === "camera" ? event.deviceId : selectedCameraId.value;
+			const micDeviceId =
+				event.type === "microphone" ? event.deviceId : selectedMicId.value;
 
-			if (meetingState.isCameraOn.value) {
-				constraints.video = {};
-				// Use the deviceId from the event if it's a camera change, otherwise use current selection
-				const cameraDeviceId =
-					event.type === "camera" ? event.deviceId : selectedCameraId.value;
-				if (
-					cameraDeviceId &&
-					deviceManager.isDeviceAvailable(cameraDeviceId, "camera")
-				) {
-					constraints.video.deviceId = { exact: cameraDeviceId };
-				}
-			}
-
-			if (meetingState.isMicOn.value) {
-				constraints.audio = {};
-				const micDeviceId =
-					event.type === "microphone" ? event.deviceId : selectedMicId.value;
-				if (
-					micDeviceId &&
-					deviceManager.isDeviceAvailable(micDeviceId, "microphone")
-				) {
-					constraints.audio.deviceId = { exact: micDeviceId };
-				}
-			}
-
-			// use new device
-			const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+			const { stream: newStream } = await acquireUserMedia(
+				meetingState.isCameraOn.value,
+				meetingState.isMicOn.value,
+				{ cameraDeviceId, micDeviceId },
+			);
 			meetingState.localStream.value = newStream;
 
 			if (meetingState.localVideo) {
@@ -675,6 +663,7 @@ const handleDeviceChanged = async (event) => {
 // Lifecycle
 onMounted(async () => {
 	window.addEventListener("keydown", handleKeyDown);
+	window.addEventListener("keyup", handleKeyUp);
 
 	// Clear any stale error/connection state from previous navigations
 	if (typeof meetingState.resetConnectionState === "function") {
@@ -754,6 +743,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
 	window.removeEventListener("keydown", handleKeyDown);
+	window.removeEventListener("keyup", handleKeyUp);
 
 	// Cleanup will be handled by the meeting logic composable
 });
@@ -827,32 +817,3 @@ watch(
 	{ immediate: true },
 );
 </script>
-
-<style scoped>
-/* Transition styles for participant tiles */
-.tile-enter-from,
-.tile-leave-to {
-	opacity: 0;
-	transform: scale(0.85) translateY(8px);
-}
-
-.tile-enter-active,
-.tile-leave-active {
-	transition:
-		opacity 200ms ease,
-		transform 200ms ease;
-}
-
-.tile-move {
-	transition: transform 200ms ease;
-}
-
-.tile-leave-active {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
-}
-</style>

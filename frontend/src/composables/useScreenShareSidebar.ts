@@ -5,12 +5,14 @@ import {
 	onMounted,
 	onUnmounted,
 	ref,
+	watch,
 } from "vue";
 import type { Participant } from "../types";
 import { useResponsiveGrid } from "./useResponsiveGrid";
 
 interface MeetingState {
 	raisedHands?: Ref<Record<string, string>>;
+	stableSpeakerIds?: Ref<string[]>;
 }
 
 interface SidebarDisplayResult {
@@ -37,6 +39,7 @@ interface UseScreenShareSidebarReturn {
 	visibleTileCount: ComputedRef<number>;
 	hiddenParticipantsTooltip: ComputedRef<string>;
 	maxVisibleTiles: ComputedRef<number>;
+	allParticipants: ComputedRef<SidebarParticipant[]>;
 }
 
 /**
@@ -50,7 +53,7 @@ interface UseScreenShareSidebarReturn {
  */
 export function useScreenShareSidebar(
 	participants: Ref<Record<string, Participant>>,
-	activeSpeakerIds: Ref<string[]>,
+	speakerIds: Ref<string[]>,
 	meetingState: MeetingState,
 ): UseScreenShareSidebarReturn {
 	const { sidebarMaxColumns } = useResponsiveGrid();
@@ -81,7 +84,17 @@ export function useScreenShareSidebar(
 		return cols * maxRows;
 	});
 
-	const sidebarDisplay = computed<SidebarDisplayResult>(() => {
+	// State for slot persistence (User ID -> Slot Index)
+	const slotAssignments = ref(new Map<string, number>());
+	const allParticipantsRef = ref<SidebarParticipant[]>([]);
+	const sidebarDisplayRef = ref<SidebarDisplayResult>({
+		list: [],
+		hidden: [],
+		extra: 0,
+	});
+
+	// Watch triggers layout update
+	const updateLayout = () => {
 		const participantData = participants.value || participants;
 
 		let remotes: Participant[];
@@ -117,96 +130,133 @@ export function useScreenShareSidebar(
 				remotes = arrayResult as Participant[];
 			}
 		}
-		const total = remotes.length + 1; // include local user
-		const threshold = maxVisibleTiles.value;
 
-		if (total <= threshold) {
-			return { list: remotes, hidden: [], extra: 0 };
-		}
+		const threshold = maxVisibleTiles.value;
+		const totalTiles = remotes.length + 1; // include local tile
+		const remoteCapacity =
+			totalTiles <= threshold ? remotes.length : Math.max(0, threshold - 2);
 
 		// Get active speaker IDs
-		const activeSpeakers = activeSpeakerIds?.value || [];
+		const activeSpeakers = speakerIds?.value || [];
 		const activeSpeakerSet = new Set<string>(activeSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
 
-		// 1 for local user and 1 for grouped tile
-		const remoteCapacity = threshold - 2;
+		// Calculate priority
+		const getPriority = (p: Participant) => {
+			const isStable = activeSpeakerSet.has(p.user_id);
+			const hasVideo = !!p.video_enabled;
+			const hasHand = !!raisedHands[p.user_id];
 
-		// Separate participants by video state and active speaker status
-		// Sort by user_id for stable ordering within each category
-		const videoOnActiveSpeakers = remotes
-			.filter((p) => p.video_enabled && activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const videoOnNonSpeakers = remotes
-			.filter((p) => p.video_enabled && !activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const videoOffActiveSpeakers = remotes
-			.filter((p) => !p.video_enabled && activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const raisedHandsParticipants = remotes
-			.filter((p) => raisedHands[p.user_id] && !activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => {
-				const aTime = new Date(raisedHands[a.user_id]).getTime();
-				const bTime = new Date(raisedHands[b.user_id]).getTime();
-				// First sort by timestamp (earliest first), then by user_id for stability
-				if (aTime !== bTime) {
-					return aTime - bTime;
+			if (isStable && hasVideo) return 0;
+			if (isStable) return 1;
+			if (hasHand) return 2;
+			if (hasVideo) return 3;
+			return 4;
+		};
+
+		// 1. sort remotes by priority to find candidates
+		const priorityMap = new Map<string, number>();
+		for (const p of remotes) {
+			priorityMap.set(p.user_id, getPriority(p));
+		}
+
+		const sortedByPriority = [...remotes].sort((a, b) => {
+			const pA = priorityMap.get(a.user_id) ?? 4;
+			const pB = priorityMap.get(b.user_id) ?? 4;
+			if (pA !== pB) return pA - pB;
+			return a.user_id.localeCompare(b.user_id);
+		});
+
+		// candidates are the top visible participants
+		const candidates = sortedByPriority.slice(0, remoteCapacity);
+
+		const hidden = sortedByPriority.slice(remoteCapacity);
+
+		// 2. Assign Slots
+		const newSlots = new Map<string, number>();
+		const slotsTaken = new Set<number>();
+
+		// 1. keep existing slots for candidates
+		for (const p of candidates) {
+			if (slotAssignments.value.has(p.user_id)) {
+				const oldSlot = slotAssignments.value.get(p.user_id);
+				if (
+					oldSlot !== undefined &&
+					oldSlot < remoteCapacity &&
+					!slotsTaken.has(oldSlot)
+				) {
+					newSlots.set(p.user_id, oldSlot);
+					slotsTaken.add(oldSlot);
 				}
-				return a.user_id.localeCompare(b.user_id);
-			});
-		const videoOffNonSpeakers = remotes
-			.filter(
-				(p) =>
-					!p.video_enabled &&
-					!activeSpeakerSet.has(p.user_id) &&
-					!raisedHands[p.user_id],
-			)
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-
-		const visibleRemotes: Participant[] = [];
-
-		// Priority order:
-		// 1. Active speakers with video ON
-		// 2. Non-active speakers with video ON
-		// 3. Active speakers with video OFF (ensure they're visible)
-		// 4. Raised hands (sorted by timestamp)
-		// 5. Non-active speakers with video OFF
-
-		for (const p of videoOnActiveSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
 			}
 		}
 
-		for (const p of videoOnNonSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
+		// 2. assign free slots to newcomers
+		let nextFreeSlot = 0;
+		for (const p of candidates) {
+			if (!newSlots.has(p.user_id)) {
+				while (slotsTaken.has(nextFreeSlot) && nextFreeSlot < remoteCapacity) {
+					nextFreeSlot++;
+				}
+				if (nextFreeSlot < remoteCapacity) {
+					newSlots.set(p.user_id, nextFreeSlot);
+					slotsTaken.add(nextFreeSlot);
+				}
 			}
 		}
 
-		for (const p of videoOffActiveSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
+		slotAssignments.value = newSlots;
+
+		// visible list must be sorted by slot index for stable grid layout
+		const visibleList: Participant[] = [];
+		const visibleMap = new Map<string, Participant>();
+		for (const p of candidates) {
+			if (newSlots.has(p.user_id)) {
+				visibleMap.set(p.user_id, p);
 			}
 		}
 
-		for (const p of raisedHandsParticipants) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
+		for (let i = 0; i < remoteCapacity; i++) {
+			for (const [uid, slot] of newSlots.entries()) {
+				if (slot === i && visibleMap.has(uid)) {
+					const participant = visibleMap.get(uid);
+					if (participant) {
+						visibleList.push(participant);
+					}
+					break;
+				}
 			}
 		}
 
-		for (const p of videoOffNonSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			}
+		sidebarDisplayRef.value = {
+			list: visibleList,
+			hidden: hidden,
+			extra: hidden.length,
+		};
+
+		const combined: SidebarParticipant[] = [];
+		for (const p of visibleList) {
+			combined.push({ ...p, isVisible: true });
 		}
+		for (const p of hidden) {
+			combined.push({ ...p, isVisible: false });
+		}
+		allParticipantsRef.value = combined;
+	};
 
-		const visibleIds = new Set(visibleRemotes.map((p) => p.user_id));
-		const hidden = remotes.filter((p) => !visibleIds.has(p.user_id));
+	watch(
+		[
+			() => participants.value,
+			speakerIds,
+			maxVisibleTiles,
+			() => meetingState.raisedHands?.value,
+		],
+		updateLayout,
+		{ deep: true, immediate: true },
+	);
 
-		return { list: visibleRemotes, hidden, extra: hidden.length };
-	});
+	const sidebarDisplay = computed(() => sidebarDisplayRef.value);
+	const allParticipants = computed(() => allParticipantsRef.value);
 
 	const sidebarClass = computed<string>(() => {
 		const isMobile = windowWidth.value < 768;
@@ -234,14 +284,7 @@ export function useScreenShareSidebar(
 
 		const widthClass = columns === 2 ? "w-72" : "w-64";
 
-		const visible =
-			1 +
-			sidebarDisplay.value.list.length +
-			(sidebarDisplay.value.extra > 0 ? 1 : 0);
-
-		const rows = Math.min(4, Math.ceil(visible / columns));
-
-		return `${widthClass} grid-cols-${columns} grid-rows-${rows}`;
+		return `${widthClass} grid-cols-${columns}`;
 	});
 
 	const sidebarStyle = computed<SidebarStyle>(() => {
@@ -331,6 +374,7 @@ export function useScreenShareSidebar(
 
 	return {
 		sidebarDisplay,
+		allParticipants,
 		sidebarClass,
 		sidebarStyle,
 		singleTileStyle,
@@ -338,4 +382,8 @@ export function useScreenShareSidebar(
 		hiddenParticipantsTooltip,
 		maxVisibleTiles,
 	};
+}
+
+export interface SidebarParticipant extends Participant {
+	isVisible: boolean;
 }

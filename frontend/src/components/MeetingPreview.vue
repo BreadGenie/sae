@@ -48,12 +48,9 @@
 								</div>
 							</div>
 
-							<FloatingControls
-								:isPreview="true"
-								:isChatOpen="false"
+							<PreviewToolbar
 								:isMicOn="isMicOn"
 								:isCameraOn="isCameraOn"
-								:isScreenSharing="false"
 								:cameraPermissionGranted="cameraPermissionGranted"
 								:microphonePermissionGranted="microphonePermissionGranted"
 								@toggle-microphone="$emit('toggle-microphone')"
@@ -135,8 +132,8 @@
 <script setup>
 import { Button, FormControl, createResource, toast } from "frappe-ui";
 import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
-import FloatingControls from "../components/FloatingControls.vue";
 import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
+import PreviewToolbar from "../components/PreviewToolbar.vue";
 import { useMeetingPreviewPresence } from "../composables/useMeetingPreviewPresence";
 import { session } from "../data/session";
 import FrappeMeetingLogo from "../icons/FrappeMeetingLogo.vue";

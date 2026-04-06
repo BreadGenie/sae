@@ -5,6 +5,7 @@ import {
 	noiseCancellationEnabled,
 	cameraEnabled as prefCameraEnabled,
 	micEnabled as prefMicEnabled,
+	pushToTalkEnabled,
 	selectedCameraId,
 	selectedMicId,
 	selectedSpeakerId,
@@ -14,7 +15,6 @@ import {
 	setSelectedMicId,
 	setSelectedSpeakerId,
 } from "../data/mediaPreferences";
-import { publishScreenShare } from "../mediasoup-client.js";
 import { useSocket } from "../socket.js";
 import audioNotificationManager from "../utils/audioNotifications";
 import { deviceManager } from "../utils/media/DeviceManager.js";
@@ -62,6 +62,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const realtimeListenersSetup = ref(false);
 	const activeSpeakerTimeout = ref(null);
 	const joiningInProgress = ref(false);
+	const unmutedByPushToTalk = ref(false);
 
 	// Background effects
 	const { applyBackgroundEffects, stopProcessing, processedStream } =
@@ -73,6 +74,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const { applyNoiseCancellation } = useNoiseCancellation();
 
 	let noiseCancellationSession = null;
+	let stabilityCheckTimeout = null;
 
 	const replacePublishedVideoTrack = async (
 		stream,
@@ -184,13 +186,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 	const getFreshMicTrack = async () => {
 		try {
-			const constraints = {
-				audio: selectedMicId.value
-					? { deviceId: { exact: selectedMicId.value } }
-					: true,
-			};
-			const freshStream =
-				await navigator.mediaDevices.getUserMedia(constraints);
+			const { stream: freshStream } = await acquireUserMedia(false, true, {
+				micDeviceId: selectedMicId.value || null,
+			});
 			const freshTrack = freshStream.getAudioTracks()[0];
 
 			if (!freshTrack) {
@@ -310,7 +308,15 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 	const buildMediaConstraints = async (videoEnabled, audioEnabled) => {
 		const constraints = {};
-		const deviceIds = {};
+
+		const audioConstraints = {
+			channelCount: 1, // mono audio cuz voice is priority
+			echoCancellation: true,
+			noiseSuppression: true,
+			autoGainControl: true,
+			sampleRate: 48000,
+			sampleSize: 16,
+		};
 
 		if (videoEnabled) {
 			constraints.video = {
@@ -325,13 +331,12 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			);
 			if (validCameraId) {
 				constraints.video.deviceId = { exact: validCameraId };
-				deviceIds.camera = validCameraId;
 			}
 			// If no valid device ID, let browser use its default
 		}
 
 		if (audioEnabled) {
-			constraints.audio = {};
+			constraints.audio = { ...audioConstraints };
 
 			const validMicId = await getValidDeviceId(
 				selectedMicId.value,
@@ -339,12 +344,46 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			);
 			if (validMicId) {
 				constraints.audio.deviceId = { exact: validMicId };
-				deviceIds.microphone = validMicId;
 			}
 			// If no valid device ID, let browser use its default
 		}
 
-		return { constraints, deviceIds };
+		return constraints;
+	};
+
+	const acquireUserMedia = async (
+		videoEnabled,
+		audioEnabled,
+		deviceOverrides = {},
+	) => {
+		const constraints = await buildMediaConstraints(videoEnabled, audioEnabled);
+
+		if (videoEnabled && Object.hasOwn(deviceOverrides, "cameraDeviceId")) {
+			const validCameraId = await getValidDeviceId(
+				deviceOverrides.cameraDeviceId,
+				"camera",
+			);
+			if (validCameraId && constraints.video) {
+				constraints.video.deviceId = { exact: validCameraId };
+			} else if (constraints.video?.deviceId) {
+				constraints.video.deviceId = undefined;
+			}
+		}
+
+		if (audioEnabled && Object.hasOwn(deviceOverrides, "micDeviceId")) {
+			const validMicId = await getValidDeviceId(
+				deviceOverrides.micDeviceId,
+				"microphone",
+			);
+			if (validMicId && constraints.audio) {
+				constraints.audio.deviceId = { exact: validMicId };
+			} else if (constraints.audio?.deviceId) {
+				constraints.audio.deviceId = undefined;
+			}
+		}
+
+		const stream = await navigator.mediaDevices.getUserMedia(constraints);
+		return { stream, constraints };
 	};
 
 	/**
@@ -381,12 +420,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			meetingState.setMediaState(prefMicEnabled.value, prefCameraEnabled.value);
 
 			if (meetingState.isCameraOn.value || meetingState.isMicOn.value) {
-				const { constraints, deviceIds } = await buildMediaConstraints(
+				const { stream } = await acquireUserMedia(
 					meetingState.isCameraOn.value,
 					meetingState.isMicOn.value,
 				);
-
-				const stream = await navigator.mediaDevices.getUserMedia(constraints);
 				meetingState.localStream.value = stream;
 				// Clear any stale connection error on successful media acquisition
 				if (meetingState.connectionError.value) {
@@ -436,11 +473,11 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				// Turning mic ON
 				if (!stream) {
 					try {
-						const { constraints, deviceIds } = await buildMediaConstraints(
+						const { stream: nextStream } = await acquireUserMedia(
 							meetingState.isCameraOn.value,
 							enable,
 						);
-						stream = await navigator.mediaDevices.getUserMedia(constraints);
+						stream = nextStream;
 						meetingState.localStream.value = stream;
 						meetingState.cameraPermissionGranted.value = true;
 						meetingState.microphonePermissionGranted.value = true;
@@ -461,12 +498,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					const hasAudio = stream.getAudioTracks().length > 0;
 					if (!hasAudio) {
 						try {
-							const { constraints, deviceIds } = await buildMediaConstraints(
-								false,
-								true,
-							);
-							const audioOnly =
-								await navigator.mediaDevices.getUserMedia(constraints);
+							const { stream: audioOnly } = await acquireUserMedia(false, true);
 							const newTrack = audioOnly.getAudioTracks()[0];
 							if (newTrack) {
 								stream.addTrack(newTrack);
@@ -490,12 +522,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 						if (at.readyState === "ended") {
 							// Track was stopped, get a new one
 							try {
-								const { constraints, deviceIds } = await buildMediaConstraints(
+								const { stream: audioOnly } = await acquireUserMedia(
 									false,
 									true,
 								);
-								const audioOnly =
-									await navigator.mediaDevices.getUserMedia(constraints);
 								const newTrack = audioOnly.getAudioTracks()[0];
 								if (newTrack) {
 									stream.removeTrack(at);
@@ -628,11 +658,11 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				if (!stream) {
 					// No existing stream: request both video and current audio state
 					try {
-						const { constraints, deviceIds } = await buildMediaConstraints(
+						const { stream: nextStream } = await acquireUserMedia(
 							true,
 							meetingState.isMicOn.value,
 						);
-						stream = await navigator.mediaDevices.getUserMedia(constraints);
+						stream = nextStream;
 						meetingState.localStream.value = stream;
 						meetingState.cameraPermissionGranted.value = true;
 						if (meetingState.isMicOn.value) {
@@ -655,12 +685,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					const hasVideo = stream.getVideoTracks().length > 0;
 					if (!hasVideo) {
 						try {
-							const { constraints, deviceIds } = await buildMediaConstraints(
-								true,
-								false,
-							);
-							const videoOnly =
-								await navigator.mediaDevices.getUserMedia(constraints);
+							const { stream: videoOnly } = await acquireUserMedia(true, false);
 							const newTrack = videoOnly.getVideoTracks()[0];
 							if (newTrack) {
 								stream.addTrack(newTrack);
@@ -693,12 +718,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 						if (vt.readyState === "ended") {
 							// Track was stopped, get a new one
 							try {
-								const { constraints, deviceIds } = await buildMediaConstraints(
+								const { stream: videoOnly } = await acquireUserMedia(
 									true,
 									false,
 								);
-								const videoOnly =
-									await navigator.mediaDevices.getUserMedia(constraints);
 								const newTrack = videoOnly.getVideoTracks()[0];
 								if (newTrack) {
 									stream.removeTrack(vt);
@@ -871,7 +894,11 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				screenStream = await getDisplay.call(
 					navigator.mediaDevices || navigator,
 					{
-						video: { frameRate: { ideal: 15, max: 30 } },
+						video: {
+							width: { ideal: 1920, max: 1920 },
+							height: { ideal: 1080, max: 1080 },
+							frameRate: { ideal: 10, max: 15 },
+						},
 					},
 				);
 				if (!screenStream)
@@ -883,7 +910,18 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 				// Publish via mediasoup
 				try {
-					const producer = await publishScreenShare(meetingId, screenStream);
+					const screenTrack = screenStream.getVideoTracks()[0];
+					if (!screenTrack || !sfuManager.value?.transportManager) {
+						throw new Error("Screen share transport is not available");
+					}
+
+					const producer =
+						await sfuManager.value.transportManager.createProducer(
+							screenTrack,
+							{
+								type: "screen",
+							},
+						);
 					// Store reference on mediaHandler so we can close it when stopping
 					if (sfuManager.value?.mediaHandler) {
 						sfuManager.value.mediaHandler.setProducers({
@@ -1075,9 +1113,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			});
 		} catch (error) {
 			console.error("Failed to join meeting:", error);
-			meetingState.connectionError.value = error.messages.length
+			meetingState.connectionError.value = error?.messages?.length
 				? error.messages.join(", ")
-				: "Failed to join meeting";
+				: error?.message || "Failed to join meeting";
 			meetingState.isConnecting.value = false;
 		} finally {
 			joiningInProgress.value = false;
@@ -1116,7 +1154,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			// Connect to SFU
 			await sfuManager.value.connect(meetingState.guestAuthToken.value);
 			meetingState.codecStrategy.value =
-				getSFUClient().getCodecStrategy() || "auto";
+				getSFUClient().getCodecStrategy() || "svc";
 
 			// Join the room with user details and initial media states
 			let userData;
@@ -1391,9 +1429,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					}
 				} catch (error) {
 					console.error("Error after approval:", error);
-					meetingState.connectionError.value = error.messages.length
+					meetingState.connectionError.value = error?.messages?.length
 						? error.messages.join(", ")
-						: "Failed to join meeting after approval";
+						: error?.message || "Failed to join meeting after approval";
 					toast.error("Failed to join meeting after approval");
 				}
 			}
@@ -1582,8 +1620,71 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					clearTimeout(activeSpeakerTimeout.value);
 					activeSpeakerTimeout.value = null;
 				}
+				if (stabilityCheckTimeout) {
+					clearTimeout(stabilityCheckTimeout);
+					stabilityCheckTimeout = null;
+				}
 
 				meetingState.activeSpeakerIds.value = participantIds;
+
+				const STABLE_THRESHOLD_MS = 1000;
+				const DEMOTE_THRESHOLD_MS = 3000;
+
+				const checkStability = () => {
+					const now = Date.now();
+					const currentSet = new Set(meetingState.activeSpeakerIds.value);
+					const startTimes = { ...meetingState.speakerStartTimes.value };
+					const currentStable = new Set(
+						meetingState.stableSpeakerIds.value || [],
+					);
+					let hasPendingCandidates = false;
+
+					// 1. Handle stopped speakers (demotion logic)
+					for (const id of Object.keys(startTimes)) {
+						if (!currentSet.has(id)) {
+							if (startTimes[id] > 0) {
+								startTimes[id] = -now; // Mark stopped
+							} else if (now - Math.abs(startTimes[id]) > DEMOTE_THRESHOLD_MS) {
+								delete startTimes[id];
+								currentStable.delete(id);
+							}
+						} else if (startTimes[id] < 0) {
+							startTimes[id] = now; // Resume
+						}
+					}
+
+					// 2. Add new speakers
+					for (const id of currentSet) {
+						if (startTimes[id] === undefined) {
+							startTimes[id] = now;
+						}
+					}
+
+					// 3. Promote stable speakers
+					for (const id of currentSet) {
+						const startTime = startTimes[id];
+						if (startTime > 0) {
+							if (now - startTime >= STABLE_THRESHOLD_MS) {
+								currentStable.add(id);
+							} else {
+								hasPendingCandidates = true;
+							}
+						}
+					}
+
+					meetingState.speakerStartTimes.value = startTimes;
+					meetingState.stableSpeakerIds.value = Array.from(currentStable);
+
+					// Schedule re-check if we have candidates waiting to become stable
+					if (hasPendingCandidates) {
+						if (stabilityCheckTimeout) clearTimeout(stabilityCheckTimeout);
+						stabilityCheckTimeout = setTimeout(checkStability, 200);
+					} else {
+						stabilityCheckTimeout = null;
+					}
+				};
+
+				checkStability();
 
 				if (participantIds.length > 0) {
 					activeSpeakerTimeout.value = setTimeout(() => {
@@ -2049,6 +2150,25 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	 * Handle keyboard shortcuts
 	 */
 	const handleKeyDown = (event) => {
+		const targetTag = event.target?.tagName?.toLowerCase();
+		const isInput =
+			targetTag === "input" ||
+			targetTag === "textarea" ||
+			event.target?.isContentEditable;
+
+		if (
+			pushToTalkEnabled.value &&
+			event.code === "Space" &&
+			!isInput &&
+			!event.repeat
+		) {
+			event.preventDefault();
+			if (!meetingState.isMicOn.value) {
+				unmutedByPushToTalk.value = true;
+				toggleMicrophone();
+			}
+		}
+
 		if ((event.metaKey || event.ctrlKey) && event.key === "d") {
 			event.preventDefault();
 			toggleMicrophone();
@@ -2056,6 +2176,23 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 		if ((event.metaKey || event.ctrlKey) && event.key === "e") {
 			event.preventDefault();
 			toggleCamera();
+		}
+	};
+
+	const handleKeyUp = (event) => {
+		const targetTag = event.target?.tagName?.toLowerCase();
+		const isInput =
+			targetTag === "input" ||
+			targetTag === "textarea" ||
+			event.target?.isContentEditable;
+
+		if (pushToTalkEnabled.value && event.code === "Space" && !isInput) {
+			if (unmutedByPushToTalk.value) {
+				unmutedByPushToTalk.value = false;
+				if (meetingState.isMicOn.value) {
+					toggleMicrophone();
+				}
+			}
 		}
 	};
 
@@ -2132,6 +2269,10 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			clearTimeout(activeSpeakerTimeout.value);
 			activeSpeakerTimeout.value = null;
 		}
+		if (stabilityCheckTimeout) {
+			clearTimeout(stabilityCheckTimeout);
+			stabilityCheckTimeout = null;
+		}
 
 		// Cleanup SFU manager (disconnect and free resources)
 		sfuManager.value?.cleanup?.();
@@ -2176,6 +2317,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 		// Methods - Media
 		initializeCamera,
+		acquireUserMedia,
 		toggleMicrophone,
 		toggleCamera,
 		toggleScreenShare,
@@ -2211,5 +2353,6 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 		// Methods - Keyboard
 		handleKeyDown,
+		handleKeyUp,
 	};
 }

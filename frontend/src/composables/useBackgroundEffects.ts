@@ -1,4 +1,4 @@
-import { SelfieSegmentation } from "@mediapipe/selfie_segmentation";
+import type { SelfieSegmentation } from "@mediapipe/selfie_segmentation";
 import { toast } from "frappe-ui";
 import { type Ref, onUnmounted, ref } from "vue";
 import { availableBackgroundImages } from "../data/backgroundEffects";
@@ -61,10 +61,37 @@ interface HaltProcessingOptions {
 
 // MediaPipe Selfie Segmentation instance
 let selfieSegmentation: SelfieSegmentation | null = null;
+let selfieSegmentationCtor:
+	| (new (options: {
+			locateFile: (file: string) => string;
+	  }) => SelfieSegmentation)
+	| null = null;
 const backgroundImages = new Map<string, HTMLImageElement>();
 let latestResults: SelfieSegmentationResults | null = null;
 let modelInitializationPromise: Promise<SelfieSegmentation> | null = null;
 let activeInstanceCount = 0;
+
+async function getSelfieSegmentationCtor() {
+	if (selfieSegmentationCtor) return selfieSegmentationCtor;
+
+	// @mediapipe/selfie_segmentation ships a UMD bundle that exposes a global.
+	await import("@mediapipe/selfie_segmentation");
+
+	const ctor = (
+		globalThis as typeof globalThis & {
+			SelfieSegmentation?: new (options: {
+				locateFile: (file: string) => string;
+			}) => SelfieSegmentation;
+		}
+	).SelfieSegmentation;
+
+	if (!ctor) {
+		throw new Error("SelfieSegmentation constructor not found on globalThis");
+	}
+
+	selfieSegmentationCtor = ctor;
+	return ctor;
+}
 
 export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 	const isProcessing = ref<boolean>(false);
@@ -96,7 +123,8 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 			if (!modelInitializationPromise) {
 				modelInitializationPromise = (async () => {
 					try {
-						const instance = new SelfieSegmentation({
+						const SelfieSegmentationCtor = await getSelfieSegmentationCtor();
+						const instance = new SelfieSegmentationCtor({
 							locateFile: (file) => {
 								return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
 							},

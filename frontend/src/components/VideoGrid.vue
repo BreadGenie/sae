@@ -3,8 +3,7 @@
 		<TransitionGroup
 			name="tile"
 			tag="div"
-			class="h-full grid gap-2 call-grid transition-all duration-300 ease-out"
-			:class="gridClass"
+			class="h-full call-grid"
 			:style="gridStyle"
 		>
 			<!-- Local user video -->
@@ -17,20 +16,32 @@
 				:isActiveSpeaker="activeSpeakerIds.includes(localParticipant.user_id)"
 				:videoRef="setLocalVideoRef"
 				:tileCount="visibleTileCount"
+				:style="tileStyle"
 			/>
 
 			<!-- Remote participants -->
-			<ParticipantTile
-				v-for="participant in displayParticipants.list"
-				:key="'grid-' + participant.user_id"
-				:participant="participant"
-				:isLocal="false"
-				:isVideoEnabled="participant.video_enabled"
-				:isAudioEnabled="participant.audio_enabled"
-				:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
-				:videoRef="(el) => handleRemoteVideoRef(participant.user_id, el)"
-				:tileCount="visibleTileCount"
-			/>
+			<template
+				v-for="participant in allParticipants"
+				:key="'group-' + participant.user_id"
+			>
+				<ParticipantTile
+					:class="{ 'hidden-tile': !participant.isVisible }"
+					:participant="participant"
+					:isLocal="false"
+					:isVideoEnabled="participant.video_enabled"
+					:isAudioEnabled="participant.audio_enabled"
+					:isActiveSpeaker="activeSpeakerIds.includes(participant.user_id)"
+					:videoRef="getRemoteVideoRef(participant.user_id)"
+					:tileCount="visibleTileCount"
+					:style="participant.isVisible ? tileStyle : undefined"
+				/>
+				<!-- needed for dynamic row breaks -->
+				<div
+					v-if="participant.isVisible && participant.needsBreakAfter"
+					:key="'break-' + participant.user_id"
+					class="flex-break"
+				/>
+			</template>
 
 			<!-- Grouping tile for overflow participants -->
 			<GroupTile
@@ -40,6 +51,7 @@
 				:tooltip="hiddenParticipantsTooltip"
 				:participants="displayParticipants.hidden"
 				size="medium"
+				:style="tileStyle"
 				@click="handleGroupTileClick"
 			/>
 		</TransitionGroup>
@@ -75,6 +87,18 @@ const handleGroupTileClick = () => {
 const handleRemoteVideoRef = (participantId, el) => {
 	setRemoteVideoRef(participantId, el);
 	registerTile(participantId, el);
+};
+
+const videoRefHandlers = new Map();
+
+// cache ref handlers to avoid UI flicker
+const getRemoteVideoRef = (participantId) => {
+	if (!videoRefHandlers.has(participantId)) {
+		videoRefHandlers.set(participantId, (el) => {
+			handleRemoteVideoRef(participantId, el);
+		});
+	}
+	return videoRefHandlers.get(participantId);
 };
 
 const gridContainer = ref(null);
@@ -119,11 +143,12 @@ const localParticipant = computed(() => {
 
 const {
 	displayParticipants,
-	gridClass,
+	allParticipants,
 	gridStyle,
+	tileStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useVideoGridLayout(participants, activeSpeakerIds, meetingState);
+} = useVideoGridLayout(participants, meetingState);
 
 const hiddenParticipantReactions = computed(() => {
 	const reactions = meetingState.reactions?.value || {};
@@ -162,3 +187,47 @@ const hiddenParticipantReactions = computed(() => {
 	return sorted.slice(0, 6);
 });
 </script>
+
+<style scoped>
+/* Hidden tiles are kept mounted to not affect grid layout animations. */
+.hidden-tile {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+	transform: scale(0);
+	bottom: 0;
+	right: 0;
+	z-index: 0;
+}
+
+/* Invisible element that forces flexbox to start a new line. */
+.flex-break {
+	flex-basis: 100%;
+	height: 0;
+	overflow: hidden;
+	padding: 0;
+	margin: 0;
+	border: 0;
+}
+
+/* Animation styles */
+.tile-enter-from,
+.tile-leave-to {
+	opacity: 0;
+	transform: scale(0.85);
+}
+
+.tile-enter-active,
+.tile-leave-active {
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tile-move {
+	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tile-leave-active {
+	position: absolute;
+	z-index: 0;
+}
+</style>

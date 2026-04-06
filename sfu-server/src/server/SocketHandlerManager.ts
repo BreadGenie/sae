@@ -39,6 +39,13 @@ export class SocketHandlerManager {
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
 		this.rateLimiter = new RateLimiter();
+
+		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
+			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
+				participantId: peerId,
+				quality,
+			});
+		});
 	}
 
 	private isRealParticipant(participantId: string): boolean {
@@ -51,7 +58,17 @@ export class SocketHandlerManager {
 		ipLimit: number,
 		windowMs: number,
 	): boolean {
-		const clientIp = socket.handshake.address || 'unknown';
+		const forwardedFor = socket.handshake.headers['x-forwarded-for'];
+		const forwarded = socket.handshake.headers.forwarded;
+
+		const getFirstIp = (val?: string | string[]) =>
+			(Array.isArray(val) ? val[0] : val)?.split(',')[0]?.trim();
+
+		const clientIp =
+			getFirstIp(forwardedFor) ||
+			getFirstIp(forwarded) ||
+			socket.handshake.address;
+
 		const userKey = `user:${socket.userId}`;
 		const ipKey = `ip:${clientIp}`;
 
@@ -548,6 +565,52 @@ export class SocketHandlerManager {
 			}
 		});
 
+		socket.on('restart_webrtc_transport_ice', async (data, callback) => {
+			try {
+				this.authManager.ensureFullAccess(socket);
+				const { transportId } = data;
+				const iceParameters =
+					await this.mediasoup.restartWebRtcTransportIce(transportId);
+
+				callback({ success: true, iceParameters });
+			} catch (error) {
+				loggers.socketHandler.error(
+					'Error restarting WebRTC transport ICE: %s',
+					(error as Error).message,
+				);
+				callback({ success: false, error: (error as Error).message });
+			}
+		});
+
+		socket.on('create_plain_transport', async (_data, callback) => {
+			try {
+				const isDev = process.env.NODE_ENV === 'development';
+				if (!isDev) {
+					throw new Error(
+						'PlainTransport creation is not allowed in this environment',
+					);
+				}
+
+				this.authManager.ensureFullAccess(socket);
+
+				const roomId = socket.meetingId;
+				const userId = socket.userId;
+
+				const transportParams = await this.mediasoup.createPlainTransport(
+					roomId,
+					userId,
+				);
+
+				callback({ success: true, ...transportParams });
+			} catch (error) {
+				loggers.socketHandler.error(
+					'Error creating PlainTransport: %s',
+					(error as Error).message,
+				);
+				callback({ success: false, error: (error as Error).message });
+			}
+		});
+
 		socket.on('create_producer', async (data, callback) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
@@ -698,179 +761,208 @@ export class SocketHandlerManager {
 
 	private setupMediaControlHandlers(socket: Socket): void {
 		socket.on('media_control', async (data) => {
-			this.authManager.ensureFullAccess(socket);
-			const { action } = data;
-			const roomId = socket.roomId;
-
-			if (!roomId || !socket.participantId) return;
-
 			try {
-				this.mediasoup.applyMediaControl(roomId, socket.participantId, action);
-			} catch (e) {
-				loggers.socketHandler.warn(
-					'Failed to apply media control on server: %s',
-					(e as Error).message,
-				);
-			}
+				this.authManager.ensureFullAccess(socket);
+				const { action } = data;
+				const roomId = socket.roomId;
 
-			// If unmuting and hand is raised, lower it automatically
-			if (
-				action === 'unmute' &&
-				this.raisedHands[roomId]?.[socket.participantId]
-			) {
-				delete this.raisedHands[roomId][socket.participantId];
-				this.emitToFullAccessParticipants(roomId, 'hand_raised', {
+				if (!roomId || !socket.participantId) return;
+
+				try {
+					this.mediasoup.applyMediaControl(
+						roomId,
+						socket.participantId,
+						action,
+					);
+				} catch (e) {
+					loggers.socketHandler.warn(
+						'Failed to apply media control on server: %s',
+						(e as Error).message,
+					);
+				}
+
+				// If unmuting and hand is raised, lower it automatically
+				if (
+					action === 'unmute' &&
+					this.raisedHands[roomId]?.[socket.participantId]
+				) {
+					delete this.raisedHands[roomId][socket.participantId];
+					this.emitToFullAccessParticipants(roomId, 'hand_raised', {
+						participantId: socket.participantId,
+						raised: false,
+						timestamp: new Date().toISOString(),
+					});
+				}
+
+				this.emitToFullAccessParticipants(roomId, 'media_control_update', {
 					participantId: socket.participantId,
-					raised: false,
+					action,
 					timestamp: new Date().toISOString(),
 				});
+			} catch (error) {
+				loggers.socketHandler.warn(
+					'media_control handling failed: %s',
+					(error as Error).message,
+				);
 			}
-
-			this.emitToFullAccessParticipants(roomId, 'media_control_update', {
-				participantId: socket.participantId,
-				action,
-				timestamp: new Date().toISOString(),
-			});
 		});
 	}
 
 	private setupHostControlHandlers(socket: TypedSocket): void {
 		socket.on('host_control', async (data) => {
-			this.authManager.ensureFullAccess(socket);
-			const { action, targetParticipantId } = data;
-			const roomId = socket.roomId;
+			try {
+				this.authManager.ensureFullAccess(socket);
+				const { action, targetParticipantId } = data;
+				const roomId = socket.roomId;
 
-			if (!roomId || !socket.participantId) {
-				socket.emit('sfu_error', {
-					error: 'Not in a room',
-					timestamp: new Date().toISOString(),
-				});
-				return;
-			}
+				if (!roomId || !socket.participantId) {
+					socket.emit('sfu_error', {
+						error: 'Not in a room',
+						timestamp: new Date().toISOString(),
+					});
+					return;
+				}
 
-			if (!socket.isHost && !socket.isCohost) {
-				socket.emit('sfu_error', {
-					error: 'Only host or co-host can control participants',
-					timestamp: new Date().toISOString(),
-				});
-				loggers.socketHandler.warn(
-					'Non-host/co-host %s attempted host control in room %s',
-					socket.participantId,
+				if (!socket.isHost && !socket.isCohost) {
+					socket.emit('sfu_error', {
+						error: 'Only host or co-host can control participants',
+						timestamp: new Date().toISOString(),
+					});
+					loggers.socketHandler.warn(
+						'Non-host/co-host %s attempted host control in room %s',
+						socket.participantId,
+						roomId,
+					);
+					return;
+				}
+
+				if (!this.mediasoup.peerExistsInRoom(roomId, targetParticipantId)) {
+					socket.emit('sfu_error', {
+						error: 'Target participant not found',
+						timestamp: new Date().toISOString(),
+					});
+					return;
+				}
+
+				const targetSocket = this.findSocketByParticipantId(
 					roomId,
+					targetParticipantId,
 				);
-				return;
-			}
 
-			if (!this.mediasoup.peerExistsInRoom(roomId, targetParticipantId)) {
-				socket.emit('sfu_error', {
-					error: 'Target participant not found',
-					timestamp: new Date().toISOString(),
-				});
-				return;
-			}
-
-			const targetSocket = this.findSocketByParticipantId(
-				roomId,
-				targetParticipantId,
-			);
-
-			if (!targetSocket) {
-				socket.emit('sfu_error', {
-					error: 'Target participant socket not found',
-					timestamp: new Date().toISOString(),
-				});
-				return;
-			}
-
-			switch (action) {
-				case 'mute_participant':
-					targetSocket.emit('host_control_update', {
-						action,
-						targetParticipantId,
-						hostId: socket.participantId,
+				if (!targetSocket) {
+					socket.emit('sfu_error', {
+						error: 'Target participant socket not found',
 						timestamp: new Date().toISOString(),
 					});
-					loggers.socketHandler.info(
-						'Host %s sent mute command to participant %s in room %s',
-						socket.participantId,
-						targetParticipantId,
-						roomId,
-					);
-					break;
-				case 'kick_participant':
-					targetSocket.emit('host_control_update', {
-						action,
-						targetParticipantId,
-						hostId: socket.participantId,
-						timestamp: new Date().toISOString(),
-					});
+					return;
+				}
 
-					loggers.socketHandler.info(
-						'Host %s kicked participant %s from room %s',
-						socket.participantId,
-						targetParticipantId,
-						roomId,
-					);
-
-					setTimeout(() => {
-						if (targetSocket.connected) {
-							targetSocket.disconnect(true);
-							loggers.socketHandler.info(
-								'Forcefully disconnected kicked participant %s',
-								targetParticipantId,
-							);
-						}
-					}, 1000);
-					break;
-				case 'lower_hand':
-					if (this.raisedHands[roomId]?.[targetParticipantId]) {
-						delete this.raisedHands[roomId][targetParticipantId];
-						this.emitToFullAccessParticipants(roomId, 'hand_raised', {
-							participantId: targetParticipantId,
-							raised: false,
+				switch (action) {
+					case 'mute_participant':
+						targetSocket.emit('host_control_update', {
+							action,
+							targetParticipantId,
+							hostId: socket.participantId,
 							timestamp: new Date().toISOString(),
 						});
 						loggers.socketHandler.info(
-							'Host %s lowered hand of participant %s',
+							'Host %s sent mute command to participant %s in room %s',
 							socket.participantId,
 							targetParticipantId,
+							roomId,
 						);
-					} else {
-						socket.emit('sfu_error', {
-							error: 'Participant does not have a raised hand',
+						break;
+					case 'kick_participant':
+						targetSocket.emit('host_control_update', {
+							action,
+							targetParticipantId,
+							hostId: socket.participantId,
 							timestamp: new Date().toISOString(),
 						});
-					}
-					break;
-				default:
-					socket.emit('sfu_error', {
-						error: 'Invalid host control action',
-						timestamp: new Date().toISOString(),
-					});
-					break;
+
+						loggers.socketHandler.info(
+							'Host %s kicked participant %s from room %s',
+							socket.participantId,
+							targetParticipantId,
+							roomId,
+						);
+
+						setTimeout(() => {
+							if (targetSocket.connected) {
+								targetSocket.disconnect(true);
+								loggers.socketHandler.info(
+									'Forcefully disconnected kicked participant %s',
+									targetParticipantId,
+								);
+							}
+						}, 1000);
+						break;
+					case 'lower_hand':
+						if (this.raisedHands[roomId]?.[targetParticipantId]) {
+							delete this.raisedHands[roomId][targetParticipantId];
+							this.emitToFullAccessParticipants(roomId, 'hand_raised', {
+								participantId: targetParticipantId,
+								raised: false,
+								timestamp: new Date().toISOString(),
+							});
+							loggers.socketHandler.info(
+								'Host %s lowered hand of participant %s',
+								socket.participantId,
+								targetParticipantId,
+							);
+						} else {
+							socket.emit('sfu_error', {
+								error: 'Participant does not have a raised hand',
+								timestamp: new Date().toISOString(),
+							});
+						}
+						break;
+					default:
+						socket.emit('sfu_error', {
+							error: 'Invalid host control action',
+							timestamp: new Date().toISOString(),
+						});
+						break;
+				}
+			} catch (error) {
+				loggers.socketHandler.warn(
+					'host_control handling failed: %s',
+					(error as Error).message,
+				);
+				socket.emit('sfu_error', {
+					error: (error as Error).message,
+					timestamp: new Date().toISOString(),
+				});
 			}
 		});
 	}
 
 	private setupScreenShareHandlers(socket: Socket): void {
 		socket.on('screen_share', (data) => {
-			this.authManager.ensureFullAccess(socket);
-			const { action, shareData } = data;
-			const roomId = socket.roomId;
+			try {
+				this.authManager.ensureFullAccess(socket);
+				const { action, shareData } = data;
+				const roomId = socket.roomId;
 
-			if (!roomId) return;
+				if (!roomId) return;
 
-			if (action === 'start_share') {
-				this.emitToFullAccessParticipants(roomId, 'screen_share_started', {
-					participantId: socket.participantId,
-					shareData,
-					timestamp: new Date().toISOString(),
-				});
-			} else if (action === 'stop_share') {
-				this.emitToFullAccessParticipants(roomId, 'screen_share_stopped', {
-					participantId: socket.participantId,
-					timestamp: new Date().toISOString(),
-				});
+				if (action === 'start_share') {
+					this.emitToFullAccessParticipants(roomId, 'screen_share_started', {
+						participantId: socket.participantId,
+						shareData,
+						timestamp: new Date().toISOString(),
+					});
+				} else if (action === 'stop_share') {
+					this.emitToFullAccessParticipants(roomId, 'screen_share_stopped', {
+						participantId: socket.participantId,
+						timestamp: new Date().toISOString(),
+					});
+				}
+			} catch (error) {
+				loggers.socketHandler.warn(
+					'screen_share handling failed: %s',
+					(error as Error).message,
+				);
 			}
 		});
 	}

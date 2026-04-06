@@ -80,6 +80,15 @@ export class TransportManager {
 		}
 	}
 
+	async restartWebRtcTransportIce(transportId: string): Promise<IceParameters> {
+		const transportData = this.transports.get(transportId);
+		if (!transportData) {
+			throw new Error(`Transport ${transportId} not found`);
+		}
+
+		return transportData.transport.restartIce();
+	}
+
 	getTransport(transportId: string): WebRtcTransport | undefined {
 		return this.transports.get(transportId)?.transport;
 	}
@@ -109,5 +118,50 @@ export class TransportManager {
 			}
 		}
 		this.transports.clear();
+	}
+
+	async createPlainTransport(
+		roomId: string,
+		peerId: string,
+		router: mediasoup.types.Router,
+		listenIp: string,
+		rtcpMux = true,
+		comedia = true,
+	): Promise<{
+		id: string;
+		ip: string;
+		port: number;
+		rtcpPort: number | undefined;
+	}> {
+		loggers.transportManager.info(
+			'Creating PlainTransport for peer %s',
+			peerId,
+		);
+
+		const transport = await router.createPlainTransport({
+			listenInfo: { protocol: 'udp', ip: listenIp },
+			rtcpMux,
+			comedia,
+		});
+
+		const transportData: TransportData = {
+			roomId,
+			peerId,
+			transport: transport as unknown as WebRtcTransport, // fake as WebRtcTransport
+		};
+		this.transports.set(transport.id, transportData);
+
+		loggers.transportManager.info(
+			'PlainTransport created for peer %s on port %d',
+			peerId,
+			transport.tuple.localPort,
+		);
+
+		return {
+			id: transport.id,
+			ip: transport.tuple.localIp,
+			port: transport.tuple.localPort,
+			rtcpPort: transport.rtcpTuple?.localPort,
+		};
 	}
 }

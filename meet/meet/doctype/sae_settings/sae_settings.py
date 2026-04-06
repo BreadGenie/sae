@@ -15,7 +15,7 @@ class SaeSettings(Document):
 		from frappe.types import DF
 
 		allow_guest: DF.Check
-		codec_strategy: DF.Literal["auto", "svc", "simulcast"]
+		codec_strategy: DF.Literal["svc", "simulcast"]
 	# end: auto-generated types
 
 	pass

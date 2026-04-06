@@ -19,6 +19,44 @@ import type {
 } from 'mediasoup/node/lib/rtpParametersTypes';
 import type { RtpCapabilities, RtpParameters } from 'mediasoup/node/lib/types';
 import type { AppData } from 'mediasoup/node/lib/types';
+import type {
+	ActiveSpeakerEvent,
+	AuthExpiredEvent,
+	ChatMessage,
+	ChatSendRequest,
+	ConsumerClosedEvent,
+	ConsumerUpdatePreferencesRequest,
+	CreateWebRtcTransportRequest,
+	ExistingRaisedHandsEvent,
+	HandRaisedEvent,
+	HostControlAction,
+	HostControlRequest,
+	HostControlUpdateEvent,
+	JoinRoomRequest,
+	LeaveRoomRequest,
+	MediaControlAction,
+	MediaControlRequest,
+	MediaControlUpdateEvent,
+	NetworkQualityUpdateEvent,
+	ParticipantInfo,
+	ParticipantJoinedEvent,
+	ParticipantLeftEvent,
+	PreviewParticipantInfo,
+	ProducerClosedEvent,
+	ProducerCreatedEvent,
+	RaiseHandRequest,
+	ReactionMessage,
+	ReactionSendRequest,
+	SFUErrorEvent,
+	SFUScope,
+	ScreenShareData,
+	ScreenShareRequest,
+	ScreenShareStartedEvent,
+	ScreenShareStoppedEvent,
+	UpdateTokenRequest,
+	UserData,
+	WebRTCSignalData,
+} from '../../../types';
 
 // Re-export mediasoup types
 export type { RtpCapabilities, RtpParameters };
@@ -38,77 +76,76 @@ export type {
 	WorkerLogTag,
 	AppData,
 };
+export type {
+	ActiveSpeakerEvent,
+	AuthExpiredEvent,
+	ChatSendRequest,
+	ChatMessage,
+	ConsumerClosedEvent,
+	ConsumerUpdatePreferencesRequest,
+	CreateWebRtcTransportRequest,
+	ExistingRaisedHandsEvent,
+	HandRaisedEvent,
+	HostControlRequest,
+	HostControlAction,
+	HostControlUpdateEvent,
+	JoinRoomRequest,
+	LeaveRoomRequest,
+	MediaControlRequest,
+	MediaControlAction,
+	MediaControlUpdateEvent,
+	ParticipantInfo,
+	ParticipantJoinedEvent,
+	ParticipantLeftEvent,
+	ProducerCreatedEvent,
+	ProducerClosedEvent,
+	PreviewParticipantInfo,
+	RaiseHandRequest,
+	ReactionSendRequest,
+	ReactionMessage,
+	ScreenShareData,
+	ScreenShareRequest,
+	ScreenShareStartedEvent,
+	ScreenShareStoppedEvent,
+	SFUErrorEvent,
+	SFUScope,
+	UpdateTokenRequest,
+	UserData,
+	WebRTCSignalData,
+	NetworkQualityUpdateEvent,
+};
 
 // Socket.IO types
 export interface ServerToClientEvents {
-	participant_joined: (data: {
-		roomId: string;
-		participantId: string;
-		userData: UserData;
-	}) => void;
-	participant_left: (data: { roomId: string; participantId: string }) => void;
-	producer_created: (data: {
-		roomId: string;
-		producerId: string;
-		participantId: string;
-		kind: 'audio' | 'video';
-		paused: boolean;
-		isScreen: boolean;
-	}) => void;
-	producer_closed: (data: {
-		roomId: string;
-		producerId: string;
-		participantId: string;
-		isScreen: boolean;
-	}) => void;
-	consumer_closed: (data: { consumerId: string; peerId?: string }) => void;
-	media_control_update: (data: {
-		participantId: string;
-		action: MediaControlAction;
-		timestamp: string;
-	}) => void;
-	host_control_update: (data: {
-		action: HostControlAction;
-		targetParticipantId: string;
-		hostId: string;
-		timestamp: string;
-	}) => void;
-	screen_share_started: (data: {
-		participantId: string;
-		shareData: ScreenShareData;
-		timestamp: string;
-	}) => void;
-	screen_share_stopped: (data: {
-		participantId: string;
-		timestamp: string;
-	}) => void;
+	participant_joined: (data: ParticipantJoinedEvent) => void;
+	participant_left: (data: ParticipantLeftEvent) => void;
+	producer_created: (data: ProducerCreatedEvent) => void;
+	producer_closed: (data: ProducerClosedEvent) => void;
+	consumer_closed: (data: ConsumerClosedEvent) => void;
+	media_control_update: (data: MediaControlUpdateEvent) => void;
+	host_control_update: (data: HostControlUpdateEvent) => void;
+	screen_share_started: (data: ScreenShareStartedEvent) => void;
+	screen_share_stopped: (data: ScreenShareStoppedEvent) => void;
 	'chat:message': (data: ChatMessage) => void;
 	'reaction:message': (data: ReactionMessage) => void;
 	webrtc_offer: (data: WebRTCSignalData) => void;
 	webrtc_answer: (data: WebRTCSignalData) => void;
 	ice_candidate: (data: WebRTCSignalData) => void;
-	active_speaker: (data: { participantIds: string[] }) => void;
-	sfu_error: (data: { error: string; timestamp: string }) => void;
-	'auth:expired': (data: { timestamp: string; reason: string }) => void;
-	hand_raised: (data: {
-		participantId: string;
-		raised: boolean;
-		timestamp: string;
-	}) => void;
-	existing_raised_hands: (data: { hands: Record<string, boolean> }) => void;
+	active_speaker: (data: ActiveSpeakerEvent) => void;
+	sfu_error: (data: SFUErrorEvent) => void;
+	'auth:expired': (data: AuthExpiredEvent) => void;
+	hand_raised: (data: HandRaisedEvent) => void;
+	existing_raised_hands: (data: ExistingRaisedHandsEvent) => void;
+	network_quality_update: (data: NetworkQualityUpdateEvent) => void;
 }
 
 export interface ClientToServerEvents {
 	'auth:update_token': (
-		data: { token: string },
+		data: UpdateTokenRequest,
 		callback: (response: SFUResponse) => void,
 	) => void;
 	join_room: (
-		data: {
-			roomId: string;
-			userData: UserData;
-			mediaState: { audio_enabled: boolean; video_enabled: boolean };
-		},
+		data: JoinRoomRequest,
 		callback: (response: SFUResponse) => void,
 	) => void;
 	get_router_rtp_capabilities: (
@@ -116,12 +153,16 @@ export interface ClientToServerEvents {
 		callback: (response: RouterRtpCapabilitiesResponse) => void,
 	) => void;
 	create_webrtc_transport: (
-		data: { direction: 'send' | 'recv' },
+		data: CreateWebRtcTransportRequest,
 		callback: (response: WebRTCTransportResponse) => void,
 	) => void;
 	connect_webrtc_transport: (
 		data: { transportId: string; dtlsParameters: DtlsParameters },
 		callback: (response: SFUResponse) => void,
+	) => void;
+	restart_webrtc_transport_ice: (
+		data: { transportId: string },
+		callback: (response: TransportIceRestartResponse) => void,
 	) => void;
 	create_producer: (
 		data: {
@@ -159,31 +200,20 @@ export interface ClientToServerEvents {
 	webrtc_offer: (data: WebRTCSignalData) => void;
 	webrtc_answer: (data: WebRTCSignalData) => void;
 	ice_candidate: (data: WebRTCSignalData) => void;
-	media_control: (data: { action: MediaControlAction }) => void;
-	host_control: (data: {
-		action: HostControlAction;
-		targetParticipantId: string;
-	}) => void;
-	screen_share: (data: {
-		action: 'start_share' | 'stop_share';
-		shareData?: ScreenShareData;
-	}) => void;
-	'chat:send': (data: { message: string; clientId?: string }) => void;
-	'reaction:send': (data: { reaction: string; clientId?: string }) => void;
+	media_control: (data: MediaControlRequest) => void;
+	host_control: (data: HostControlRequest) => void;
+	screen_share: (data: ScreenShareRequest) => void;
+	'chat:send': (data: ChatSendRequest) => void;
+	'reaction:send': (data: ReactionSendRequest) => void;
 	'consumer:update_preferences': (
-		data: {
-			consumerId: string;
-			visible: boolean;
-			width?: number;
-			height?: number;
-		},
+		data: ConsumerUpdatePreferencesRequest,
 		callback: (response: ConsumerPreferenceResponse) => void,
 	) => void;
 	raise_hand: (
-		data: { raised: boolean },
+		data: RaiseHandRequest,
 		callback: (response: SFUResponse) => void,
 	) => void;
-	leave_room: (data?: { roomId?: string }) => void;
+	leave_room: (data?: LeaveRoomRequest) => void;
 }
 
 export interface InterServerEvents {
@@ -198,17 +228,7 @@ export interface SocketData {
 	isGuest?: boolean;
 	roomId?: string;
 	participantId?: string;
-	scope?: 'presence-preview' | 'full';
-}
-
-// Core data types
-export interface UserData {
-	name: string;
-	userId: string;
-	avatar?: string;
-	audio_enabled: boolean;
-	video_enabled: boolean;
-	is_guest?: boolean;
+	scope?: SFUScope;
 }
 
 export interface SFUResponse {
@@ -225,6 +245,10 @@ export interface WebRTCTransportResponse extends SFUResponse {
 	iceParameters: IceParameters;
 	iceCandidates: IceCandidate[];
 	dtlsParameters: DtlsParameters;
+}
+
+export interface TransportIceRestartResponse extends SFUResponse {
+	iceParameters: IceParameters;
 }
 
 export interface ProducerResponse extends SFUResponse, ProducerInfo {
@@ -292,66 +316,6 @@ export interface ExistingProducer {
 	isScreen: boolean;
 }
 
-export interface ParticipantInfo {
-	id: string;
-	user_id: string;
-	info: {
-		name?: string;
-		userId: string;
-		avatar?: string;
-		audio_enabled: boolean;
-		video_enabled: boolean;
-		is_guest?: boolean;
-	};
-}
-
-export interface PreviewParticipantInfo {
-	id: string;
-	info: {
-		name?: string;
-		avatar?: string;
-	};
-}
-
-export type MediaControlAction = 'mute' | 'unmute' | 'video_off' | 'video_on';
-
-export type HostControlAction =
-	| 'mute_participant'
-	| 'kick_participant'
-	| 'lower_hand';
-
-// Screen share data interface
-export interface ScreenShareData {
-	streamId?: string;
-	kind?: 'video';
-	isScreen?: boolean;
-	[key: string]: unknown;
-}
-
-// WebRTC signaling data interface
-export interface WebRTCSignalData {
-	fromUser?: string;
-	targetUser: string;
-	signalData: Record<string, unknown>;
-}
-
-export interface ChatMessage {
-	roomId: string;
-	message: string;
-	fromUser: string;
-	fromName: string;
-	timestamp: string;
-	clientId?: string;
-}
-
-export interface ReactionMessage {
-	roomId: string;
-	reaction: string;
-	fromUser: string;
-	fromName: string;
-	timestamp: string;
-}
-
 // Mediasoup Manager types
 export interface Room {
 	id: string;
@@ -395,6 +359,8 @@ export interface RoomStats {
 	created: Date;
 	peerCount: number;
 	peers: string[];
+	producerCount?: number;
+	consumerCount?: number;
 }
 
 // Configuration types
@@ -430,7 +396,7 @@ export interface JWTPayload {
 	user_avatar?: string;
 	is_host: boolean;
 	is_cohost?: boolean;
-	scope?: 'presence-preview' | 'full';
+	scope?: SFUScope;
 	session_id?: string;
 	exp?: number;
 	iat?: number;
@@ -464,6 +430,6 @@ declare module 'socket.io' {
 		currentToken?: string;
 		tokenExpiresAt?: number;
 		tokenExpiryTimer?: NodeJS.Timeout;
-		scope?: 'presence-preview' | 'full';
+		scope?: SFUScope;
 	}
 }

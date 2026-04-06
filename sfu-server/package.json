@@ -1,11 +1,11 @@
 {
 	"name": "meet-sfu-server",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"description": "SFU server for Frappe Meet",
-	"main": "dist/server.js",
+	"main": "dist/sfu-server/src/server.js",
 	"scripts": {
 		"build": "tsc",
-		"start": "node dist/server.js",
+		"start": "node dist/sfu-server/src/server.js",
 		"dev": "ts-node src/server.ts",
 		"dev:watch": "npx nodemon",
 		"spawn-fake": "node scripts/spawn-fake-users.js",

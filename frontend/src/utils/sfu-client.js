@@ -17,7 +17,7 @@ class SFUClient {
 			sfuUrl: null,
 			sfuPort: null,
 			tokenExpiresAt: null,
-			codecStrategy: "auto",
+			codecStrategy: "svc",
 		};
 		this.eventHandlers = new Map();
 		this.isRefreshingToken = false;
@@ -39,8 +39,6 @@ class SFUClient {
 			);
 			this.connectionDetails = connectionDetails;
 			this.scheduleTokenRefresh();
-
-			await this.validateSFUHealth();
 
 			await this.establishSocketConnection();
 
@@ -87,7 +85,7 @@ class SFUClient {
 					is_guest: true,
 				},
 				tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-				codecStrategy: response.codec_strategy || "auto",
+				codecStrategy: response.codec_strategy || "svc",
 			};
 		}
 
@@ -122,7 +120,7 @@ class SFUClient {
 		};
 	}
 
-	async validateSFUHealth() {
+	async getSFUEndpoint() {
 		const { sfuUrl, sfuPort } = this.connectionDetails;
 
 		let sfuEndpoint;
@@ -135,26 +133,11 @@ class SFUClient {
 			sfuEndpoint = `${urlObj.protocol}//${urlObj.hostname}:${sfuPort}`;
 		}
 
-		try {
-			const healthResponse = await fetch(`${sfuEndpoint}/health`);
-			if (!healthResponse.ok) {
-				console.warn(
-					"SFU health check failed, but attempting connection anyway",
-				);
-			}
-		} catch (fetchError) {
-			console.warn(
-				"SFU health check failed:",
-				fetchError.message,
-				"- attempting socket connection anyway",
-			);
-		}
-
 		return sfuEndpoint;
 	}
 
 	async establishSocketConnection() {
-		const sfuEndpoint = await this.validateSFUHealth();
+		const sfuEndpoint = await this.getSFUEndpoint();
 		const { authToken } = this.connectionDetails;
 
 		this.socket = io(sfuEndpoint, {
@@ -243,7 +226,7 @@ class SFUClient {
 			sfuUrl: null,
 			sfuPort: null,
 			tokenExpiresAt: null,
-			codecStrategy: "auto",
+			codecStrategy: "svc",
 		};
 		this.isRefreshingToken = false;
 	}
@@ -478,6 +461,13 @@ class SFUClient {
 		console.log(`Transport ${transportId} connected successfully`);
 	}
 
+	async restartWebRtcTransportIce(transportId) {
+		const response = await this.sendRequest("restart_webrtc_transport_ice", {
+			transportId,
+		});
+		return response.iceParameters;
+	}
+
 	async createProducer(transportId, rtpParameters, kind, appData = {}) {
 		return this.sendRequest("create_producer", {
 			transportId,
@@ -645,7 +635,7 @@ class SFUClient {
 	}
 
 	getCodecStrategy() {
-		return this.connectionDetails.codecStrategy || "auto";
+		return this.connectionDetails.codecStrategy || "svc";
 	}
 
 	getConnectionStatus() {

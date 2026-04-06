@@ -2,53 +2,15 @@ import { createResource } from "frappe-ui";
 import { type Socket, io } from "socket.io-client";
 import { computed, onUnmounted, readonly, ref } from "vue";
 import { session } from "../data/session";
-import type { FrappeRequestError, ParticipantPreview } from "../types";
-
-interface TokenResponse {
-	auth_token?: string;
-	sfu_url?: string;
-	sfu_port?: number;
-	error?: string;
-}
-
-interface ParticipantResponse {
-	success: boolean;
-	participants?: Array<{
-		id: string;
-		user_id?: string;
-		info: {
-			name?: string;
-			userId?: string;
-			avatar?: string;
-			audio_enabled?: boolean;
-			video_enabled?: boolean;
-			is_guest?: boolean;
-		};
-	}>;
-	error?: string;
-}
-
-interface JoinResponse {
-	success: boolean;
-	error?: string;
-}
-
-interface ParticipantJoinedData {
-	roomId: string;
-	participantId: string;
-	userData: {
-		name?: string;
-		userId: string;
-		avatar?: string;
-		audio_enabled: boolean;
-		video_enabled: boolean;
-	};
-}
-
-interface ParticipantLeftData {
-	roomId: string;
-	participantId: string;
-}
+import type {
+	FrappeRequestError,
+	ParticipantJoinedEvent,
+	ParticipantLeftEvent,
+	ParticipantPreview,
+	PresenceJoinResponse,
+	PresenceParticipantsResponse,
+	PresenceTokenResponse,
+} from "../types";
 
 export function useMeetingPreviewPresence(meetingId: string) {
 	const participants = ref<ParticipantPreview[]>([]);
@@ -59,7 +21,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 		url: "meet.api.meeting.get_sfu_presence_preview_token",
 		params: { meeting_id: meetingId },
 		auto: false,
-		onSuccess(data: TokenResponse) {
+		onSuccess(data: PresenceTokenResponse) {
 			if (data && (data.auth_token || data.sfu_url)) {
 				connectToSFU(data);
 			} else {
@@ -77,7 +39,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 		fetchPresenceToken.fetch();
 	}
 
-	const connectToSFU = (tokenData: TokenResponse) => {
+	const connectToSFU = (tokenData: PresenceTokenResponse) => {
 		if (!tokenData.sfu_url || !tokenData.auth_token) {
 			error.value = "Invalid token data";
 			return;
@@ -118,7 +80,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 					},
 				},
 				// keep callback since we do evoke it
-				(joinResponse: JoinResponse) => {
+				(joinResponse: PresenceJoinResponse) => {
 					if (!joinResponse.success) {
 						console.error(
 							"Failed to join room for presence preview:",
@@ -131,7 +93,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 			currentSocket.emit(
 				"get_room_participants",
 				{},
-				(response: ParticipantResponse) => {
+				(response: PresenceParticipantsResponse) => {
 					if (response.success && response.participants) {
 						participants.value = response.participants.map((p) => ({
 							user_id: p.info.userId || p.user_id || p.id,
@@ -152,13 +114,14 @@ export function useMeetingPreviewPresence(meetingId: string) {
 			error.value = err.message || "Failed to connect to SFU";
 		});
 
-		currentSocket.on("participant_joined", (data: ParticipantJoinedData) => {
+		currentSocket.on("participant_joined", (data: ParticipantJoinedEvent) => {
 			const newParticipant: ParticipantPreview = {
 				user_id: data.userData.userId,
 				full_name: data.userData.name || data.userData.userId,
 				avatar_url: data.userData.avatar,
 				has_video: data.userData.video_enabled,
 				has_audio: data.userData.audio_enabled,
+				is_guest: data.userData.is_guest,
 			};
 
 			const existingIndex = participants.value.findIndex(
@@ -169,7 +132,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 			}
 		});
 
-		currentSocket.on("participant_left", (data: ParticipantLeftData) => {
+		currentSocket.on("participant_left", (data: ParticipantLeftEvent) => {
 			if (data.participantId.startsWith("preview-")) {
 				return;
 			}

@@ -85,5 +85,5 @@ if [ "$NODE_ENV" = "development" ]; then
     npx nodemon
 else
     # Production mode
-    node dist/server.js
+    node dist/sfu-server/src/server.js
 fi

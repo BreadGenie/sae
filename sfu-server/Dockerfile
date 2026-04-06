@@ -7,14 +7,20 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 build-essential python3-pip pkg-config libssl-dev git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY package*.json tsconfig.json ./
+
+# Copy the shared types directory
+COPY types /app/types
+
+# Copy sfu-server source code
+WORKDIR /app/sfu-server
+COPY sfu-server/package*.json sfu-server/tsconfig.json ./
 RUN npm ci
-COPY src ./src
+COPY sfu-server/src ./src
 RUN npm run build
 
 # --- Runtime stage (minimal) ---
 FROM node:${NODE_VERSION} AS runtime
-WORKDIR /app
+WORKDIR /app/sfu-server
 ENV NODE_ENV=production \
   PORT=3000
 
@@ -24,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certifi
 COPY --from=build /app /app
 
 # Create logs dir and set ownership to existing 'node' user (already in base image)
-RUN mkdir -p /app/logs && chown -R node:node /app
+RUN mkdir -p /app/sfu-server/logs && chown -R node:node /app
 
 USER node
 
@@ -32,4 +38,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD curl -fsS http://127.0.0.1:3000/health || exit 1
 
 ENTRYPOINT ["/usr/bin/tini","--"]
-CMD ["node","dist/server.js"]
+CMD ["node","dist/sfu-server/src/server.js"]

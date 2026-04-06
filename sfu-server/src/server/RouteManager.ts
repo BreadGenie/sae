@@ -1,14 +1,26 @@
-import express, {
-	type Application,
-	type Request,
-	type Response,
-} from 'express';
+import type { Application, Request, Response } from 'express';
 import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type { HealthStats } from '../types';
+
+import fs from 'node:fs';
+import path from 'node:path';
 
 export class RouteManager {
 	private app: Application;
 	private mediasoup: MediasoupManager;
+
+	private static version: string = RouteManager.readVersion();
+
+	private static readVersion(): string {
+		try {
+			const pkgPath = path.join(__dirname, '..', '..', 'package.json');
+			const raw = fs.readFileSync(pkgPath, 'utf8');
+			const json = JSON.parse(raw) as { version?: string };
+			return json.version ?? 'unknown';
+		} catch (_err) {
+			return 'unknown';
+		}
+	}
 
 	constructor(app: Application, mediasoup: MediasoupManager) {
 		this.app = app;
@@ -19,9 +31,8 @@ export class RouteManager {
 		this.app.get('/', (_req: Request, res: Response) => {
 			res.json({
 				message: 'Frappe Meet SFU Server is running',
-				version: '1.0.0',
+				version: RouteManager.version,
 				timestamp: new Date().toISOString(),
-				rooms: this.mediasoup.rooms.getAllRoomsStats(),
 			});
 		});
 
@@ -34,12 +45,6 @@ export class RouteManager {
 				peers: this.mediasoup.peers.getPeerCount(),
 			};
 			res.json(stats);
-		});
-
-		this.app.get('/rooms', (_req: Request, res: Response) => {
-			res.json({
-				rooms: this.mediasoup.rooms.getAllRoomsStats(),
-			});
 		});
 	}
 }

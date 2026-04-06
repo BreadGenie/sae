@@ -31,6 +31,108 @@ export class MediasoupManager {
 	private producerManager = new ProducerManager();
 	private consumerManager = new ConsumerManager();
 
+	private networkQualityListeners: Array<
+		(
+			roomId: string,
+			peerId: string,
+			quality: 'good' | 'poor' | 'critical',
+		) => void
+	> = [];
+
+	private peerScores = new Map<
+		string,
+		{
+			audio?: number;
+			video?: number;
+			lastOverallQuality?: 'good' | 'poor' | 'critical';
+		}
+	>();
+
+	constructor() {
+		this.producerManager.on(
+			'score',
+			(
+				roomId: string,
+				peerId: string,
+				kind: 'audio' | 'video',
+				scores: Array<{ score: number }>,
+			) => {
+				if (!scores || scores.length === 0) return;
+				// take avg of scores
+				const total = scores.reduce((sum, s) => sum + s.score, 0);
+				const avg = total / scores.length;
+
+				let peerState = this.peerScores.get(peerId);
+				if (!peerState) {
+					peerState = {};
+					this.peerScores.set(peerId, peerState);
+				}
+
+				peerState[kind] = avg;
+
+				this.evaluateAndEmitNetworkQuality(roomId, peerId);
+			},
+		);
+
+		this.producerManager.on(
+			'producer_closed',
+			(roomId: string, peerId: string, kind: 'audio' | 'video') => {
+				const peerState = this.peerScores.get(peerId);
+				if (peerState) {
+					delete peerState[kind];
+					this.evaluateAndEmitNetworkQuality(roomId, peerId);
+				}
+			},
+		);
+	}
+
+	private evaluateAndEmitNetworkQuality(roomId: string, peerId: string) {
+		const peerState = this.peerScores.get(peerId);
+		if (!peerState) return;
+
+		let minScore = 10;
+		if (peerState.audio !== undefined)
+			minScore = Math.min(minScore, peerState.audio);
+		if (peerState.video !== undefined)
+			minScore = Math.min(minScore, peerState.video);
+
+		if (peerState.audio === undefined && peerState.video === undefined) {
+			minScore = 10;
+		}
+
+		let quality: 'good' | 'poor' | 'critical' = 'good';
+		if (minScore < 5) {
+			quality = 'critical';
+		} else if (minScore < 8) {
+			quality = 'poor';
+		}
+
+		if (peerState.lastOverallQuality !== quality) {
+			loggers.mediasoupManager.debug(
+				'Network quality for peer %s changed to %s (audio: %s, video: %s)',
+				peerId,
+				quality,
+				peerState.audio,
+				peerState.video,
+			);
+			peerState.lastOverallQuality = quality;
+
+			for (const listener of this.networkQualityListeners) {
+				listener(roomId, peerId, quality);
+			}
+		}
+	}
+
+	onNetworkQualityUpdate(
+		listener: (
+			roomId: string,
+			peerId: string,
+			quality: 'good' | 'poor' | 'critical',
+		) => void,
+	) {
+		this.networkQualityListeners.push(listener);
+	}
+
 	async init(): Promise<void> {
 		loggers.mediasoupManager.info('Initializing Mediasoup');
 
@@ -82,6 +184,7 @@ export class MediasoupManager {
 		if (!room) return;
 
 		this.peerManager.removePeer(room, peerId);
+		this.peerScores.delete(peerId);
 	}
 
 	async createWebRtcTransport(
@@ -120,6 +223,39 @@ export class MediasoupManager {
 		return this.transportManager.connectWebRtcTransport(
 			transportId,
 			dtlsParameters,
+		);
+	}
+
+	async restartWebRtcTransportIce(transportId: string): Promise<IceParameters> {
+		return this.transportManager.restartWebRtcTransportIce(transportId);
+	}
+
+	async createPlainTransport(
+		roomId: string,
+		peerId: string,
+	): Promise<{
+		id: string;
+		ip: string;
+		port: number;
+		rtcpPort: number | undefined;
+	}> {
+		const room = this.roomManager.getRoom(roomId);
+		if (!room) {
+			throw new Error(`Room ${roomId} not found`);
+		}
+
+		const peer = room.peers.get(peerId);
+		if (!peer) {
+			throw new Error(`Peer ${peerId} not found in room ${roomId}`);
+		}
+
+		const listenIp =
+			mediasoupConfig.webRtcTransport.listenIps[0]?.ip || '0.0.0.0';
+		return this.transportManager.createPlainTransport(
+			roomId,
+			peerId,
+			room.router,
+			listenIp,
 		);
 	}
 

@@ -4,7 +4,7 @@
 		:style="tileStyle"
 	>
 		<video
-			:ref="(el) => videoRef(participant.user_id, el)"
+			:ref="videoRef"
 			:participant-id="participant.user_id"
 			class="w-full h-full object-cover flex-1 remote-video"
 			autoplay

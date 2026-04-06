@@ -4,11 +4,43 @@
  */
 
 import { ConsumerManager } from "./media/ConsumerManager.js";
-import { MediaStreamHandler } from "./media/MediaStreamHandler.js";
 import { ParticipantManager } from "./media/ParticipantManager.js";
-import { TransportManager } from "./media/TransportManager.js";
+import { TransportManager } from "./media/TransportManager.ts";
 import { VideoElementManager } from "./media/VideoElementManager.js";
 import { getSFUClient } from "./sfu-client.js";
+
+function createMediaHandler() {
+	return {
+		localStream: null,
+		audioProducer: null,
+		videoProducer: null,
+		screenProducer: null,
+		setProducers(producers = {}) {
+			Object.assign(this, producers);
+		},
+		stopScreenShare() {
+			this.screenProducer = null;
+		},
+		cleanup() {
+			for (const producer of [
+				this.audioProducer,
+				this.videoProducer,
+				this.screenProducer,
+			]) {
+				try {
+					producer?.close?.();
+				} catch (error) {
+					console.warn("Failed to close producer during cleanup:", error);
+				}
+			}
+
+			this.localStream = null;
+			this.audioProducer = null;
+			this.videoProducer = null;
+			this.screenProducer = null;
+		},
+	};
+}
 
 export class SFUMeetingManager {
 	constructor() {
@@ -21,14 +53,16 @@ export class SFUMeetingManager {
 		this.processedConsumers = new Set();
 		this.isScreenShareActive = false;
 
-		this.mediaHandler = new MediaStreamHandler();
 		this.videoManager = new VideoElementManager();
 		this.participantManager = new ParticipantManager();
 		this.consumerManager = new ConsumerManager();
 		this.transportManager = new TransportManager();
+		this.mediaHandler = createMediaHandler();
 
 		this.sfuClient = null;
 		this.eventHandlers = {};
+		this.recoveryInProgress = false;
+		this.lastRecoveryAt = 0;
 
 		this.eventTarget = new EventTarget();
 	}
@@ -94,6 +128,12 @@ export class SFUMeetingManager {
 						err,
 					);
 				}
+			},
+		});
+
+		this.transportManager.setEventHandlers({
+			onTransportConnectionStateChange: ({ direction, state }) => {
+				this.handleTransportConnectionStateChange(direction, state);
 			},
 		});
 	}
@@ -216,8 +256,7 @@ export class SFUMeetingManager {
 			const participants = await this.sfuClient.getRoomParticipants();
 
 			// Get current user ID to filter out self from participants
-			const currentUserId =
-				this.currentUser?.user_id || this.currentUser?.userId;
+			const currentUserId = this.getCurrentUserId();
 
 			const normalized = (participants || [])
 				.map((p) => {
@@ -270,27 +309,23 @@ export class SFUMeetingManager {
 					})),
 				);
 
-				const currentUserId =
-					this.currentUser?.user_id || this.currentUser?.userId;
-
 				for (const producerInfo of existingProducers) {
-					const pid =
+					const participantId =
 						producerInfo.participantId ||
 						producerInfo.user_id ||
 						producerInfo.userId;
 
-					if (pid === currentUserId) {
-						continue;
-					}
-
-					const metadata = { isScreen: !!producerInfo.isScreen };
 					console.log("Subscribing to existing producer:", {
 						producerId: producerInfo.id,
-						participantId: pid,
+						participantId,
 						kind: producerInfo.kind,
 						isScreen: !!producerInfo.isScreen,
 					});
-					await this.subscribeToProducer(producerInfo.id, pid, metadata);
+					await this.subscribeToRemoteProducer({
+						producerId: producerInfo.id,
+						participantId,
+						isScreen: producerInfo.isScreen,
+					});
 				}
 			} else {
 				console.log("No existing producers found");
@@ -335,6 +370,20 @@ export class SFUMeetingManager {
 		}
 	}
 
+	async subscribeToRemoteProducer({ producerId, participantId, isScreen }) {
+		if (!producerId || !participantId) {
+			return null;
+		}
+
+		if (participantId === this.getCurrentUserId()) {
+			return null;
+		}
+
+		return this.subscribeToProducer(producerId, participantId, {
+			isScreen: !!isScreen,
+		});
+	}
+
 	async handleNewConsumer(consumer) {
 		const { participantId, kind, track, isScreen } = consumer;
 
@@ -351,7 +400,7 @@ export class SFUMeetingManager {
 			return;
 		}
 
-		const currentUserId = this.currentUser?.user_id || this.currentUser?.userId;
+		const currentUserId = this.getCurrentUserId();
 		if (participantId === currentUserId) {
 			return;
 		}
@@ -480,16 +529,11 @@ export class SFUMeetingManager {
 					continue;
 				}
 
-				const isSelf = event.participantId === this.currentUser.value?.user_id;
-				const isScreen = !!event.isScreen;
-				if (!isSelf) {
-					const metadata = { isScreen };
-					await this.subscribeToProducer(
-						event.producerId,
-						event.participantId,
-						metadata,
-					);
-				}
+				await this.subscribeToRemoteProducer({
+					producerId: event.producerId,
+					participantId: event.participantId,
+					isScreen: event.isScreen,
+				});
 			} catch (error) {
 				console.warn("Failed to process buffered producer:", error);
 			}
@@ -497,9 +541,12 @@ export class SFUMeetingManager {
 	}
 
 	setupSFUEventHandlers() {
+		this.sfuClient.on("reconnect", () => {
+			this.recoverTransportIce("socket_reconnect");
+		});
+
 		this.sfuClient.on("participant_joined", (data) => {
-			const currentUserId =
-				this.currentUser?.user_id || this.currentUser?.userId;
+			const currentUserId = this.getCurrentUserId();
 			const joinedUserId = data.participantId || data.user_id;
 
 			if (joinedUserId && joinedUserId !== currentUserId) {
@@ -512,7 +559,7 @@ export class SFUMeetingManager {
 		});
 
 		this.sfuClient.on("producer_created", async (data) => {
-			if (data.participantId === this.currentUser.value?.user_id) return;
+			if (data.participantId === this.getCurrentUserId()) return;
 
 			// If we're syncing or the device isn't ready yet, buffer this event
 			if (
@@ -523,16 +570,11 @@ export class SFUMeetingManager {
 				return;
 			}
 
-			const isSelf = data.participantId === this.currentUser.value?.user_id;
-			const isScreen = !!data.isScreen;
-			if (!isSelf) {
-				const metadata = { isScreen };
-				await this.subscribeToProducer(
-					data.producerId,
-					data.participantId,
-					metadata,
-				);
-			}
+			await this.subscribeToRemoteProducer({
+				producerId: data.producerId,
+				participantId: data.participantId,
+				isScreen: data.isScreen,
+			});
 		});
 
 		this.sfuClient.on("producer_closed", (data) => {
@@ -633,10 +675,18 @@ export class SFUMeetingManager {
 			}
 		});
 
+		this.sfuClient.on("network_quality_update", (data) => {
+			if (data?.participantId && data?.quality) {
+				this.participantManager.updateParticipant(data.participantId, {
+					networkQuality: data.quality,
+				});
+			}
+		});
+
 		this.sfuClient.on("host_control_update", (data) => {
 			const { action, targetParticipantId, hostId } = data;
 
-			const myParticipantId = this.currentUser.value?.user_id;
+			const myParticipantId = this.getCurrentUserId();
 
 			console.log("SFU event: host_control_update", {
 				action,
@@ -726,6 +776,50 @@ export class SFUMeetingManager {
 		});
 	}
 
+	handleTransportConnectionStateChange(direction, state) {
+		if (state === "failed" || state === "closed") {
+			this.recoverTransportIce(`transport_${direction}_${state}`);
+		}
+	}
+
+	async recoverTransportIce(reason) {
+		if (this.recoveryInProgress) {
+			return false;
+		}
+
+		if (!this.sfuClient?.isConnected?.()) {
+			return false;
+		}
+
+		const now = Date.now();
+		if (now - this.lastRecoveryAt < 7000) {
+			return false;
+		}
+
+		this.recoveryInProgress = true;
+		this.lastRecoveryAt = now;
+
+		try {
+			console.warn("Restarting SFU transport ICE", {
+				reason,
+				meetingId: this.meetingId,
+			});
+
+			const restarted = await this.transportManager.restartAllTransportIce();
+			if (!restarted) {
+				return false;
+			}
+
+			console.log("SFU transport ICE restart completed", { reason });
+			return true;
+		} catch (error) {
+			console.error("SFU transport ICE restart failed:", error);
+			return false;
+		} finally {
+			this.recoveryInProgress = false;
+		}
+	}
+
 	registerVideoElement(participantId, element) {
 		this.videoManager.registerVideoElement(participantId, element);
 	}
@@ -758,6 +852,8 @@ export class SFUMeetingManager {
 
 	async disconnect() {
 		try {
+			this.recoveryInProgress = false;
+
 			// Close producers/consumers and transports first
 			this.consumerManager?.clear?.();
 			this.mediaHandler?.cleanup?.();
@@ -788,6 +884,8 @@ export class SFUMeetingManager {
 		this.eventHandlers = {};
 		this.isConnected = false;
 		this.isSetupComplete = false;
+		this.recoveryInProgress = false;
+		this.lastRecoveryAt = 0;
 	}
 
 	/**
@@ -798,6 +896,11 @@ export class SFUMeetingManager {
 			return obj;
 		}
 		return { value: obj };
+	}
+
+	getCurrentUserId() {
+		const currentUser = this.currentUser?.value || this.currentUser;
+		return currentUser?.user_id || currentUser?.userId || null;
 	}
 }
 

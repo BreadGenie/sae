@@ -30,7 +30,16 @@ export const videoCodecOptions = {
 	videoGoogleStartBitrate: 2000,
 };
 
+export const audioCodecOptions = {
+	// ref: https://mediasoup.org/documentation/v3/mediasoup-client/api/#ProducerCodecOptions
+	opusStereo: 0, // disable stereo to save bandwidth, as most meetings are voice-only
+	opusDtx: 1, // enable DTX to save bandwidth during silence periods
+	opusFec: 1, // enable FEC to improve audio quality in case of packet loss
+	opusMaxAverageBitrate: 48000,
+};
+
 export default {
+	audioCodecOptions,
 	videoEncodings,
 	screenEncodings,
 	videoCodecOptions,

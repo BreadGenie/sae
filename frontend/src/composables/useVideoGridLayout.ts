@@ -4,6 +4,7 @@ import { useResponsiveGrid } from "./useResponsiveGrid";
 
 interface MeetingState {
 	raisedHands?: Ref<Record<string, string>>;
+	stableSpeakerIds?: Ref<string[]>;
 }
 
 interface DisplayParticipantsResult {
@@ -12,15 +13,35 @@ interface DisplayParticipantsResult {
 	extra: number;
 }
 
+interface DisplayParticipant extends Participant {
+	isVisible: boolean;
+	slotIndex: number;
+	tileStyle: Record<string, string>;
+	needsBreakAfter: boolean;
+}
+
 interface GridStyle {
-	"grid-auto-rows": string;
-	"grid-template-columns": string;
+	display: string;
+	"flex-wrap": string;
+	"justify-content": string;
+	"align-content": string;
+	"column-gap": string;
+	overflow: string;
+}
+
+interface TileStyle {
+	width: string;
+	height: string;
+	minWidth: string;
+	minHeight: string;
+	[key: string]: string;
 }
 
 interface UseVideoGridLayoutReturn {
 	displayParticipants: ComputedRef<DisplayParticipantsResult>;
-	gridClass: ComputedRef<string>;
+	allParticipants: ComputedRef<DisplayParticipant[]>;
 	gridStyle: ComputedRef<GridStyle>;
+	tileStyle: ComputedRef<TileStyle>;
 	visibleTileCount: ComputedRef<number>;
 	hiddenParticipantsTooltip: ComputedRef<string>;
 	maxVisibleTiles: ComputedRef<number>;
@@ -34,10 +55,11 @@ interface UseVideoGridLayoutReturn {
  * - Maximum 4 rows at any screen size
  * - Columns adapt to screen size (2 mobile, 3 tablet, 4 desktop)
  * - Overflow participants go to grouped tile
+ * - Tiles are distributed evenly across rows (e.g. 7 → [3,2,2])
+ * - Shorter rows are centered via justify-content with flex breaks
  */
 export function useVideoGridLayout(
 	participants: Ref<Record<string, Participant>>,
-	activeSpeakerIds: Ref<string[]>,
 	meetingState: MeetingState,
 ): UseVideoGridLayoutReturn {
 	const { maxColumns, windowWidth, BREAKPOINTS } = useResponsiveGrid();
@@ -55,11 +77,35 @@ export function useVideoGridLayout(
 		return Math.min(4, maxCols); // 4x4 max
 	};
 
+	/**
+	 * Distribute totalTiles evenly across rows.
+	 * E.g. 7 tiles, 3 max cols → [3, 2, 2] instead of [3, 3, 1]
+	 */
+	const getRowDistribution = (
+		totalTiles: number,
+		maxCols: number,
+	): number[] => {
+		if (totalTiles <= 0) return [];
+		const cols = getOptimalColumns(totalTiles, maxCols);
+		const rows = Math.ceil(totalTiles / cols);
+		const base = Math.floor(totalTiles / rows);
+		const extra = totalTiles % rows;
+
+		const distribution: number[] = [];
+		for (let i = 0; i < rows; i++) {
+			distribution.push(base + (i < extra ? 1 : 0));
+		}
+		return distribution;
+	};
+
 	const maxVisibleTiles = computed<number>(() => {
 		const cols = maxColumns.value;
 		const maxRows = 4;
 		return cols * maxRows; // e.g., 2 cols = 8 tiles, 3 cols = 12, 4 cols = 16
 	});
+
+	// store position in map participant ID -> assigned slot index
+	let slotAssignments: Map<string, number> = new Map();
 
 	// cap visible tiles based on screen size (cols × 4 rows)
 	// extra participants are grouped
@@ -74,133 +120,117 @@ export function useVideoGridLayout(
 
 		const total = remotes.length + 1; // +1 for local user
 		const threshold = maxVisibleTiles.value;
+		const remoteCapacity = total <= threshold ? remotes.length : threshold - 2;
 
-		// Get active speaker IDs
-		const activeSpeakers = activeSpeakerIds?.value || [];
-		const activeSpeakerSet = new Set<string>(activeSpeakers);
+		// Use stableSpeakerIds for tile ordering (recently stable speakers)
+		const stableSpeakers = meetingState.stableSpeakerIds?.value || [];
+		const stableSpeakerSet = new Set<string>(stableSpeakers);
 		const raisedHands = meetingState?.raisedHands?.value || {};
 
-		// If within threshold, show all
-		if (total <= threshold) {
-			return { list: remotes, hidden: [], extra: 0 };
-		}
+		const getPriority = (p: Participant) => {
+			const isStable = stableSpeakerSet.has(p.user_id);
+			const hasVideo = !!p.video_enabled;
+			const hasHand = !!raisedHands[p.user_id];
 
-		// 1 for local user and 1 for grouped tile
-		const remoteCapacity = threshold - 2;
-
-		// Separate participants by video state and active speaker status
-		// Sort by user_id for stable ordering within each category
-		const videoOnActiveSpeakers = remotes
-			.filter((p) => p.video_enabled && activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const videoOnNonSpeakers = remotes
-			.filter((p) => p.video_enabled && !activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const videoOffActiveSpeakers = remotes
-			.filter((p) => !p.video_enabled && activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-		const raisedHandsParticipants = remotes
-			.filter((p) => raisedHands[p.user_id] && !activeSpeakerSet.has(p.user_id))
-			.sort((a, b) => {
-				const aTime = new Date(raisedHands[a.user_id]).getTime();
-				const bTime = new Date(raisedHands[b.user_id]).getTime();
-				// First sort by timestamp (earliest first), then by user_id for stability
-				if (aTime !== bTime) {
-					return aTime - bTime;
-				}
-				return a.user_id.localeCompare(b.user_id);
-			});
-		const videoOffNonSpeakers = remotes
-			.filter(
-				(p) =>
-					!p.video_enabled &&
-					!activeSpeakerSet.has(p.user_id) &&
-					!raisedHands[p.user_id],
-			)
-			.sort((a, b) => a.user_id.localeCompare(b.user_id));
-
-		const visibleRemotes: Participant[] = [];
-
-		// Priority order:
-		// 1. Active speakers with video ON
-		// 2. Non-active speakers with video ON
-		// 3. Active speakers with video OFF (ensure they're visible)
-		// 4. Raised hands
-		// 5. Non-active speakers with video OFF
-
-		for (const p of videoOnActiveSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
-			}
-		}
-
-		for (const p of videoOnNonSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
-			}
-		}
-
-		for (const p of videoOffActiveSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
-			}
-		}
-
-		for (const p of raisedHandsParticipants) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
-			}
-		}
-
-		for (const p of videoOffNonSpeakers) {
-			if (visibleRemotes.length < remoteCapacity) {
-				visibleRemotes.push(p);
-			} else {
-				break;
-			}
-		}
-
-		// Hidden are all remaining not in visibleRemotes
-		const visibleIds = new Set(visibleRemotes.map((p) => p.user_id));
-		const hidden = remotes.filter((p) => !visibleIds.has(p.user_id));
-
-		return { list: visibleRemotes, hidden, extra: hidden.length };
-	});
-
-	// Calculate grid columns based on total visible tiles and screen size
-	const gridClass = computed<string>(() => {
-		const totalVisibleTiles =
-			1 + // local
-			displayParticipants.value.list.length +
-			(displayParticipants.value.extra > 0 ? 1 : 0); // grouped tile if present
-
-		const cols = getOptimalColumns(totalVisibleTiles, maxColumns.value);
-
-		return `grid-cols-${cols}`;
-	});
-
-	// Calculate grid style for equal row heights
-	const gridStyle = computed<GridStyle>(() => {
-		const totalVisibleTiles =
-			1 +
-			displayParticipants.value.list.length +
-			(displayParticipants.value.extra > 0 ? 1 : 0);
-
-		const cols = getOptimalColumns(totalVisibleTiles, maxColumns.value);
-
-		return {
-			"grid-auto-rows": "1fr",
-			"grid-template-columns": `repeat(${cols}, minmax(0, 1fr))`,
+			if (isStable && hasVideo) return 0;
+			if (isStable) return 1;
+			if (hasVideo) return 2;
+			if (hasHand) return 3;
+			return 4;
 		};
+
+		// priority map
+		const priorityMap = new Map<string, number>();
+		for (const p of remotes) {
+			priorityMap.set(p.user_id, getPriority(p));
+		}
+
+		const currentIds = new Set(remotes.map((p) => p.user_id));
+
+		// remove slots for participants who left
+		for (const id of slotAssignments.keys()) {
+			if (!currentIds.has(id)) {
+				slotAssignments.delete(id);
+			}
+		}
+
+		// get currently visible participants
+		const currentlyVisible = new Set<string>();
+		for (const [id, slot] of slotAssignments.entries()) {
+			if (slot < remoteCapacity) {
+				currentlyVisible.add(id);
+			}
+		}
+
+		// sort all participants by priority, then by existing slot (to avoid needless moving around)
+		const sortedByPriority = [...remotes].sort((a, b) => {
+			const aPriority = priorityMap.get(a.user_id) ?? 4;
+			const bPriority = priorityMap.get(b.user_id) ?? 4;
+			if (aPriority !== bPriority) return aPriority - bPriority;
+
+			// Both same priority: prefer already visible
+			const aVisible = currentlyVisible.has(a.user_id);
+			const bVisible = currentlyVisible.has(b.user_id);
+			if (aVisible !== bVisible) return aVisible ? -1 : 1;
+
+			// Both visible or both hidden: keep existing order
+			const aSlot = slotAssignments.get(a.user_id) ?? 9999;
+			const bSlot = slotAssignments.get(b.user_id) ?? 9999;
+			if (aSlot !== bSlot) return aSlot - bSlot;
+
+			return a.user_id.localeCompare(b.user_id);
+		});
+
+		// Take top N as visible
+		const visibleRemotes = sortedByPriority.slice(0, remoteCapacity);
+		const hidden = sortedByPriority.slice(remoteCapacity);
+
+		const usedSlots = new Set<number>();
+		const newSlotAssignments = new Map<string, number>();
+
+		// 1. keep existing slots for existing visible participants
+		for (const p of visibleRemotes) {
+			const existingSlot = slotAssignments.get(p.user_id);
+			if (
+				existingSlot !== undefined &&
+				existingSlot < remoteCapacity &&
+				!usedSlots.has(existingSlot)
+			) {
+				newSlotAssignments.set(p.user_id, existingSlot);
+				usedSlots.add(existingSlot);
+			}
+		}
+
+		// 2. assign free slots to newcomers
+		let nextFreeSlot = 0;
+		for (const p of visibleRemotes) {
+			if (!newSlotAssignments.has(p.user_id)) {
+				while (usedSlots.has(nextFreeSlot)) nextFreeSlot++;
+				newSlotAssignments.set(p.user_id, nextFreeSlot);
+				usedSlots.add(nextFreeSlot);
+				nextFreeSlot++;
+			}
+		}
+
+		slotAssignments = newSlotAssignments;
+
+		// sort by slot
+		const orderedVisible = [...visibleRemotes].sort((a, b) => {
+			const aSlot = newSlotAssignments.get(a.user_id) ?? 999;
+			const bSlot = newSlotAssignments.get(b.user_id) ?? 999;
+			return aSlot - bSlot;
+		});
+		return { list: orderedVisible, hidden, extra: hidden.length };
 	});
+
+	const gridStyle = computed<GridStyle>(() => ({
+		display: "flex",
+		"flex-wrap": "wrap",
+		"justify-content": "center",
+		"align-content": "start",
+		"column-gap": "0.5rem",
+		overflow: "hidden",
+	}));
 
 	// Total visible tile count for avatar sizing
 	const visibleTileCount = computed<number>(() => {
@@ -209,6 +239,46 @@ export function useVideoGridLayout(
 			displayParticipants.value.list.length +
 			(displayParticipants.value.extra > 0 ? 1 : 0)
 		);
+	});
+
+	/**
+	 * Row break indices: visible tile indices after which a flex line-break
+	 * element should be inserted. This forces the desired row distribution.
+	 *
+	 * E.g. for distribution [3, 2, 2], breaks = {2, 4}
+	 *   → break after vis index 2 (end of row 1)
+	 *   → break after vis index 4 (end of row 2)
+	 */
+	const rowBreakIndices = computed<Set<number>>(() => {
+		const total = visibleTileCount.value;
+		const distribution = getRowDistribution(total, maxColumns.value);
+		const breaks = new Set<number>();
+		let cumulative = 0;
+		for (let r = 0; r < distribution.length - 1; r++) {
+			cumulative += distribution[r];
+			breaks.add(cumulative - 1);
+		}
+		return breaks;
+	});
+
+	// all tiles get the same dimensions based on
+	// the first row's column count and total number of rows.
+	const tileStyle = computed<TileStyle>(() => {
+		const total = visibleTileCount.value;
+		const distribution = getRowDistribution(total, maxColumns.value);
+		const firstRowCols = distribution[0] || 1;
+		const rows = distribution.length || 1;
+		const gap = "0.5rem";
+
+		const verticalGaps = rows - 1;
+
+		return {
+			width: `calc((100% - ${firstRowCols - 1} * ${gap}) / ${firstRowCols})`,
+			height: `calc((100% - ${verticalGaps} * ${gap}) / ${rows})`,
+			minWidth: "0",
+			minHeight: "0",
+			marginBottom: gap,
+		};
 	});
 
 	const hiddenParticipantsTooltip = computed<string>(() => {
@@ -228,10 +298,45 @@ export function useVideoGridLayout(
 		return `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
 	});
 
+	const allParticipants = computed<DisplayParticipant[]>(() => {
+		const dp = displayParticipants.value;
+		const ts = tileStyle.value;
+		const breaks = rowBreakIndices.value;
+
+		const allWithVisibility: DisplayParticipant[] = [];
+
+		// visible ones — vis index = i + 1 (local is vis 0)
+		for (let i = 0; i < dp.list.length; i++) {
+			const p = dp.list[i];
+			const visIndex = i + 1;
+			allWithVisibility.push({
+				...p,
+				isVisible: true,
+				slotIndex: i,
+				tileStyle: ts,
+				needsBreakAfter: breaks.has(visIndex),
+			});
+		}
+
+		// hidden ones don't need tile styles or breaks
+		for (const p of dp.hidden) {
+			allWithVisibility.push({
+				...p,
+				isVisible: false,
+				slotIndex: 999,
+				tileStyle: {},
+				needsBreakAfter: false,
+			});
+		}
+
+		return allWithVisibility;
+	});
+
 	return {
 		displayParticipants,
-		gridClass,
+		allParticipants,
 		gridStyle,
+		tileStyle,
 		visibleTileCount,
 		hiddenParticipantsTooltip,
 		maxVisibleTiles,

@@ -1,3 +1,5 @@
+import type { UserData } from "../../types";
+
 export type Platform = "win" | "mac" | "linux" | "unknown";
 
 export interface FrappeRequestError extends Error {
@@ -7,11 +9,11 @@ export interface FrappeRequestError extends Error {
 export interface Participant {
 	user_id: string;
 	user_name?: string;
-	avatar?: string;
+	avatar?: UserData["avatar"];
 	initials?: string;
-	audio_enabled?: boolean;
-	video_enabled?: boolean;
-	is_guest?: boolean;
+	audio_enabled?: UserData["audio_enabled"];
+	video_enabled?: UserData["video_enabled"];
+	is_guest?: UserData["is_guest"];
 }
 
 export interface ParticipantPreview {
@@ -20,4 +22,16 @@ export interface ParticipantPreview {
 	avatar_url?: string;
 	has_video: boolean;
 	has_audio: boolean;
+	is_guest?: boolean;
 }
+
+export type {
+	ParticipantInfo,
+	ParticipantJoinedEvent,
+	ParticipantLeftEvent,
+	PresenceJoinResponse,
+	PresenceParticipantsResponse,
+	PresenceTokenResponse,
+	PreviewParticipantInfo,
+	UserData,
+} from "../../types";

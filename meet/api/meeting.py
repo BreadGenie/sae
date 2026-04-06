@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 def _get_codec_strategy() -> str:
-	return frappe.get_cached_doc("Sae Settings").codec_strategy or "auto"
+	return frappe.get_cached_doc("Sae Settings").codec_strategy or "svc"
 
 
 @frappe.whitelist()

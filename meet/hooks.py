@@ -248,6 +248,9 @@ fixtures = [
 # Automatically update python controller files with type annotations for this app.
 export_python_type_annotations = True
 
+# Enforce type annotations for whitelisted methods
+require_type_annotated_api_methods = True
+
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }

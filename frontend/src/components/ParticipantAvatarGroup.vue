@@ -79,10 +79,12 @@ const extraCount = computed(() =>
 
 const formattedNames = computed((): string => {
 	const names = displayedParticipants.value.map((p) => p.full_name);
-	if (names.length === 0) return "";
-	if (names.length === 1) return names[0];
-	if (names.length === 2) return `${names[0]} and ${names[1]}`;
-	if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]}`;
+	const participantLength = props.participants.length;
+	if (participantLength === 0) return "";
+	if (participantLength === 1) return names[0];
+	if (participantLength === 2) return `${names[0]} and ${names[1]}`;
+	if (participantLength === 3)
+		return `${names[0]}, ${names[1]} and ${names[2]}`;
 	return names.join(", ");
 });
 

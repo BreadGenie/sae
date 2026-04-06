@@ -2,10 +2,9 @@
 	<TransitionGroup
 		name="tile"
 		tag="div"
-		class="relative overflow-y-auto p-1 grid gap-2 h-full"
+		class="relative overflow-y-auto grid gap-2 h-full"
 		:class="sidebarClass"
 		:style="sidebarStyle"
-		@before-leave="lockTileDimensions"
 	>
 		<!-- Local camera tile -->
 		<div
@@ -51,10 +50,11 @@
 
 		<!-- Remote participants -->
 		<ScreenShareSidebarParticipantTile
-			v-for="participant in sidebarDisplay.list"
+			v-for="participant in allParticipants"
 			:key="'side-' + participant.user_id"
 			:participant="participant"
-			:videoRef="handleRemoteVideoRef"
+			:class="{ 'hidden-tile': !participant.isVisible }"
+			:videoRef="getRemoteVideoRef(participant.user_id)"
 			:tileStyle="singleTileStyle"
 			:visibleTileCount="visibleTileCount"
 		/>
@@ -90,31 +90,26 @@ const setLocalVideoRef = inject("setLocalVideoRef");
 const setRemoteVideoRef = inject("setRemoteVideoRef");
 const { registerTile } = useTileAdaptiveStreaming();
 
-const handleRemoteVideoRef = (participantId, el) => {
-	setRemoteVideoRef(participantId, el);
-	registerTile(participantId, el);
-};
+const videoRefHandlers = new Map();
 
-// needed to avoid layout shifts during tile removal
-const lockTileDimensions = (el) => {
-	const width = el.offsetWidth;
-	const height = el.offsetHeight;
-	const top = el.offsetTop;
-	const left = el.offsetLeft;
-
-	el.style.position = "absolute";
-	el.style.width = `${width}px`;
-	el.style.height = `${height}px`;
-	el.style.top = `${top}px`;
-	el.style.left = `${left}px`;
-	el.style.pointerEvents = "none";
+// cache ref handlers to avoid UI flicker
+const getRemoteVideoRef = (participantId) => {
+	if (!videoRefHandlers.has(participantId)) {
+		videoRefHandlers.set(participantId, (el) => {
+			setRemoteVideoRef(participantId, el);
+			registerTile(participantId, el);
+		});
+	}
+	return videoRefHandlers.get(participantId);
 };
 
 const participants = computed(() => meetingState.participants.value);
 const currentUser = computed(() => meetingState.currentUser.value);
 const isCameraOn = computed(() => meetingState.isCameraOn.value);
 const isMicOn = computed(() => meetingState.isMicOn.value);
-const activeSpeakerIds = computed(() => meetingState.activeSpeakerIds.value);
+const stableSpeakerIds = computed(
+	() => meetingState.stableSpeakerIds?.value || [],
+);
 
 const userInitials = computed(() => {
 	const name = currentUser.value?.full_name || currentUser.value?.name || "You";
@@ -130,12 +125,13 @@ const userAvatar = computed(() => currentUser.value?.avatar || "");
 
 const {
 	sidebarDisplay,
+	allParticipants,
 	sidebarClass,
 	sidebarStyle,
 	singleTileStyle,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useScreenShareSidebar(participants, activeSpeakerIds, meetingState);
+} = useScreenShareSidebar(participants, stableSpeakerIds, meetingState);
 
 const { stream: localStream } = useAudioStream(currentUser.value?.user_id);
 
@@ -145,7 +141,15 @@ const handleOpenPeoplePanel = () => {
 </script>
 
 <style scoped>
-/* Transition styles */
+.hidden-tile {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+	transform: scale(0);
+	bottom: 0;
+	right: 0;
+	z-index: 0;
+}
 .tile-enter-from,
 .tile-leave-to {
 	opacity: 0;
@@ -165,11 +169,6 @@ const handleOpenPeoplePanel = () => {
 
 .tile-leave-active {
 	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
 }
 
 .remote-video {

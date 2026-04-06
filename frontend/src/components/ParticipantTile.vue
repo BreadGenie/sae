@@ -62,7 +62,7 @@
 			class="absolute top-2 right-12 bg-gray-700 rounded-full p-1.5"
 			:title="networkQualityMessage"
 		>
-			<lucide-wifi-off class="w-4 h-4 text-white" />
+			<WifiAlertIcon class="w-4 h-4 text-white" />
 		</div>
 
 		<div v-if="!isAudioEnabled" class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5">
@@ -75,6 +75,7 @@
 import { computed, inject, ref, watch } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels.js";
 import { useNetworkQuality } from "../composables/useNetworkQuality";
+import WifiAlertIcon from "../icons/WifiAlertIcon.vue";
 import AudioIndicator from "./AudioIndicator.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 import NamePill from "./NamePill.vue";
@@ -114,57 +115,34 @@ const props = defineProps({
 
 const { stream } = useAudioStream(props.participant.user_id);
 
-const { networkConnectionInfo } = useNetworkQuality();
+const { networkQuality } = useNetworkQuality();
+
+const computedNetworkQuality = computed(() => {
+	if (props.isLocal) {
+		return networkQuality.value;
+	}
+	return props.participant.networkQuality || "good";
+});
 
 const showNetworkIndicator = computed(() => {
-	if (!props.isLocal) return false;
-
-	if (!navigator.onLine) {
-		return true;
-	}
-
-	const connectionInfo = networkConnectionInfo.value;
-	if (!connectionInfo) {
-		return false;
-	}
-
-	const { downlink, effectiveType } = connectionInfo;
-
-	// Show indicator for poor connections:
-	// below 2 Mbps or poor effective types
-	const isPoorConnection =
-		// Very slow or no connection
-		(downlink !== undefined && downlink <= 0.5) ||
-		// Poor effective types
-		effectiveType === "slow-2g" ||
-		effectiveType === "2g" ||
-		(effectiveType === "3g" && downlink !== undefined && downlink < 1);
-
-	return isPoorConnection;
+	return computedNetworkQuality.value !== "good";
 });
 
 const networkQualityMessage = computed(() => {
-	if (!navigator.onLine) {
-		return "Connection lost - attempting to reconnect";
+	const quality = computedNetworkQuality.value;
+	const isLocal = props.isLocal;
+	const name = props.participant.user_name || "This participant";
+
+	if (quality === "critical") {
+		return isLocal
+			? "Your internet connection is unstable. Video and audio might lag or drop."
+			: `${name}'s internet connection is unstable.`;
 	}
-
-	if (!networkConnectionInfo.value) return "";
-
-	const { downlink, effectiveType } = networkConnectionInfo.value;
-
-	// Critical conditions: very slow, or slow-2g
-	if (
-		(downlink !== undefined && downlink < 0.5) ||
-		effectiveType === "slow-2g"
-	) {
-		return "Connection lost - attempting to reconnect";
+	if (quality === "poor") {
+		return isLocal
+			? "Your internet connection is weak. You might notice some lag."
+			: `${name}'s internet connection is weak.`;
 	}
-
-	// Poor conditions: below 2 Mbps or 2g
-	if ((downlink !== undefined && downlink < 2) || effectiveType === "2g") {
-		return "Poor connection - you may experience issues with audio/video";
-	}
-
 	return "";
 });
 

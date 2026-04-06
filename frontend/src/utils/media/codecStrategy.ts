@@ -13,7 +13,7 @@ export type CodecDecision = {
 	requested: string;
 };
 
-const VALID_STRATEGIES = new Set(["auto", "svc", "simulcast"]);
+const VALID_STRATEGIES = new Set(["svc", "simulcast"]);
 // multi-spatial single-temporal modes (L3T1/L2T1/L1T1).
 const PREFERRED_SVC_MODES = ["L3T1_KEY", "L3T1", "L2T1", "L2T1_KEY", "L1T1"];
 
@@ -34,8 +34,8 @@ function nowMs() {
 }
 
 export function normalizeCodecStrategy(value: string): string {
-	const normalized = value.trim().toLowerCase() || "auto";
-	return VALID_STRATEGIES.has(normalized) ? normalized : "auto";
+	const normalized = value.trim().toLowerCase() || "svc";
+	return VALID_STRATEGIES.has(normalized) ? normalized : "svc";
 }
 
 function detectBrowserSupport() {
