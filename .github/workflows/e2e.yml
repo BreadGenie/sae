@@ -13,11 +13,32 @@ concurrency:
 
 jobs:
   e2e:
+<<<<<<< HEAD
     runs-on: macos-latest # TODO: use ubuntu-latest once open sourced
+=======
+    runs-on: ubuntu-latest
+>>>>>>> parent of 0d55f17 (ci: use macos)
     name: E2E Tests
     env:
       EXTERNAL_SFU_URL: ${{ secrets.EXTERNAL_SFU_URL }}
       EXTERNAL_SFU_SECRET: ${{ secrets.EXTERNAL_SFU_SECRET }}
+
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
     steps:
       - name: Clone
@@ -36,43 +57,6 @@ jobs:
 
       - name: Add to Hosts
         run: echo "127.0.0.1 meet.test" | sudo tee -a /etc/hosts
-
-      - name: Install System Dependencies
-        run: |
-          brew install coreutils redis mariadb
-
-      - name: Start Redis Servers
-        run: |
-          # Start Redis for cache on port 13000
-          redis-server --port 13000 --daemonize yes
-          # Start Redis for queue on port 11000
-          redis-server --port 11000 --daemonize yes
-          # Verify Redis servers are running
-          redis-cli -p 13000 ping
-          redis-cli -p 11000 ping
-
-      - name: Start MariaDB
-        run: |
-          # Start MariaDB
-          brew services start mariadb
-          # Wait for MariaDB to be ready
-          for i in {1..30}; do
-            if mysqladmin ping --silent 2>/dev/null; then
-              echo "MariaDB is ready!"
-              break
-            fi
-            echo "Waiting for MariaDB... ($i/30)"
-            sleep 2
-          done
-          # Configure root user for password authentication (use sudo for unix_socket auth)
-          sudo mysql -u root <<EOF
-          ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('root');
-          CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY 'root';
-          GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
-          GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
-          FLUSH PRIVILEGES;
-          EOF
-          echo "MariaDB configured!"
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -114,19 +98,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
-      - name: Install Additional Dependencies
+      - name: Install MariaDB Client and FFmpeg
         run: |
-          brew install ffmpeg
+          sudo apt update
+          sudo apt-get install -y mariadb-client ffmpeg
 
       - name: Setup Bench
         run: |
           pip install frappe-bench
           bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
-          mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
-          mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
       - name: Install Meet
-        working-directory: /Users/runner/frappe-bench
+        working-directory: /home/runner/frappe-bench
         run: |
           bench get-app meet $GITHUB_WORKSPACE
           bench setup requirements --dev
@@ -137,7 +122,7 @@ jobs:
           CI: "Yes"
 
       - name: Configure Site for E2E
-        working-directory: /Users/runner/frappe-bench
+        working-directory: /home/runner/frappe-bench
         run: |
           if [ -n "$EXTERNAL_SFU_URL" ]; then
              echo "Using External SFU: $EXTERNAL_SFU_URL"
@@ -188,13 +173,13 @@ jobs:
           ffmpeg -f lavfi -i testsrc=size=640x480:rate=30 -t 10 -pix_fmt yuv420p fake-video.y4m
 
       - name: Start Frappe Server
-        working-directory: /Users/runner/frappe-bench
+        working-directory: /home/runner/frappe-bench
         run: |
-          sed -i '' 's/^watch:/# watch:/g' Procfile
-          sed -i '' 's/^schedule:/# schedule:/g' Procfile
+          sed -i 's/^watch:/# watch:/g' Procfile
+          sed -i 's/^schedule:/# schedule:/g' Procfile
           bench start &> bench_start.log &
           echo "Waiting for Frappe server to start..."
-          gtimeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done' || timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
+          timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
           echo "Frappe server is ready!"
 
       - name: Start SFU Server
@@ -203,7 +188,7 @@ jobs:
         run: |
           npm start &
           echo "Waiting for SFU server..."
-          gtimeout 30 bash -c 'until curl -s http://localhost:3000/health > /dev/null 2>&1; do sleep 2; done' || timeout 30 bash -c 'until curl -s http://localhost:3000/health > /dev/null 2>&1; do sleep 2; done'
+          timeout 30 bash -c 'until curl -s http://localhost:3000/health > /dev/null 2>&1; do sleep 2; done'
           echo "SFU server is ready"
         env:
           PORT: 3000
