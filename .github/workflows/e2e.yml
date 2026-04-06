@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
 >>>>>>> parent of 0d55f17 (ci: use macos)
     name: E2E Tests
-    env:
-      EXTERNAL_SFU_URL: ${{ vars.EXTERNAL_SFU_URL }}
 
     services:
       redis-cache:
@@ -123,19 +121,9 @@ jobs:
       - name: Configure Site for E2E
         working-directory: /home/runner/frappe-bench
         run: |
-          if [ -n "$EXTERNAL_SFU_URL" ]; then
-             echo "Using External SFU: $EXTERNAL_SFU_URL"
-             SFU_URL="$EXTERNAL_SFU_URL"
-             SFU_PORT=$(python3 -c "from urllib.parse import urlparse; u = urlparse('$SFU_URL'); print(u.port or (443 if u.scheme == 'https' else 80))")
-          else
-             echo "Using Local SFU"
-             SFU_URL="http://localhost"
-             SFU_PORT="3000"
-          fi
-
           bench --site meet.test set-config sfu_secret "e2e-test-secret-key-12345"
-          bench --site meet.test set-config sfu_server_url "$SFU_URL"
-          bench --site meet.test set-config sfu_server_port "$SFU_PORT"
+          bench --site meet.test set-config sfu_server_url "http://localhost"
+          bench --site meet.test set-config sfu_server_port "3000"
           bench --site meet.test set-config allow_tests true
           bench --site meet.test set-config host_name "http://meet.test:8000"
           
@@ -143,7 +131,6 @@ jobs:
           bench --site meet.test execute meet.utils.test_helpers.create_test_users
 
       - name: Build SFU Server
-        if: env.EXTERNAL_SFU_URL == ''
         working-directory: ${{ github.workspace }}/sfu-server
         run: |
           npm ci
@@ -176,7 +163,6 @@ jobs:
           echo "Frappe server is ready!"
 
       - name: Start SFU Server
-        if: env.EXTERNAL_SFU_URL == ''
         working-directory: ${{ github.workspace }}/sfu-server
         run: |
           npm start &
@@ -195,7 +181,7 @@ jobs:
         run: yarn test
         env:
           BASE_URL: http://meet.test:8000
-          SFU_URL: ${{ env.EXTERNAL_SFU_URL || 'http://localhost:3000' }}
+          SFU_URL: http://localhost:3000
           CI: true
 
       - name: Upload Test Results
