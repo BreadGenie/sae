@@ -20,31 +20,31 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 
-# Check Node.js version (mediasoup requires Node.js 14+)
+# Check Node.js version (mediasoup requires Node.js 22+)
 NODE_VERSION=$(node -v | cut -d'v' -f2)
-REQUIRED_VERSION="14.0.0"
+REQUIRED_VERSION="22.0.0"
 
 # Simple version comparison (major version check)
 NODE_MAJOR=$(echo $NODE_VERSION | cut -d'.' -f1)
-REQUIRED_MAJOR=14
+REQUIRED_MAJOR=22
 
 if [ "$NODE_MAJOR" -lt "$REQUIRED_MAJOR" ]; then
-    echo -e "${RED}❌ Node.js version ${NODE_VERSION} is not supported. Please install Node.js 14 or higher.${NC}"
+    echo -e "${RED}❌ Node.js version ${NODE_VERSION} is not supported. Please install Node.js 22 or higher.${NC}"
     exit 1
 fi
 
 echo -e "${GREEN}✅ Node.js version: ${NODE_VERSION}${NC}"
 
-# Check if npm is installed
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}❌ npm is not installed. Please install npm first.${NC}"
+# Check if yarn is installed
+if ! command -v yarn &> /dev/null; then
+    echo -e "${RED}❌ Yarn is not installed. Please install Yarn first.${NC}"
     exit 1
 fi
 
 # Install dependencies if node_modules doesn't exist
 if [ ! -d "node_modules" ]; then
     echo -e "${YELLOW}📦 Installing dependencies...${NC}"
-    npm install
+    yarn install
     echo -e "${GREEN}✅ Dependencies installed${NC}"
 else
     echo -e "${GREEN}✅ Dependencies already installed${NC}"
@@ -52,7 +52,7 @@ fi
 
 # Build TypeScript
 echo -e "${BLUE}🔨 Building TypeScript...${NC}"
-npm run build
+yarn build
 echo -e "${GREEN}✅ TypeScript built successfully${NC}"
 
 # Create .env file if it doesn't exist
@@ -82,7 +82,7 @@ if [ "$NODE_ENV" = "development" ]; then
     echo -e "${BLUE}🚀 Starting server in development mode with hot reload...${NC}"
     echo -e "${YELLOW}📁 Watching: src/**/*.{ts,js,json}${NC}"
     echo -e "${YELLOW}🔄 Hot reload enabled - server will restart on file changes${NC}"
-    npx nodemon
+    yarn dev:watch
 else
     # Production mode
     node dist/sfu-server/src/server.js

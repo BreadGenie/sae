@@ -824,8 +824,8 @@ function cleanupParticipant(socketId: string, meetingId: string) {
 
 ### Running the Server
 
-- Development: `npm run dev` or `npm run dev:watch` (with nodemon)
-- Production: `npm run build && npm start`
+- Development: `yarn dev` or `yarn dev:watch` (with nodemon)
+- Production: `yarn build && yarn start`
 - Assume SFU server is already running during development
 
 ### Logging
@@ -856,8 +856,8 @@ function cleanupParticipant(socketId: string, meetingId: string) {
 ## Code Quality
 
 - Use Biome for linting and formatting (both frontend and SFU server)
-- Run `yarn lint` or `npm run lint` to check code
-- Run `yarn format` or `npm run format` to fix formatting
+- Run `yarn lint` to check code
+- Run `yarn format` to fix formatting
 - Ignore newline errors in all files
 - Write clean, readable code that follows project conventions
 

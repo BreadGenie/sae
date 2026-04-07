@@ -26,11 +26,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: "npm"
-          cache-dependency-path: "**/package-lock.json"
+          cache: "yarn"
+          cache-dependency-path: "**/yarn.lock"
 
       - name: Install SFU Server dependencies
-        run: cd sfu-server && npm ci
+        run: cd sfu-server && yarn install --frozen-lockfile
 
       - uses: pre-commit/action@v3.0.0
 

@@ -7,7 +7,7 @@
 		"build": "tsc",
 		"start": "node dist/sfu-server/src/server.js",
 		"dev": "ts-node src/server.ts",
-		"dev:watch": "npx nodemon",
+		"dev:watch": "nodemon",
 		"spawn-fake": "node scripts/spawn-fake-users.js",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
@@ -22,6 +22,7 @@
 	],
 	"author": "Frappe",
 	"license": "AGPL-3.0",
+	"packageManager": "yarn@1.22.22",
 	"dependencies": {
 		"cors": "^2.8.5",
 		"dotenv": "^16.3.1",
