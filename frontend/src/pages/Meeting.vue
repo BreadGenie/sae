@@ -1,9 +1,5 @@
 <template>
-	<div
-		class="h-[100dvh] bg-gray-900 flex flex-col"
-		data-meeting-component
-		id="meetingContainer"
-	>
+	<div class="h-[100dvh] bg-gray-900 flex flex-col" data-meeting-component>
 		<!-- Loading state -->
 		<div v-if="isConnecting" class="flex-1 flex items-center justify-center">
 			<div class="flex items-center justify-center text-white space-x-4">

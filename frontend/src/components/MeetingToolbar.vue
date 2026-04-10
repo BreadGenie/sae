@@ -1,6 +1,6 @@
 <template>
 	<div
-		class="w-full overflow-visible shrink-0 transition-[height,margin] duration-300 ease-in-out relative z-40"
+		class="w-full overflow-hidden shrink-0 transition-[height,margin] duration-300 ease-in-out"
 		:style="{ height: toolbarHeight }"
 	>
 		<div
@@ -151,10 +151,7 @@
 					ref="dropdownContainer"
 					@click="handleDropdownClick"
 				>
-					<Dropdown
-						:options="moreOptions"
-						placement="top"
-					>
+					<Dropdown :options="moreOptions" placement="top">
 						<template #default>
 							<Button
 								variant="solid"
