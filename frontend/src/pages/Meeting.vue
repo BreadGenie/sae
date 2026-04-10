@@ -1,6 +1,5 @@
 <template>
 	<div
-		ref="meetingContainer"
 		class="h-[100dvh] bg-gray-900 flex flex-col"
 		data-meeting-component
 		id="meetingContainer"
@@ -363,7 +362,6 @@ const lobbyUsersForNotifications = computed(() => {
 // Refs
 const chatNotificationQueue = ref(null);
 const isReactionPickerOpen = ref(false);
-const meetingContainer = ref(null);
 const isFullscreen = ref(false);
 
 // Methods
@@ -590,7 +588,7 @@ const syncFullscreenState = () => {
 const toggleFullscreen = async () => {
 	try {
 		if (!document.fullscreenElement) {
-			const targetElement = meetingContainer.value;
+			const targetElement = document.body;
 
 			if (targetElement?.requestFullscreen) {
 				await targetElement.requestFullscreen();

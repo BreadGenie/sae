@@ -154,7 +154,6 @@
 					<Dropdown
 						:options="moreOptions"
 						placement="top"
-						:portal-to="dropdownPortalTarget"
 					>
 						<template #default>
 							<Button
@@ -299,9 +298,6 @@ const emit = defineEmits([
 
 const { windowWidth } = useResponsiveGrid();
 const isMobile = computed(() => windowWidth.value < 768);
-const dropdownPortalTarget = computed(() =>
-	props.isFullscreen ? "#meetingContainer" : "body",
-);
 
 const moreOptions = computed(() => [
 	{
