@@ -21,6 +21,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 ENV_FILE="$SCRIPT_DIR/.env"
 
+# ── Project name ──────────────────────────────────────────────────────────────
+# Use a fixed project name so Docker volume names are predictable regardless of
+# the directory the stack is installed into (e.g., /opt/meet-sfu vs ./deploy).
+COMPOSE_PROJECT="meet-sfu"
+
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -41,7 +46,7 @@ compose() {
     if [ "${DISABLE_SSL:-false}" != "true" ]; then
         profiles+=(--profile ssl)
     fi
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "${profiles[@]}" "$@"
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" "${profiles[@]}" "$@"
 }
 
 # ── Preflight checks ────────────────────────────────────────────────────────
@@ -147,7 +152,7 @@ cmd_setup() {
     if [ "${DISABLE_SSL:-false}" != "true" ]; then
         header "SSL Certificate"
         # Check if certs already exist inside the Docker volume
-        if docker run --rm -v deploy_certbot-certs:/certs alpine \
+        if docker run --rm -v "${COMPOSE_PROJECT}_certbot-certs:/certs" alpine \
             test -f "/certs/live/${DOMAIN:-}/fullchain.pem" 2>/dev/null; then
             info "SSL certificate already exists. Skipping provisioning."
             info "To re-provision, run: ./deploy.sh ssl-init"

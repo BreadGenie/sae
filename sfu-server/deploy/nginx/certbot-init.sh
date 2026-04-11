@@ -15,6 +15,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Use the same fixed project name as deploy.sh so Docker volume names are
+# consistent regardless of the installation directory.
+COMPOSE_PROJECT="meet-sfu"
+COMPOSE_CMD="docker compose -f $DEPLOY_DIR/docker-compose.yml -p $COMPOSE_PROJECT --env-file $DEPLOY_DIR/.env"
+
 # Load environment
 if [ ! -f "$DEPLOY_DIR/.env" ]; then
     echo "[-] .env file not found. Run: cp .env.example .env && edit .env"
@@ -76,7 +81,7 @@ NGINX
 
 # Step 2: Start nginx with the ACME-only config
 echo "▶ Starting nginx for ACME challenge..."
-docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$DEPLOY_DIR/.env" up -d nginx
+$COMPOSE_CMD up -d nginx
 sleep 3
 
 # Verify nginx is actually running
@@ -87,7 +92,7 @@ fi
 
 # Step 3: Request the certificate
 echo "▶ Requesting certificate from Let's Encrypt..."
-docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$DEPLOY_DIR/.env" \
+$COMPOSE_CMD \
     run --rm --entrypoint certbot certbot \
     certonly \
     --webroot \
@@ -109,7 +114,7 @@ if [ $CERT_EXIT -eq 0 ]; then
     echo ""
     echo "[+] SSL certificate provisioned successfully!"
     echo "[>] Restarting nginx with full SSL configuration..."
-    docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$DEPLOY_DIR/.env" up -d --force-recreate nginx
+    $COMPOSE_CMD up -d --force-recreate nginx
     echo "[+] Done! Your SFU is now available at https://$DOMAIN"
 else
     echo ""
