@@ -62,10 +62,6 @@ Add to your Frappe site's `site_config.json`:
 ./deploy.sh ssl-renew  # Force SSL certificate renewal
 ```
 
-### Deploying Behind Cloudflare / Reverse Proxy
-
-If SSL is handled upstream, set `DISABLE_SSL=true` in `.env`. This runs nginx on port 80 only and skips certificate provisioning.
-
 ### Updating
 
 When new changes are pushed to `develop`, the GitHub Actions workflow builds and pushes a new Docker image. To update the SFU on your server:

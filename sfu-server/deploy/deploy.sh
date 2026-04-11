@@ -42,11 +42,7 @@ header(){ echo -e "\n${CYAN}--- $* ---${NC}\n"; }
 
 # ── Compose wrapper ──────────────────────────────────────────────────────────
 compose() {
-    local profiles=()
-    if [ "${DISABLE_SSL:-false}" != "true" ]; then
-        profiles+=(--profile ssl)
-    fi
-    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" "${profiles[@]}" "$@"
+    docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" --profile ssl "$@"
 }
 
 # ── Preflight checks ────────────────────────────────────────────────────────
@@ -113,8 +109,8 @@ check_env() {
         ok "DOMAIN = $DOMAIN"
     fi
 
-    if [ "${DISABLE_SSL:-false}" != "true" ] && [ -z "${SSL_EMAIL:-}" ]; then
-        err "SSL_EMAIL must be set when SSL is enabled."
+    if [ -z "${SSL_EMAIL:-}" ]; then
+        err "SSL_EMAIL must be set for Let's Encrypt certificate provisioning."
         errors=true
     fi
 
@@ -122,7 +118,6 @@ check_env() {
     info "SFU Image: ${SFU_IMAGE:-ghcr.io/frappe/meet/sfu-server:latest}"
     info "SFU Port: ${PORT:-3000}"
     info "WebRTC ports: ${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40200} UDP"
-    info "SSL: $([ "${DISABLE_SSL:-false}" = "true" ] && echo "disabled (HTTP-only)" || echo "enabled")"
 
     if [ "$errors" = true ]; then
         echo ""
@@ -149,17 +144,15 @@ cmd_setup() {
     compose up -d sfu
     ok "SFU container started"
 
-    if [ "${DISABLE_SSL:-false}" != "true" ]; then
-        header "SSL Certificate"
-        # Check if certs already exist inside the Docker volume
-        if docker run --rm -v "${COMPOSE_PROJECT}_certbot-certs:/certs" alpine \
-            test -f "/certs/live/${DOMAIN:-}/fullchain.pem" 2>/dev/null; then
-            info "SSL certificate already exists. Skipping provisioning."
-            info "To re-provision, run: ./deploy.sh ssl-init"
-        else
-            warn "No SSL certificate found. Provisioning now..."
-            cmd_ssl_init
-        fi
+    header "SSL Certificate"
+    # Check if certs already exist inside the Docker volume
+    if docker run --rm -v "${COMPOSE_PROJECT}_certbot-certs:/certs" alpine \
+        test -f "/certs/live/${DOMAIN:-}/fullchain.pem" 2>/dev/null; then
+        info "SSL certificate already exists. Skipping provisioning."
+        info "To re-provision, run: ./deploy.sh ssl-init"
+    else
+        warn "No SSL certificate found. Provisioning now..."
+        cmd_ssl_init
     fi
 
     header "Starting all services"
@@ -170,25 +163,14 @@ cmd_setup() {
     echo ""
     header "Setup complete!"
     set -a; source "$ENV_FILE"; set +a
-    if [ "${DISABLE_SSL:-false}" = "true" ]; then
-        ok "SFU is running at http://$DOMAIN"
-    else
-        ok "SFU is running at https://$DOMAIN"
-    fi
+    ok "SFU is running at https://$DOMAIN"
     echo ""
     info "Next step: Add this to your Frappe site_config.json:"
     echo ""
-    if [ "${DISABLE_SSL:-false}" = "true" ]; then
-        echo "  {"
-        echo "    \"sfu_server_url\": \"http://$DOMAIN\","
-        echo "    \"sfu_secret\": \"<your JWT_SECRET from .env>\""
-        echo "  }"
-    else
-        echo "  {"
-        echo "    \"sfu_server_url\": \"https://$DOMAIN\","
-        echo "    \"sfu_secret\": \"<your JWT_SECRET from .env>\""
-        echo "  }"
-    fi
+    echo "  {"
+    echo "    \"sfu_server_url\": \"https://$DOMAIN\","
+    echo "    \"sfu_secret\": \"<your JWT_SECRET from .env>\""
+    echo "  }"
     echo ""
 }
 
@@ -240,12 +222,7 @@ cmd_status() {
     echo ""
 
     set -a; source "$ENV_FILE"; set +a
-    local health_url
-    if [ "${DISABLE_SSL:-false}" = "true" ]; then
-        health_url="http://127.0.0.1:${PORT:-3000}/health"
-    else
-        health_url="https://${DOMAIN}/health"
-    fi
+    local health_url="https://${DOMAIN}/health"
 
     info "Health check: $health_url"
     if curl -fsS "$health_url" 2>/dev/null | python3 -m json.tool 2>/dev/null; then
@@ -263,12 +240,6 @@ cmd_status() {
 cmd_ssl_init() {
     check_dependencies
     set -a; source "$ENV_FILE"; set +a
-
-    if [ "${DISABLE_SSL:-false}" = "true" ]; then
-        warn "SSL is disabled (DISABLE_SSL=true). Nothing to do."
-        exit 0
-    fi
-
     bash "$SCRIPT_DIR/nginx/certbot-init.sh"
 }
 

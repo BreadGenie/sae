@@ -2,7 +2,7 @@
 # Frappe Meet SFU — Nginx Configuration
 # ==============================================================================
 # Variables are substituted at container start by the nginx:alpine entrypoint:
-#   $DOMAIN, $SFU_UPSTREAM, $DISABLE_SSL
+#   $DOMAIN, $SFU_UPSTREAM
 # ==============================================================================
 
 map $http_upgrade $connection_upgrade {
@@ -24,41 +24,13 @@ server {
         root /var/www/certbot;
     }
 
-    # When SSL is disabled, proxy everything here
-    # When SSL is enabled, redirect to HTTPS
+    # Redirect all other traffic to HTTPS
     location / {
-        # This block is used in HTTP-only mode (DISABLE_SSL=true)
-        # When SSL is active, the ssl server block handles traffic
-        # and this block only serves ACME challenges above.
-        set $do_redirect "${DISABLE_SSL}";
-
-        if ($do_redirect = "false") {
-            return 301 https://$host$request_uri;
-        }
-
-        # HTTP-only mode: proxy to SFU
-        proxy_pass http://${SFU_UPSTREAM};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket tuning
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-        proxy_buffering off;
-
-        limit_req zone=sfu_signaling burst=50 nodelay;
+        return 301 https://$host$request_uri;
     }
 }
 
 # ── HTTPS server (port 443) ──────────────────────────────────────────────────
-# This block is always present but nginx will only serve it if the certs exist.
-# On first run before cert provisioning, nginx gracefully ignores missing certs
-# because we use ssl_certificate with a test/self-signed fallback.
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
