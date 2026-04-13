@@ -271,6 +271,11 @@ provide("meetingState", meetingState);
 provide("meetingId", meetingId.value);
 provide("sfuManager", sfuManager);
 provide("socket", socket);
+provide("isCurrentUserHost", isCurrentUserHost);
+provide("hostControls", {
+	muteParticipant: (...args) => handleMuteParticipant(...args),
+	kickParticipant: (...args) => handleKickParticipant(...args),
+});
 provide(
 	"meetingTitle",
 	computed(() => {

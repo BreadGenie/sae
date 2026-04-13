@@ -67,7 +67,7 @@
 
 		<div
 			v-if="showNetworkState && showNetworkIndicator"
-			class="absolute top-2 right-12 bg-gray-700 rounded-full p-1.5"
+			class="absolute top-2 right-12 bg-gray-700 rounded-full p-1.5 ring-1 ring-gray-800"
 			:title="networkQualityMessage"
 		>
 			<WifiAlertIcon class="w-4 h-4 text-white" />
@@ -75,20 +75,52 @@
 
 		<div
 			v-if="showAudioState && !isAudioEnabled"
-			class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5"
+			class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5 ring-1 ring-gray-800"
 		>
 			<lucide-mic-off class="w-4 h-4 text-white" />
 		</div>
 
-		<button
-			v-if="canShowPinButton"
-			class="absolute bottom-2 right-2 rounded-full bg-gray-700/80 p-1.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-			:title="isPinned ? 'Unpin' : 'Pin'"
-			@click.stop="togglePin"
+		<!-- Participant action toolbar -->
+		<div
+			v-if="showActionToolbar"
+			class="absolute bottom-2 right-2 flex items-center gap-0.5 rounded-full bg-gray-700 p-1 text-white opacity-0 group-hover:opacity-100 transition-opacity ring-1 ring-gray-800"
+			@click.stop
 		>
-			<lucide-pin-off v-if="isPinned" class="w-3.5 h-3.5" />
-			<lucide-pin v-else class="w-3.5 h-3.5" />
-		</button>
+			<button
+				v-if="canShowPinButton"
+				class="rounded-full p-1.5 hover:bg-gray-600 transition-colors"
+				:class="{ 'bg-gray-600': isPinned }"
+				:title="isPinned ? 'Unpin participant' : 'Pin participant'"
+				@click="togglePin"
+			>
+				<lucide-pin-off v-if="isPinned" class="w-3.5 h-3.5" />
+				<lucide-pin v-else class="w-3.5 h-3.5" />
+			</button>
+			<button
+				v-if="canShowHostControls && isAudioEnabled"
+				class="rounded-full p-1.5 hover:bg-gray-600 transition-colors"
+				title="Mute participant"
+				@click="handleMute"
+			>
+				<lucide-mic-off class="w-3.5 h-3.5" />
+			</button>
+			<button
+				v-if="canShowHostControls"
+				class="rounded-full p-1.5 hover:bg-gray-600 transition-colors"
+				title="Remove participant"
+				@click="showKickDialog = true"
+			>
+				<lucide-user-x class="w-3.5 h-3.5" />
+			</button>
+		</div>
+
+		<!-- Kick Confirmation Dialog -->
+		<KickParticipantDialog
+			v-if="canShowHostControls"
+			v-model="showKickDialog"
+			:participant-name="displayName || 'this participant'"
+			@confirm="handleKick"
+		/>
 	</div>
 </template>
 
@@ -98,10 +130,13 @@ import { useAudioStream } from "../composables/useAudioLevels.js";
 import { useNetworkQuality } from "../composables/useNetworkQuality";
 import WifiAlertIcon from "../icons/WifiAlertIcon.vue";
 import AudioIndicator from "./AudioIndicator.vue";
+import KickParticipantDialog from "./KickParticipantDialog.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 import NamePill from "./NamePill.vue";
 
 const meetingState = inject("meetingState");
+const isCurrentUserHost = inject("isCurrentUserHost", ref(false));
+const hostControls = inject("hostControls", null);
 
 const props = defineProps({
 	participant: {
@@ -280,6 +315,25 @@ const togglePin = () => {
 	} else {
 		meetingState.pinTile(props.pinType, targetId);
 	}
+};
+
+const canShowHostControls = computed(() => {
+	return !props.isLocal && isCurrentUserHost.value && !!hostControls;
+});
+
+const showActionToolbar = computed(() => {
+	return canShowPinButton.value || canShowHostControls.value;
+});
+
+const showKickDialog = ref(false);
+
+const handleMute = () => {
+	hostControls?.muteParticipant(props.participant.user_id);
+};
+
+const handleKick = (ban) => {
+	hostControls?.kickParticipant(props.participant.user_id, ban);
+	showKickDialog.value = false;
 };
 </script>
 

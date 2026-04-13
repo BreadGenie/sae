@@ -11,6 +11,7 @@
 		<!-- ── Pinned area ────────────────────────────────────────────────── -->
 		<div
 			v-if="mode === 'sidebar' && pinnedTile"
+			ref="pinnedPanel"
 			class="group/pinned relative bg-black rounded-lg overflow-hidden flex items-center justify-center flex-1 sm:flex-1 min-h-0"
 		>
 			<ParticipantTile
@@ -33,7 +34,7 @@
 				:showRaisedHand="false"
 				:showAudioState="false"
 				:showNetworkState="false"
-				class="absolute inset-0 w-full h-full"
+				class="absolute inset-0 w-full h-full pin-anim-target"
 			/>
 
 			<!-- Pinned participant tile (fills the area) -->
@@ -46,7 +47,7 @@
 				:isActiveSpeaker="activeSpeakerIds.includes(pinnedParticipant.user_id)"
 				:videoRef="getRemoteVideoRef(pinnedParticipant.user_id)"
 				:tileCount="1"
-				class="absolute inset-0 w-full h-full"
+				class="absolute inset-0 w-full h-full pin-anim-target"
 			/>
 
 		</div>
@@ -79,6 +80,7 @@
 			<ParticipantTile
 				v-for="shareTile in visibleScreenShareTiles"
 				:key="shareTile.pinId"
+				:data-tile-id="`screenshare-${shareTile.pinId}`"
 				:participant="shareTile.participant"
 				:isLocal="false"
 				:isVideoEnabled="true"
@@ -105,6 +107,7 @@
 				:key="'group-' + participant.user_id"
 			>
 				<ParticipantTile
+					:data-tile-id="`participant-${participant.user_id}`"
 					:class="{ 'hidden-tile': !participant.isVisible }"
 					:participant="participant"
 					:isLocal="false"
@@ -140,7 +143,7 @@
 </template>
 
 <script setup>
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, nextTick, ref, watch } from "vue";
 import { useLayout } from "../composables/useLayout";
 import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
 import { getInitials } from "../utils/text";
@@ -159,6 +162,7 @@ const getParticipantName = inject("getParticipantName");
 const { registerTile } = useTileAdaptiveStreaming();
 
 const container = ref(null);
+const pinnedPanel = ref(null);
 
 // Cache ref handlers to avoid UI flicker
 const videoRefHandlers = new Map();
@@ -241,10 +245,12 @@ watch(
 
 const screenShareTileParticipants = computed(() => {
 	return displayScreenShares.value.map((share) => {
-		const displayName =
-			currentUser.value?.user_id === share.participantId
-				? "Your screen"
-				: `${getParticipantName(share.participantId)}'s screen`;
+		const participantName = getParticipantName(share.participantId);
+		const isLocalSharer = currentUser.value?.user_id === share.participantId;
+		const localName = currentUser.value?.full_name || currentUser.value?.name;
+		const displayName = `${
+			isLocalSharer ? localName : participantName
+		}'s screen`;
 
 		return {
 			pinId: share.consumerId,
@@ -275,6 +281,63 @@ const visibleScreenShareTiles = computed(() => {
 	}
 	return screenShareTileParticipants.value;
 });
+
+const getPinnedSourceSelector = (tile) => {
+	if (!tile?.id || !tile?.type) return null;
+	return `[data-tile-id="${tile.type}-${tile.id}"]`;
+};
+
+// Animate pinned tile from its position in the grid to the pinned area
+watch(
+	pinnedTile,
+	async (nextPinned, prevPinned) => {
+		if (mode.value !== "sidebar" || !nextPinned?.id) return;
+		const pinChanged =
+			!prevPinned ||
+			prevPinned.id !== nextPinned.id ||
+			prevPinned.type !== nextPinned.type;
+		if (!pinChanged) return;
+
+		const sourceSelector = getPinnedSourceSelector(nextPinned);
+		const sourceEl = sourceSelector
+			? container.value?.querySelector(sourceSelector)
+			: null;
+		const sourceRect = sourceEl?.getBoundingClientRect();
+		if (!sourceRect) return;
+
+		await nextTick();
+
+		const targetEl = pinnedPanel.value?.querySelector(".pin-anim-target");
+		const targetRect = targetEl?.getBoundingClientRect();
+		if (!targetRect || !targetEl) return;
+
+		const dx = sourceRect.left - targetRect.left;
+		const dy = sourceRect.top - targetRect.top;
+		const sx = sourceRect.width / targetRect.width;
+		const sy = sourceRect.height / targetRect.height;
+
+		targetEl.animate(
+			[
+				{
+					transformOrigin: "top left",
+					transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+					opacity: 0.9,
+				},
+				{
+					transformOrigin: "top left",
+					transform: "translate(0px, 0px) scale(1, 1)",
+					opacity: 1,
+				},
+			],
+			{
+				duration: 360,
+				easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+				fill: "both",
+			},
+		);
+	},
+	{ flush: "pre" },
+);
 
 // ── Local participant object ───────────────────────────────────────────────────
 
@@ -394,7 +457,7 @@ const floatingReactions = computed(() => {
 }
 
 .tile-move {
-	transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .tile-leave-active {
