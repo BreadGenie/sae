@@ -79,8 +79,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	const confirmScreenShareOverride = () =>
 		new Promise((resolve) => {
 			confirmDialog({
-				title: "Replace Active Screen Share?",
-				message: "Someone is already sharing their screen. Start yours anyway?",
+				title: "Start Screen Share Anyway?",
+				message:
+					"Someone is already sharing their screen. Starting yours may result in multiple active screen shares.",
 				onConfirm: ({ hideDialog }) => {
 					hideDialog();
 					resolve(true);
