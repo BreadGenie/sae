@@ -29,7 +29,7 @@ interface ContainerStyle {
 	"flex-wrap"?: string;
 	"justify-content"?: string;
 	"align-content"?: string;
-	"column-gap"?: string;
+	gap?: string;
 	overflow?: string;
 	"grid-auto-rows"?: string;
 	maxHeight?: string;
