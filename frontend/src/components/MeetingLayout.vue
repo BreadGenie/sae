@@ -188,12 +188,8 @@ const displayScreenShares = computed(
 	() => meetingState.displayScreenShares.value,
 );
 
-// Track whether user manually unpinned the current screen share
-const screenShareDismissed = ref(false);
-
 // ── Auto-pin screen shares ────────────────────────────────────────────────────
 // When a NEW screen share starts, pin it. When it ends, clean up.
-// If the user manually unpinned, don't re-pin the same share.
 
 watch(
 	displayScreenShares,
@@ -202,22 +198,16 @@ watch(
 		const oldId = oldShares?.[0]?.consumerId;
 
 		if (shares.length > 0 && newId !== oldId) {
-			// New screen share started — pin it and reset dismissed flag
-			screenShareDismissed.value = false;
+			// New screen share started — pin it
 			meetingState.pinTile("screenshare", newId);
-		} else if (
-			shares.length > 0 &&
-			!screenShareDismissed.value &&
-			!pinnedTile.value
-		) {
-			// No pin and not dismissed — auto-pin (initial load)
+		} else if (shares.length > 0 && !pinnedTile.value) {
+			// No pin — auto-pin (initial load)
 			meetingState.pinTile("screenshare", newId);
 		} else if (
 			shares.length === 0 &&
 			pinnedTile.value?.type === "screenshare"
 		) {
 			meetingState.unpinTile();
-			screenShareDismissed.value = false;
 		}
 	},
 	{ immediate: true },

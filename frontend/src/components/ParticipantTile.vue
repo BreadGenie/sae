@@ -83,7 +83,7 @@
 		<!-- Participant action toolbar -->
 		<div
 			v-if="showActionToolbar"
-			class="absolute bottom-2 right-2 flex items-center gap-0.5 rounded-full bg-gray-700 p-1 text-white opacity-0 group-hover:opacity-100 transition-opacity ring-1 ring-gray-800"
+			class="absolute bottom-2 right-2 flex items-center gap-0.5 rounded-full bg-gray-700 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity ring-1 ring-gray-800"
 			@click.stop
 		>
 			<button
