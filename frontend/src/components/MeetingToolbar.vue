@@ -1,14 +1,15 @@
 <template>
 	<div
-		class="w-full overflow-hidden shrink-0 transition-[height,margin] duration-300 ease-in-out"
+		class="w-full overflow-hidden shrink-0 transition-[height,margin] duration-500 ease-in-out"
+		:class="{ 'mb-4': isVisible }"
 		:style="{ height: toolbarHeight }"
 	>
 		<div
-			class="flex justify-center px-4 transition-transform duration-300 ease-in-out"
+			class="flex justify-center px-4 transition-transform duration-500 ease-in-out"
 			:class="isVisible ? 'translate-y-0' : 'translate-y-full'"
 		>
 			<div
-				class="flex items-center gap-3 p-4 bg-black/80 backdrop-blur-md rounded-full border border-white/10 shadow-xl pointer-events-auto transition-all duration-300"
+				class="flex items-center gap-3 p-4 bg-black/80 backdrop-blur-md rounded-full border border-white/10 shadow-xl pointer-events-auto transition-all duration-500"
 				@mouseenter="onMouseEnter"
 				@mouseleave="onMouseLeave"
 			>

@@ -45,15 +45,8 @@
 					<!-- Video column: video area + toolbar -->
 					<div class="flex flex-col min-h-0">
 						<!-- Video area -->
-						<div class="p-4 flex flex-col flex-1 min-h-0 overflow-auto text-white">
-							<!-- Screen share active view -->
-							<ScreenShareLayout
-								v-if="meetingState.displayScreenShares.value.length"
-								@open-people-panel="togglePeople"
-							/>
-
-							<!-- Normal video grid -->
-							<VideoGrid v-else @open-people-panel="togglePeople" />
+						<div class="p-4 flex flex-col flex-1 min-h-0 text-white">
+							<MeetingLayout @open-people-panel="togglePeople" />
 						</div>
 
 						<!-- Meeting controls -->
@@ -181,13 +174,12 @@ import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import LobbyOverlay from "../components/LobbyOverlay.vue";
+import MeetingLayout from "../components/MeetingLayout.vue";
 import MeetingPreview from "../components/MeetingPreview.vue";
 import MeetingToolbar from "../components/MeetingToolbar.vue";
 import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
-import ScreenShareLayout from "../components/ScreenShareLayout.vue";
 import Spinner from "../components/Spinner.vue";
-import VideoGrid from "../components/VideoGrid.vue";
 
 import { provideMeetingContext } from "../composables/useMeetingContext.js";
 import { useMeetingDoc } from "../composables/useMeetingDoc";

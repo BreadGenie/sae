@@ -1,4 +1,4 @@
-import { createResource, frappeRequest, toast } from "frappe-ui";
+import { confirmDialog, createResource, frappeRequest, toast } from "frappe-ui";
 import { defineAsyncComponent, h, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -75,6 +75,19 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 
 	let noiseCancellationSession = null;
 	let stabilityCheckTimeout = null;
+
+	const confirmScreenShareOverride = () =>
+		new Promise((resolve) => {
+			confirmDialog({
+				title: "Replace Active Screen Share?",
+				message: "Someone is already sharing their screen. Start yours anyway?",
+				onConfirm: ({ hideDialog }) => {
+					hideDialog();
+					resolve(true);
+				},
+				onCancel: () => resolve(false),
+			});
+		});
 
 	const replacePublishedVideoTrack = async (
 		stream,
@@ -882,6 +895,15 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					sfuClient.sendScreenShare("stop_share");
 				}
 			} else {
+				const hasOngoingRemoteShare =
+					(meetingState.activeScreenShareConsumers.value || []).length > 0;
+				if (hasOngoingRemoteShare) {
+					const shouldContinue = await confirmScreenShareOverride();
+					if (!shouldContinue) {
+						return;
+					}
+				}
+
 				// Start screen sharing (Firefox-friendly)
 				let screenStream = null;
 				const getDisplay =

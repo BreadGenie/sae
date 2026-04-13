@@ -1,9 +1,13 @@
 <template>
-	<div class="relative bg-gray-800 rounded-lg overflow-hidden min-h-0">
+	<div
+		class="group relative rounded-lg overflow-hidden min-h-0"
+		:class="tileBackgroundClass"
+	>
 		<video
 			:ref="videoRef"
-			:participant-id="participant.user_id"
-			class="w-full h-full object-cover remote-video"
+			:data-participant-id="participant.user_id"
+			class="block w-full h-full remote-video"
+			:class="[videoObjectFitClass, videoBackgroundClass]"
 			:style="{ transform: isLocal ? 'scaleX(-1) translateZ(0)' : 'translateZ(0)' }"
 			autoplay
 			muted
@@ -11,8 +15,9 @@
 		/>
 
 		<div
-			v-if="!isVideoEnabled"
-			class="absolute inset-0 bg-gray-700 flex items-center justify-center pointer-events-none"
+			v-if="showAvatar && !isVideoEnabled"
+			class="absolute inset-0 flex items-center justify-center pointer-events-none"
+			:class="avatarBackgroundClass"
 		>
 			<MeetingAvatar
 				:label="participant.initials"
@@ -22,17 +27,17 @@
 		</div>
 
 		<NamePill
-			:name="participant.user_name || participant.user_id"
-			size="md"
-			position="bottom-left"
+			:name="displayName"
+			:size="labelSize"
+			:position="labelPosition"
 		/>
 
 		<!-- Reaction -->
 		<div
-			v-if="currentReaction"
+			v-if="showReaction && currentReaction"
 			class="absolute top-1 px-2 py-1 rounded-md text-xl pointer-events-none animate-pop"
 			:class="{ 'left-2': !isHandRaised, 'left-10': isHandRaised }"
-			:aria-label="`Reaction ${currentReaction.emoji} from ${participant.user_name || participant.user_id}`"
+			:aria-label="`Reaction ${currentReaction.emoji} from ${displayName}`"
 			role="img"
 		>
 			<span class="text-2xl">{{ currentReaction.emoji }}</span>
@@ -40,14 +45,17 @@
 
 		<!-- Raised Hand -->
 		<div
-			v-if="isHandRaised"
+			v-if="showRaisedHand && isHandRaised"
 			class="absolute top-2 left-2 px-2 py-1 rounded-full !bg-[#e54e17] text-white pointer-events-none flex items-center justify-center"
-			:aria-label="`${participant.user_name || participant.user_id} has raised their hand`"
+			:aria-label="`${displayName} has raised their hand`"
 		>
 			<lucide-hand class="w-4 h-4" :class="{ wave: isAnimating }" />
 		</div>
 
-		<div v-if="isAudioEnabled && stream" class="absolute top-2 right-2 rounded-full bg-gray-700 p-1.5">
+		<div
+			v-if="showAudioState && isAudioEnabled && stream"
+			class="absolute top-2 right-2 rounded-full bg-gray-700 p-1.5"
+		>
 			<AudioIndicator
 				:mediaStream="stream"
 				:isActive="true"
@@ -58,16 +66,29 @@
 		</div>
 
 		<div
-			v-if="showNetworkIndicator"
+			v-if="showNetworkState && showNetworkIndicator"
 			class="absolute top-2 right-12 bg-gray-700 rounded-full p-1.5"
 			:title="networkQualityMessage"
 		>
 			<WifiAlertIcon class="w-4 h-4 text-white" />
 		</div>
 
-		<div v-if="!isAudioEnabled" class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5">
+		<div
+			v-if="showAudioState && !isAudioEnabled"
+			class="absolute top-2 right-2 bg-gray-700 rounded-full p-1.5"
+		>
 			<lucide-mic-off class="w-4 h-4 text-white" />
 		</div>
+
+		<button
+			v-if="canShowPinButton"
+			class="absolute bottom-2 right-2 rounded-full bg-gray-700/80 p-1.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+			:title="isPinned ? 'Unpin' : 'Pin'"
+			@click.stop="togglePin"
+		>
+			<lucide-pin-off v-if="isPinned" class="w-3.5 h-3.5" />
+			<lucide-pin v-else class="w-3.5 h-3.5" />
+		</button>
 	</div>
 </template>
 
@@ -111,11 +132,79 @@ const props = defineProps({
 		type: Number,
 		default: 1,
 	},
+	labelSize: {
+		type: String,
+		default: "md",
+	},
+	labelPosition: {
+		type: String,
+		default: "bottom-left",
+	},
+	pinType: {
+		type: String,
+		default: "participant",
+	},
+	pinId: {
+		type: String,
+		default: null,
+	},
+	showPinButton: {
+		type: Boolean,
+		default: true,
+	},
+	showAvatar: {
+		type: Boolean,
+		default: true,
+	},
+	showReaction: {
+		type: Boolean,
+		default: true,
+	},
+	showRaisedHand: {
+		type: Boolean,
+		default: true,
+	},
+	showAudioState: {
+		type: Boolean,
+		default: true,
+	},
+	showNetworkState: {
+		type: Boolean,
+		default: true,
+	},
+	tileBackgroundClass: {
+		type: String,
+		default: "bg-gray-800",
+	},
+	avatarBackgroundClass: {
+		type: String,
+		default: "bg-gray-700",
+	},
+	videoObjectFitClass: {
+		type: String,
+		default: "object-cover",
+	},
+	videoBackgroundClass: {
+		type: String,
+		default: "",
+	},
+	displayName: {
+		type: String,
+		default: "",
+	},
 });
 
 const { stream } = useAudioStream(props.participant.user_id);
 
 const { networkQuality } = useNetworkQuality();
+
+const displayName = computed(() => {
+	return (
+		props.displayName ||
+		props.participant.user_name ||
+		props.participant.user_id
+	);
+});
 
 const computedNetworkQuality = computed(() => {
 	if (props.isLocal) {
@@ -131,7 +220,7 @@ const showNetworkIndicator = computed(() => {
 const networkQualityMessage = computed(() => {
 	const quality = computedNetworkQuality.value;
 	const isLocal = props.isLocal;
-	const name = props.participant.user_name || "This participant";
+	const name = displayName.value || "This participant";
 
 	if (quality === "critical") {
 		return isLocal
@@ -166,6 +255,32 @@ watch(isHandRaised, (newValue, oldValue) => {
 		}, 1500);
 	}
 });
+
+const isPinned = computed(() => {
+	const pinned = meetingState?.pinnedTile?.value;
+	const targetId = props.pinId || props.participant.user_id;
+	return pinned?.type === props.pinType && pinned?.id === targetId;
+});
+
+const canShowPinButton = computed(() => {
+	const targetId = props.pinId || props.participant.user_id;
+	return (
+		!props.isLocal &&
+		props.showPinButton &&
+		!!meetingState?.pinTile &&
+		!!targetId
+	);
+});
+
+const togglePin = () => {
+	const targetId = props.pinId || props.participant.user_id;
+	if (!targetId) return;
+	if (isPinned.value) {
+		meetingState.unpinTile();
+	} else {
+		meetingState.pinTile(props.pinType, targetId);
+	}
+};
 </script>
 
 <style scoped>
