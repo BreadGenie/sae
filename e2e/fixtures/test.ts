@@ -42,28 +42,6 @@ async function loginViaApi(request: APIRequestContext): Promise<void> {
 	}
 }
 
-async function createMeetingViaApi(
-	request: APIRequestContext,
-	meetingType: MeetingType = "open",
-): Promise<string> {
-	const response = await request.post("/api/method/meet.api.meeting.create", {
-		form: {
-			meeting_type: meetingType,
-		},
-	});
-
-	if (!response.ok()) {
-		throw new Error(`Meeting creation failed with status ${response.status()}`);
-	}
-
-	const payload = (await response.json()) as { message?: string };
-	if (!payload.message) {
-		throw new Error("Meeting creation returned no meeting id");
-	}
-
-	return payload.message;
-}
-
 async function prepareContext(context: BrowserContext): Promise<void> {
 	await context.addInitScript({ content: STUB_MEDIA_SCRIPT });
 	await context.grantPermissions(["camera", "microphone"]);
@@ -103,6 +81,30 @@ async function joinFromPreview(page: Page): Promise<void> {
 	}
 
 	await waitForMeetingReady(page);
+}
+
+async function createMeetingViaUi(
+	page: Page,
+	meetingType: MeetingType = "open",
+): Promise<string> {
+	await page.getByTestId("home-page").waitFor({ state: "visible", timeout: 20_000 });
+
+	if (meetingType === "open") {
+		await page.getByTestId("create-open-meeting-button").click();
+	} else {
+		await page.getByTestId("create-meeting-options").click();
+		await page.getByRole("menuitem", { name: "Create a restricted meeting" }).click();
+	}
+
+	await page.waitForURL(/\/meet\/[a-z0-9-]+(?:\?created=true)?$/);
+
+	const url = new URL(page.url());
+	const match = url.pathname.match(/\/meet\/([a-z0-9-]+)$/);
+	if (!match) {
+		throw new Error(`Could not extract meeting id from URL: ${page.url()}`);
+	}
+
+	return match[1];
 }
 
 async function buildParticipant(browser: Browser): Promise<Participant> {
@@ -149,7 +151,7 @@ export const test = base.extend<TestFixtures>({
 
 	createMeeting: async ({ hostPage }, use) => {
 		await use(async (meetingType = "open") => {
-			return createMeetingViaApi(hostPage.context().request, meetingType);
+			return createMeetingViaUi(hostPage, meetingType);
 		});
 	},
 
