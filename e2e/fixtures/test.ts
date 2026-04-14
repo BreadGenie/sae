@@ -1,20 +1,17 @@
 import {
 	expect,
 	test as base,
-	type APIRequestContext,
 	type Browser,
 	type BrowserContext,
 	type Page,
 } from "@playwright/test";
 import { STUB_MEDIA_SCRIPT } from "./media";
+import { loginViaApi } from "../helpers/auth";
+import { createMeetingViaApi, type MeetingType } from "../helpers/meeting";
 
-const HOST_EMAIL = process.env.E2E_HOST_EMAIL ?? "Administrator";
-const HOST_PASSWORD = process.env.E2E_HOST_PASSWORD ?? "admin";
 const isCI = !!process.env.CI;
 const previewTimeout = isCI ? 30_000 : 20_000;
 const meetingReadyTimeout = isCI ? 45_000 : 20_000;
-
-type MeetingType = "open" | "restricted";
 
 interface Participant {
 	context: BrowserContext;
@@ -29,20 +26,8 @@ interface TestFixtures {
 	hostPage: Page;
 	meetingId: string;
 	createMeeting: (meetingType?: MeetingType) => Promise<string>;
+	createMeetingViaUi: (meetingType?: MeetingType) => Promise<string>;
 	createParticipant: () => Promise<Participant>;
-}
-
-async function loginViaApi(request: APIRequestContext): Promise<void> {
-	const response = await request.post("/api/method/login", {
-		form: {
-			usr: HOST_EMAIL,
-			pwd: HOST_PASSWORD,
-		},
-	});
-
-	if (!response.ok()) {
-		throw new Error(`Host login failed with status ${response.status()}`);
-	}
 }
 
 async function prepareContext(context: BrowserContext): Promise<void> {
@@ -157,6 +142,12 @@ export const test = base.extend<TestFixtures>({
 	},
 
 	createMeeting: async ({ hostPage }, use) => {
+		await use(async (meetingType = "open") => {
+			return createMeetingViaApi(hostPage.request, meetingType);
+		});
+	},
+
+	createMeetingViaUi: async ({ hostPage }, use) => {
 		await use(async (meetingType = "open") => {
 			return createMeetingViaUi(hostPage, meetingType);
 		});
