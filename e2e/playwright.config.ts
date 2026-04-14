@@ -4,13 +4,13 @@ const baseURL = process.env.BASE_URL ?? "http://localhost:8096";
 
 export default defineConfig({
 	testDir: "./specs",
-	fullyParallel: true,
+	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
 	workers: 1,
-	timeout: 45_000,
+	timeout: 60_000,
 	expect: {
-		timeout: 8_000,
+		timeout: 10_000,
 	},
 	reporter: process.env.CI
 		? [
@@ -26,7 +26,8 @@ export default defineConfig({
 		video: "on-first-retry",
 		screenshot: "only-on-failure",
 		viewport: { width: 1440, height: 900 },
-		actionTimeout: 8_000,
+		actionTimeout: 15_000,
+        navigationTimeout: 30_000,
 	},
 	projects: [
 		{

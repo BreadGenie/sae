@@ -2,8 +2,6 @@ import { test, expect, joinFromPreview } from "../fixtures/test";
 
 test.describe("Multi participant", () => {
 	test("host and two guests see the same meeting", async ({ hostPage, meetingId, createParticipant }) => {
-		test.setTimeout(process.env.CI ? 90_000 : 45_000);
-
 		const guestOne = await createParticipant();
 		const guestTwo = await createParticipant();
 
