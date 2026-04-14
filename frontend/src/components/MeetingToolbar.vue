@@ -12,6 +12,7 @@
 				class="flex items-center gap-3 p-4 bg-black/80 backdrop-blur-md rounded-full border border-white/10 shadow-xl pointer-events-auto transition-all duration-500"
 				@mouseenter="onMouseEnter"
 				@mouseleave="onMouseLeave"
+				data-testid="meeting-toolbar"
 			>
 				<!-- Microphone -->
 				<Button
@@ -23,6 +24,7 @@
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': !isMicOn,
 					}"
 					:title="'Toggle Audio (' + ($platform === 'mac' ? '⌘+D' : 'Ctrl+D') + ')'"
+					data-testid="toolbar-microphone"
 				>
 					<template #icon>
 						<lucide-mic-off v-if="!isMicOn" class="w-5 h-5 text-white" />
@@ -41,6 +43,7 @@
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': !isCameraOn,
 					}"
 					:title="'Toggle Video (' + ($platform === 'mac' ? '⌘+E' : 'Ctrl+E') + ')'"
+					data-testid="toolbar-camera"
 				>
 					<template #icon>
 						<lucide-video-off v-if="!isCameraOn" class="w-5 h-5 text-white" />
@@ -60,6 +63,7 @@
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': isScreenSharing,
 					}"
 					title="Toggle Screen Share"
+					data-testid="toolbar-screen-share"
 				>
 					<template #icon>
 						<lucide-monitor-up v-if="!isScreenSharing" class="w-5 h-5 text-white" />
@@ -85,6 +89,7 @@
 								'!bg-gray-800 hover:!bg-gray-800': isReactionPickerOpen,
 							}"
 							title="Reactions & Raise Hand"
+							data-testid="toolbar-reactions"
 						>
 							<template #icon>
 								<lucide-smile class="w-5 h-5 text-white" />
@@ -105,6 +110,7 @@
 							'!bg-gray-800 hover:!bg-gray-800': isChatOpen,
 						}"
 						title="Show Chat"
+						data-testid="toolbar-chat"
 					>
 						<template #icon>
 							<lucide-message-square-off
@@ -134,6 +140,7 @@
 							'!bg-gray-800 hover:!bg-gray-800': isPeopleOpen,
 						}"
 						title="Show Participants"
+						data-testid="toolbar-people"
 					>
 						<template #icon>
 							<lucide-users class="w-5 h-5 text-white" />
@@ -160,6 +167,7 @@
 								size="2xl"
 								class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95"
 								title="More options"
+								data-testid="toolbar-more"
 							>
 								<template #icon>
 									<lucide-more-horizontal class="w-5 h-5 text-white" />
@@ -177,6 +185,7 @@
 					size="2xl"
 					class="!rounded-full p-0 !bg-opacity-90 hover:!bg-opacity-100 transition-all duration-200 hover:scale-105 active:scale-95 !bg-red-600 hover:!bg-red-500"
 					title="End Call"
+					data-testid="toolbar-end-call"
 				>
 					<template #icon>
 						<lucide-phone-off class="w-5 h-5 text-white" />

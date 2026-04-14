@@ -7,9 +7,10 @@
 		leave-from-class="opacity-100 transform translate-x-0"
 		leave-to-class="opacity-0 transform translate-x-full"
 	>
-		<div v-show="open" class="h-full py-4 flex justify-end">
+		<div v-show="open" class="h-full py-4 flex justify-end" data-testid="chat-panel-wrapper">
 			<div
 				class="w-80 sm:w-96 bg-white border border-gray-200 shadow-xl flex flex-col z-40 h-full rounded-lg mr-4"
+				data-testid="chat-panel"
 			>
 				<div class="flex items-center justify-between p-4 border-b border-gray-200">
 					<div class="text-gray-900 text-base font-medium">Chat</div>
@@ -19,7 +20,7 @@
 					/>
 				</div>
 
-				<div ref="listEl" class="flex-1 overflow-y-auto p-4 space-y-4">
+				<div ref="listEl" class="flex-1 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
 					<div v-for="group in groupedMessages" :key="group.id" class="min-w-0">
 						<div class="text-xs flex items-center gap-2">
 							<span class="truncate font-medium">{{ group.user_name }}</span>
@@ -49,8 +50,9 @@
 							placeholder="Type a message"
 							class="flex-1"
 							autocomplete="off"
+							data-testid="chat-input"
 						/>
-						<Button size="md" type="submit" variant="outline"> Send </Button>
+						<Button size="md" type="submit" variant="outline" data-testid="chat-send"> Send </Button>
 					</div>
 					<EmojiPicker
 						:show="showEmojiPicker"

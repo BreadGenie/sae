@@ -1,21 +1,5 @@
-# Dependencies
 node_modules/
-
-# Test results
-test-results/
 playwright-report/
+test-results/
 results.xml
-
-<<<<<<< HEAD
-# Authentication state
-.auth/
-
-=======
->>>>>>> 9694b54 (test: add e2e tests)
-# Temporary files
-*.log
 .DS_Store
-
-# Generated resources
-resources/fake-audio.wav
-resources/fake-video.y4m

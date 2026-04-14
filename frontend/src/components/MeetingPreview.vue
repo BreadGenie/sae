@@ -1,5 +1,5 @@
 <template>
-	<div class="flex-1 flex flex-col">
+	<div class="flex-1 flex flex-col" data-testid="meeting-preview">
 		<div class="bg-gray-50 px-6 pt-4 flex-shrink-0">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2 cursor-pointer" @click="$router.push('/')">
@@ -24,6 +24,7 @@
 					<div class="max-w-3xl mx-auto w-full">
 						<div
 							class="relative bg-black rounded-xl overflow-hidden aspect-video shadow-xl group h-full"
+							data-testid="preview-video-shell"
 						>
 							<video
 								:ref="(el) => setLocalVideoRef && setLocalVideoRef(el)"
@@ -105,6 +106,7 @@
 									placeholder="John Doe"
 									:maxlength="50"
 									autocomplete="off"
+									data-testid="guest-name-input"
 								/>
 
 								<Button
@@ -114,6 +116,7 @@
 									:loading="isConnecting || joinGuestAPI.loading"
 									:disabled="isGuest && !guestName.trim()"
 									class="w-full"
+									data-testid="join-meeting-preview-button"
 								>
 									<template #prefix>
 										<lucide-video class="w-5 h-5" />

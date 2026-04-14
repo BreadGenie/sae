@@ -7,9 +7,10 @@
 		leave-from-class="opacity-100 transform translate-x-0"
 		leave-to-class="opacity-0 transform translate-x-full"
 	>
-		<div v-show="open" class="h-full py-4 flex justify-end">
+		<div v-show="open" class="h-full py-4 flex justify-end" data-testid="people-panel-wrapper">
 			<div
 				class="w-80 sm:w-96 bg-white border border-gray-200 shadow-xl flex flex-col z-40 h-full rounded-lg mr-4"
+				data-testid="people-panel"
 			>
 				<div class="flex items-center justify-between p-4 border-b border-gray-200">
 					<div class="text-ink-gray-900 text-base font-medium">
@@ -27,6 +28,7 @@
 						type="text"
 						placeholder="Search people"
 						autocomplete="off"
+						data-testid="people-search"
 					>
 						<template #prefix>
 							<lucide-search class="w-4 h-4 text-ink-gray-5" />

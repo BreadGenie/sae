@@ -10,6 +10,7 @@
 				:align="'center'"
 				:side-offset="12"
 				class="bg-black/90 rounded-2xl p-3 shadow-xl border border-white/10 max-w-sm w-full z-[70]"
+				data-testid="reaction-picker"
 			>
 				<div class="text-center">
 					<div class="grid grid-cols-5 gap-3 mb-4">
@@ -19,6 +20,7 @@
 							@click="handleReactionSelect(emoji)"
 							class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-2xl"
 							:aria-label="`Send ${emoji} reaction`"
+							:data-testid="`reaction-${emoji}`"
 						>
 							{{ emoji }}
 						</button>
@@ -27,6 +29,7 @@
 						@click="handleRaiseHand"
 						class="w-full py-2 px-4 bg-white/10 hover:bg-opacity-100 rounded-lg transition-colors flex items-center justify-center gap-3 font-medium text-white"
 						:class="{ '!bg-gray-800 hover:!bg-gray-800': isHandRaised }"
+						data-testid="toggle-raise-hand"
 					>
 						<lucide-hand class="w-5 h-5" />
 						{{ isHandRaised ? "Lower Hand" : "Raise Hand" }}

@@ -6,15 +6,9 @@
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
-		"outDir": "./dist",
-		"rootDir": ".",
-		"baseUrl": ".",
-		"paths": {
-			"@/*": ["./*"]
-		}
+		"types": ["node", "@playwright/test"],
+		"baseUrl": "."
 	},
-	"include": ["**/*.ts"],
-	"exclude": ["node_modules", "dist"]
+	"include": ["./**/*.ts"]
 }

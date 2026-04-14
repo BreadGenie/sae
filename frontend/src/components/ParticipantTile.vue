@@ -2,6 +2,10 @@
 	<div
 		class="group relative rounded-lg overflow-hidden min-h-0"
 		:class="tileBackgroundClass"
+		:data-testid="`participant-tile-${participant.user_id}`"
+		:data-audio-enabled="String(isAudioEnabled)"
+		:data-video-enabled="String(isVideoEnabled)"
+		:data-tile-id="`${pinType}-${pinId || participant.user_id}`"
 	>
 		<video
 			:ref="videoRef"
@@ -83,11 +87,7 @@
 		<!-- Participant action toolbar -->
 		<div
 			v-if="showActionToolbar"
-<<<<<<< HEAD
 			class="absolute bottom-2 right-2 flex items-center gap-0.5 rounded-full bg-gray-700 p-0.5 text-white opacity-0 group-hover:opacity-70 hover:!opacity-100 transition-opacity ring-1 ring-gray-800"
-=======
-			class="absolute bottom-2 right-2 flex items-center gap-0.5 rounded-full bg-gray-700 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity ring-1 ring-gray-800"
->>>>>>> bb6bf33 (refactor(layout): unify layout logic (#37))
 			@click.stop
 		>
 			<button

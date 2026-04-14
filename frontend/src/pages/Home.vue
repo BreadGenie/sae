@@ -1,5 +1,5 @@
 <template>
-	<div class="min-h-screen bg-gray-50 flex items-center justify-center">
+	<div class="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="home-page">
 		<div class="max-w-lg mx-auto text-center p-8">
 			<div class="mb-20">
 				<div class="flex justify-center items-center gap-4 mb-6">
@@ -10,7 +10,7 @@
 
 			<div class="space-y-6">
 				<div class="space-y-3">
-					<form @submit.prevent="joinMeeting" class="space-y-3">
+					<form @submit.prevent="joinMeeting" class="space-y-3" data-testid="join-meeting-form">
 						<label class="block text-sm font-medium text-gray-700 text-left">
 							Join with Meeting Code
 						</label>
@@ -22,6 +22,7 @@
 									size="lg"
 									:error="meetingCodeError"
 									class="text-center sm:text-left"
+									data-testid="meeting-code-input"
 								/>
 							</div>
 							<Button
@@ -29,6 +30,7 @@
 								type="submit"
 								class="whitespace-nowrap px-6 py-3"
 								:disabled="!isMeetingCodeValid(meetingCode)"
+								data-testid="join-meeting-button"
 							>
 								Join
 							</Button>
@@ -50,6 +52,7 @@
 							:loading="createMeeting.loading"
 							class="whitespace-nowrap px-6 py-3 rounded-r-none"
 							@click="() => startNewMeeting('open')"
+							data-testid="create-open-meeting-button"
 						>
 							<template #prefix>
 								<lucide-plus class="h-4 w-4" />
@@ -63,6 +66,7 @@
 							class="rounded-l-none"
 							icon="chevron-down"
 							:disabled="createMeeting.loading"
+							data-testid="create-meeting-options"
 							:options="[
 								{
 									icon: 'lock',

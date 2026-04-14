@@ -2,6 +2,7 @@
 	<div
 		ref="container"
 		class="flex-1 min-h-0"
+		data-testid="meeting-layout"
 		:class="
 			mode === 'sidebar'
 				? 'flex flex-col sm:flex-row overflow-hidden mb-2'

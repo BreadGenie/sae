@@ -1,20 +1,7 @@
 import type { FullConfig } from "@playwright/test";
 
-async function globalSetup(config: FullConfig) {
-	const baseURL = config.projects[0].use?.baseURL || "http://localhost:8096";
-	const sfuURL = process.env.SFU_URL || "http://localhost:3000";
-
-	await waitForService(baseURL, "Frontend");
-	await waitForService(sfuURL, "SFU Server");
-}
-
-async function waitForService(
-	url: string,
-	name: string,
-	maxRetries = 30,
-	retryDelay = 1000,
-) {
-	for (let i = 0; i < maxRetries; i++) {
+async function waitForService(url: string, name: string): Promise<void> {
+	for (let attempt = 0; attempt < 40; attempt += 1) {
 		try {
 			const response = await fetch(url, { method: "GET" });
 			if (response.ok || response.status < 500) {
@@ -22,12 +9,22 @@ async function waitForService(
 			}
 		} catch {}
 
-		if (i < maxRetries - 1) {
-			await new Promise((resolve) => setTimeout(resolve, retryDelay));
-		}
+		await new Promise((resolve) => setTimeout(resolve, 1000));
 	}
 
-	throw new Error(`${name} at ${url} did not become ready in time`);
+	throw new Error(`${name} did not become ready: ${url}`);
 }
 
-export default globalSetup;
+export default async function globalSetup(config: FullConfig): Promise<void> {
+	const projectUse = config.projects[0]?.use ?? {};
+	const baseURL = String(
+		projectUse.baseURL ?? process.env.BASE_URL ?? "http://localhost:8096",
+	);
+	const sfuBaseURL = process.env.SFU_URL ?? "http://localhost:3000";
+	const sfuHealthURL = sfuBaseURL.endsWith("/health")
+		? sfuBaseURL
+		: `${sfuBaseURL.replace(/\/$/, "")}/health`;
+
+	await waitForService(baseURL, "Frappe Meet");
+	await waitForService(sfuHealthURL, "SFU server");
+}
