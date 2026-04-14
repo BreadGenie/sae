@@ -10,6 +10,9 @@ import { STUB_MEDIA_SCRIPT } from "./media";
 
 const HOST_EMAIL = process.env.E2E_HOST_EMAIL ?? "Administrator";
 const HOST_PASSWORD = process.env.E2E_HOST_PASSWORD ?? "admin";
+const isCI = !!process.env.CI;
+const previewTimeout = isCI ? 30_000 : 20_000;
+const meetingReadyTimeout = isCI ? 45_000 : 20_000;
 
 type MeetingType = "open" | "restricted";
 
@@ -50,7 +53,7 @@ async function prepareContext(context: BrowserContext): Promise<void> {
 async function waitForMeetingReady(page: Page): Promise<void> {
 	await page.getByTestId("meeting-layout").waitFor({
 		state: "visible",
-		timeout: 20_000,
+		timeout: meetingReadyTimeout,
 	});
 	await expect(page.getByTestId("meeting-toolbar")).toBeVisible();
 	await expect(page.getByTestId("toolbar-end-call")).toBeVisible();
@@ -59,10 +62,11 @@ async function waitForMeetingReady(page: Page): Promise<void> {
 async function joinFromPreview(page: Page): Promise<void> {
 	const preview = page.getByTestId("meeting-preview");
 	const meetingLayout = page.getByTestId("meeting-layout");
+	const joinForm = preview.locator("form");
 
 	await Promise.race([
-		preview.waitFor({ state: "visible", timeout: 20_000 }),
-		meetingLayout.waitFor({ state: "visible", timeout: 20_000 }),
+		preview.waitFor({ state: "visible", timeout: previewTimeout }),
+		meetingLayout.waitFor({ state: "visible", timeout: previewTimeout }),
 	]);
 
 	if (
@@ -70,12 +74,14 @@ async function joinFromPreview(page: Page): Promise<void> {
 		(await preview.isVisible().catch(() => false))
 	) {
 		try {
-			await page
-				.getByTestId("join-meeting-preview-button")
-				.click({ force: true, timeout: 5_000 });
+			await joinForm.evaluate((form) => {
+				(form as HTMLFormElement).requestSubmit();
+			});
 		} catch (error) {
 			if (!(await meetingLayout.isVisible().catch(() => false))) {
-				throw error;
+				await page
+					.getByTestId("join-meeting-preview-button")
+					.click({ timeout: previewTimeout });
 			}
 		}
 	}

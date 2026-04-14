@@ -14,6 +14,7 @@ export default defineConfig({
 	},
 	reporter: process.env.CI
 		? [
+				["list"],
 				["github"],
 				["html", { open: "never" }],
 				["junit", { outputFile: "results.xml" }],
