@@ -22,8 +22,8 @@ export default defineConfig({
 		: [["list"], ["html", { open: "never" }]],
 	use: {
 		baseURL,
-		trace: "retain-on-failure",
-		video: "retain-on-failure",
+		trace: "on-first-retry",
+		video: "on-first-retry",
 		screenshot: "only-on-failure",
 		viewport: { width: 1440, height: 900 },
 		actionTimeout: 8_000,

@@ -164,4 +164,5 @@ jobs:
           path: |
             e2e/playwright-report/
             e2e/test-results/
+          compression-level: 1
           retention-days: 7
