@@ -109,6 +109,7 @@ jobs:
           bench --site meet.test set-config sfu_secret "e2e-test-secret-key-12345"
           bench --site meet.test set-config sfu_server_url "http://localhost"
           bench --site meet.test set-config sfu_server_port "3000"
+          bench --site meet.test set-config ignore_csrf 1
           bench --site meet.test set-config allow_tests true
           bench --site meet.test set-config host_name "http://meet.test:8000"
 
