@@ -15,7 +15,10 @@ test.describe("Restricted meeting", () => {
 
 		await guest.page.goto(`/meet/${meetingId}`);
 		await expect(guest.page.getByTestId("meeting-preview")).toBeVisible();
-		await guest.page.getByPlaceholder("John Doe").fill(guestName);
+		const guestNameInput = guest.page.getByPlaceholder("John Doe");
+		await guestNameInput.fill(guestName);
+		await expect(guestNameInput).toHaveValue(guestName);
+		await expect(guest.page.getByTestId("join-meeting-preview-button")).toBeEnabled();
 		await guest.page.getByTestId("join-meeting-preview-button").click();
 
 		await expect(guest.page.getByText("Waiting to be admitted")).toBeVisible();
@@ -42,7 +45,10 @@ test.describe("Restricted meeting", () => {
 
 		await guest.page.goto(`/meet/${meetingId}`);
 		await expect(guest.page.getByTestId("meeting-preview")).toBeVisible();
-		await guest.page.getByPlaceholder("John Doe").fill(guestName);
+		const guestNameInput = guest.page.getByPlaceholder("John Doe");
+		await guestNameInput.fill(guestName);
+		await expect(guestNameInput).toHaveValue(guestName);
+		await expect(guest.page.getByTestId("join-meeting-preview-button")).toBeEnabled();
 		await guest.page.getByTestId("join-meeting-preview-button").click();
 
 		await expect(guest.page.getByText("Waiting to be admitted")).toBeVisible();

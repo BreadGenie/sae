@@ -55,7 +55,7 @@ async function waitForMeetingReady(page: Page): Promise<void> {
 async function joinFromPreview(page: Page): Promise<void> {
 	const preview = page.getByTestId("meeting-preview");
 	const meetingLayout = page.getByTestId("meeting-layout");
-	const joinForm = preview.locator("form");
+	const joinButton = page.getByTestId("join-meeting-preview-button");
 
 	await Promise.race([
 		preview.waitFor({ state: "visible", timeout: previewTimeout }),
@@ -66,17 +66,9 @@ async function joinFromPreview(page: Page): Promise<void> {
 		!(await meetingLayout.isVisible().catch(() => false)) &&
 		(await preview.isVisible().catch(() => false))
 	) {
-		try {
-			await joinForm.evaluate((form) => {
-				(form as HTMLFormElement).requestSubmit();
-			});
-		} catch (error) {
-			if (!(await meetingLayout.isVisible().catch(() => false))) {
-				await page
-					.getByTestId("join-meeting-preview-button")
-					.click({ timeout: previewTimeout });
-			}
-		}
+		await joinButton.waitFor({ state: "visible", timeout: previewTimeout });
+		await expect(joinButton).toBeEnabled({ timeout: previewTimeout });
+		await joinButton.click({ timeout: previewTimeout });
 	}
 
 	await waitForMeetingReady(page);
@@ -122,7 +114,12 @@ async function buildParticipant(browser: Browser): Promise<Participant> {
 			await expect(page.getByTestId("meeting-preview")).toBeVisible({
 				timeout: previewTimeout,
 			});
-			await page.getByPlaceholder("John Doe").fill(guestName);
+			const guestNameInput = page.getByPlaceholder("John Doe");
+			await guestNameInput.fill(guestName);
+			await expect(guestNameInput).toHaveValue(guestName);
+			await expect(page.getByTestId("join-meeting-preview-button")).toBeEnabled({
+				timeout: previewTimeout,
+			});
 			await joinFromPreview(page);
 		},
 		async joinAsHost(meetingId: string) {
