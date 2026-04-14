@@ -12,14 +12,16 @@ export async function createMeetingViaApi(
 	meetingType: MeetingType = "open",
 ): Promise<string> {
 	const response = await request.post("/api/method/meet.api.meeting.create", {
-		form: {
+		data: {
 			meeting_type: meetingType,
-			allow_guest: true,
 		},
 	});
 
 	if (!response.ok()) {
-		throw new Error(`Meeting creation failed with status ${response.status()}`);
+		const responseBody = await response.text();
+		throw new Error(
+			`Meeting creation failed with status ${response.status()}: ${responseBody}`,
+		);
 	}
 
 	const data = (await response.json()) as FrappeMethodResponse<string>;
