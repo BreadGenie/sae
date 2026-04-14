@@ -48,12 +48,9 @@ jobs:
           node-version: 24
           check-latest: true
 
-<<<<<<< HEAD
       - name: Add to Hosts
         run: echo "127.0.0.1 meet.test" | sudo tee -a /etc/hosts
 
-=======
->>>>>>> 9694b54 (test: add e2e tests)
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -62,7 +59,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-<<<<<<< HEAD
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: 'echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT'
@@ -75,8 +71,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
 
-=======
->>>>>>> 9694b54 (test: add e2e tests)
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -85,51 +79,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
-<<<<<<< HEAD
       - name: Install MariaDB Client and FFmpeg
-=======
-      - name: Install MariaDB Client
->>>>>>> 9694b54 (test: add e2e tests)
         run: |
           sudo apt update
           sudo apt-get install -y mariadb-client ffmpeg
 
-<<<<<<< HEAD
       - name: Setup Bench
-=======
-      - name: Setup Frappe Bench
->>>>>>> 9694b54 (test: add e2e tests)
         run: |
           pip install frappe-bench
           bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
-<<<<<<< HEAD
       - name: Install Meet
-=======
-      - name: Install Meet App
->>>>>>> 9694b54 (test: add e2e tests)
         working-directory: /home/runner/frappe-bench
         run: |
           bench get-app meet $GITHUB_WORKSPACE
           bench setup requirements --dev
-<<<<<<< HEAD
           bench new-site --db-root-password root --admin-password admin meet.test
           bench --site meet.test install-app meet
           bench build
         env:
           CI: "Yes"
-=======
-          bench new-site --db-root-password root --admin-password admin test_site
-          bench --site test_site install-app meet
-          bench build
->>>>>>> 9694b54 (test: add e2e tests)
 
       - name: Configure Site for E2E
         working-directory: /home/runner/frappe-bench
         run: |
-<<<<<<< HEAD
           bench --site meet.test set-config sfu_secret "e2e-test-secret-key-12345"
           bench --site meet.test set-config sfu_server_url "http://localhost"
           bench --site meet.test set-config sfu_server_port "3000"
@@ -138,15 +113,6 @@ jobs:
           
           # Create test users
           bench --site meet.test execute meet.utils.test_helpers.create_test_users
-=======
-          # Set SFU configuration (shared secret)
-          bench --site test_site set-config sfu_secret "e2e-test-secret-key-12345"
-          bench --site test_site set-config sfu_server_url "http://localhost"
-          bench --site test_site set-config sfu_server_port "3000"
-          
-          # Create test users
-          bench --site test_site execute meet.utils.test_helpers.create_test_users
->>>>>>> 9694b54 (test: add e2e tests)
 
       - name: Build SFU Server
         working-directory: ${{ github.workspace }}/sfu-server
@@ -157,20 +123,14 @@ jobs:
       - name: Install E2E Dependencies
         working-directory: ${{ github.workspace }}/e2e
         run: |
-<<<<<<< HEAD
           yarn install --frozen-lockfile
           yarn playwright install chromium --with-deps
-=======
-          npm ci
-          npx playwright install chromium --with-deps
->>>>>>> 9694b54 (test: add e2e tests)
 
       - name: Generate Fake Audio File
         working-directory: ${{ github.workspace }}/e2e/resources
         run: |
           ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 10 -q:a 9 -acodec pcm_s16le fake-audio.wav
 
-<<<<<<< HEAD
       - name: Generate Fake Video File
         working-directory: ${{ github.workspace }}/e2e/resources
         run: |
@@ -185,17 +145,6 @@ jobs:
           echo "Waiting for Frappe server to start..."
           timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
           echo "Frappe server is ready!"
-=======
-      - name: Start Frappe Server
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bench serve --port 8000 &
-          echo "Waiting for Frappe server..."
-          timeout 60 bash -c 'until curl -s http://localhost:8000 > /dev/null; do sleep 2; done'
-          echo "Frappe server is ready"
-        env:
-          FRAPPE_SITE_NAME: test_site
->>>>>>> 9694b54 (test: add e2e tests)
 
       - name: Start SFU Server
         working-directory: ${{ github.workspace }}/sfu-server
@@ -209,7 +158,6 @@ jobs:
           HOST: 0.0.0.0
           JWT_SECRET: e2e-test-secret-key-12345
           MEDIASOUP_ANNOUNCED_IP: 127.0.0.1
-<<<<<<< HEAD
           MEDIASOUP_NUM_WORKERS: 1
 
       - name: Run E2E Tests
@@ -217,14 +165,6 @@ jobs:
         run: yarn test
         env:
           BASE_URL: http://meet.test:8000
-=======
-
-      - name: Run E2E Tests
-        working-directory: ${{ github.workspace }}/e2e
-        run: npm test
-        env:
-          BASE_URL: http://test_site:8000
->>>>>>> 9694b54 (test: add e2e tests)
           SFU_URL: http://localhost:3000
           CI: true
 
@@ -237,14 +177,3 @@ jobs:
             e2e/playwright-report/
             e2e/test-results/
           retention-days: 7
-<<<<<<< HEAD
-=======
-
-      - name: Upload Test Videos
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: test-videos
-          path: e2e/test-results/**/*.webm
-          retention-days: 7
->>>>>>> 9694b54 (test: add e2e tests)
