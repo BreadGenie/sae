@@ -15,6 +15,7 @@
 			v-for="lobbyUser in lobbyUsers"
 			:key="lobbyUser.userId"
 			class="flex items-center justify-between mx-4 py-3 border-b last:border-b-0 border-outline-gray-1"
+			:data-testid="`waiting-user-${lobbyUser.userId}`"
 		>
 			<div class="flex items-center gap-3">
 				<img
@@ -44,6 +45,7 @@
 					size="sm"
 					theme="green"
 					@click="$emit('approve', lobbyUser.userId)"
+					:data-testid="`approve-waiting-user-${lobbyUser.userId}`"
 				>
 					<lucide-check class="w-4 h-4" />
 				</Button>
@@ -52,6 +54,7 @@
 					size="sm"
 					theme="red"
 					@click="$emit('reject', lobbyUser.userId)"
+					:data-testid="`reject-waiting-user-${lobbyUser.userId}`"
 				>
 					<lucide-x class="w-4 h-4" />
 				</Button>
