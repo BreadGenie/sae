@@ -126,10 +126,11 @@ async function buildParticipant(browser: Browser): Promise<Participant> {
 		},
 		async joinAsGuest(meetingId: string, guestName: string) {
 			await page.goto(`/meet/${meetingId}`);
-			await expect(page.getByTestId("meeting-preview")).toBeVisible();
+			await expect(page.getByTestId("meeting-preview")).toBeVisible({
+				timeout: previewTimeout,
+			});
 			await page.getByPlaceholder("John Doe").fill(guestName);
-			await page.getByTestId("join-meeting-preview-button").click();
-			await waitForMeetingReady(page);
+			await joinFromPreview(page);
 		},
 		async joinAsHost(meetingId: string) {
 			await loginViaApi(context.request);
