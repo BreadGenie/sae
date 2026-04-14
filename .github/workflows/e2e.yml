@@ -6,6 +6,7 @@ on:
       - develop
       - main
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: e2e-${{ github.event.number || github.sha }}
