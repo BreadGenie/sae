@@ -5,6 +5,8 @@ import {
 	type BrowserContext,
 	type Page,
 } from "@playwright/test";
+import * as fs from "node:fs";
+import { MEETINGS_STATE_FILE, type MeetingsState } from "../global-setup";
 import { STUB_MEDIA_SCRIPT } from "./media";
 import { loginViaApi } from "../helpers/auth";
 import { createMeetingViaApi, type MeetingType } from "../helpers/meeting";
@@ -12,6 +14,11 @@ import { createMeetingViaApi, type MeetingType } from "../helpers/meeting";
 const isCI = !!process.env.CI;
 const previewTimeout = isCI ? 30_000 : 20_000;
 const meetingReadyTimeout = isCI ? 45_000 : 20_000;
+
+function readMeetingsState(): MeetingsState {
+	const raw = fs.readFileSync(MEETINGS_STATE_FILE, "utf-8");
+	return JSON.parse(raw) as MeetingsState;
+}
 
 interface Participant {
 	context: BrowserContext;
@@ -25,6 +32,7 @@ interface Participant {
 interface TestFixtures {
 	hostPage: Page;
 	meetingId: string;
+	restrictedMeetingId: string;
 	createMeeting: (meetingType?: MeetingType) => Promise<string>;
 	createMeetingViaUi: (meetingType?: MeetingType) => Promise<string>;
 	createParticipant: () => Promise<Participant>;
@@ -153,8 +161,12 @@ export const test = base.extend<TestFixtures>({
 		});
 	},
 
-	meetingId: async ({ createMeeting }, use) => {
-		await use(await createMeeting());
+	meetingId: async ({}, use) => {
+		await use(readMeetingsState().openMeetingId);
+	},
+
+	restrictedMeetingId: async ({}, use) => {
+		await use(readMeetingsState().restrictedMeetingId);
 	},
 
 	createParticipant: async ({ browser }, use) => {

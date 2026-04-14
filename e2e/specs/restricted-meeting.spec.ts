@@ -3,10 +3,10 @@ import { test, expect, joinFromPreview } from "../fixtures/test";
 test.describe("Restricted meeting", () => {
 	test("guest waits for approval and host can admit from people panel", async ({
 		hostPage,
-		createMeeting,
+		restrictedMeetingId,
 		createParticipant,
 	}) => {
-		const meetingId = await createMeeting("restricted");
+		const meetingId = restrictedMeetingId;
 		const guest = await createParticipant();
 		const guestName = `Guest Restricted ${test.info().parallelIndex}`;
 
@@ -30,10 +30,10 @@ test.describe("Restricted meeting", () => {
 
 	test("guest in restricted lobby can't join meeting when rejected", async ({
 		hostPage,
-		createMeeting,
+		restrictedMeetingId,
 		createParticipant,
 	}) => {
-		const meetingId = await createMeeting("restricted");
+		const meetingId = restrictedMeetingId;
 		const guest = await createParticipant();
 		const guestName = `Guest Rejected ${test.info().parallelIndex}`;
 
