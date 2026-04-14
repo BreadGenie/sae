@@ -52,12 +52,21 @@ export class SocketHandlerManager {
 		return !participantId.startsWith('preview-');
 	}
 
+	private isDevOrCiEnvironment(): boolean {
+		const nodeEnv = process.env.NODE_ENV || 'production';
+		const inCi = process.env.CI === 'true' || !!process.env.GITHUB_ACTIONS;
+		return nodeEnv !== 'production' || inCi;
+	}
+
 	private checkSocketRateLimits(
 		socket: Socket,
 		userLimit: number,
 		ipLimit: number,
 		windowMs: number,
 	): boolean {
+		if (this.isDevOrCiEnvironment()) {
+			return true;
+		}
 		const forwardedFor = socket.handshake.headers['x-forwarded-for'];
 		const forwarded = socket.handshake.headers.forwarded;
 
