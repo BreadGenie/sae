@@ -53,9 +53,9 @@ export class SocketHandlerManager {
 	}
 
 	private isDevOrCiEnvironment(): boolean {
-		const nodeEnv = process.env.NODE_ENV || 'production';
+		const devEnv = process.env.NODE_ENV === 'development';
 		const inCi = process.env.CI === 'true' || !!process.env.GITHUB_ACTIONS;
-		return nodeEnv !== 'production' || inCi;
+		return devEnv || inCi;
 	}
 
 	private checkSocketRateLimits(
