@@ -107,26 +107,20 @@ export class SFUMeetingManager {
 				this.handleNewConsumer(consumer);
 			},
 			onConsumerRemoved: (consumerId, consumer) => {
+				this.processedConsumers?.delete?.(consumerId);
+
 				// If this was a screen-share consumer, notify UI to clear screen-share state
-				try {
-					if (
-						consumer &&
-						(consumer.isScreen || consumer?.appData?.type === "screen")
-					) {
-						this.processedConsumers?.delete?.(consumerId);
-						this.isScreenShareActive = false;
-						if (this.eventHandlers.onScreenShareStopped) {
-							this.eventHandlers.onScreenShareStopped({
-								participantId: consumer.participantId,
-								consumerId,
-							});
-						}
+				if (
+					consumer &&
+					(consumer.isScreen || consumer?.appData?.type === "screen")
+				) {
+					this.isScreenShareActive = false;
+					if (this.eventHandlers.onScreenShareStopped) {
+						this.eventHandlers.onScreenShareStopped({
+							participantId: consumer.participantId,
+							consumerId,
+						});
 					}
-				} catch (err) {
-					console.warn(
-						"Error while handling consumer removal for screen-share cleanup",
-						err,
-					);
 				}
 			},
 		});

@@ -40,11 +40,6 @@ class SaeMeeting(Document):
 		if not self.name:
 			self.name = generate()
 
-	def before_insert(self):
-		"""Initialize meeting room"""
-		if not hasattr(self, "is_active"):
-			self.is_active = 1
-
 	def validate(self):
 		"""Ensure unique users in all child tables"""
 		self.members = unique_users(self.members) if self.members else []
@@ -84,26 +79,6 @@ class SaeMeeting(Document):
 
 		return {"status": "joined", "message": "Successfully joined the meeting"}
 
-	def leave(self, user=None):
-		"""
-		Leave the meeting room
-
-		Args:
-			user: User to remove (defaults to current session user)
-		"""
-		if not user:
-			user = frappe.session.user
-
-		members = self.get_members()
-
-		if user in members:
-			members.remove(user)
-			self.update_members(members)
-
-			if not members:
-				self.is_active = 0
-				self.save(ignore_permissions=True)
-
 	def get_members(self):
 		"""Get list of current members"""
 		return [row.user for row in self.members] if self.members else []
@@ -127,14 +102,6 @@ class SaeMeeting(Document):
 
 		if self.is_user_banned(user):
 			return False
-
-		# Check if meeting is active
-		# if not self.get("is_active", True):
-		# 	return False
-
-		# Check if user has read permission on the meeting
-		# if not frappe.has_permission("Sae Meeting", "read", self):
-		# 	return False
 
 		return True
 

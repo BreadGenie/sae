@@ -52,7 +52,7 @@ repos:
 
       - id: biome-check
         name: Biome Check (SFU Server)
-        entry: bash -c 'cd sfu-server && npm run lint:fix'
+        entry: bash -c 'cd sfu-server && yarn lint:fix'
         language: system
         files: "sfu-server/.*\\.(js|ts|json)$"
         exclude: |

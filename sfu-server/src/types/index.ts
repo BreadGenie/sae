@@ -412,7 +412,6 @@ export interface ServerConfig {
 export interface HealthStats {
 	status: 'healthy';
 	uptime: number;
-	memory: NodeJS.MemoryUsage;
 	rooms: number;
 	peers: number;
 }

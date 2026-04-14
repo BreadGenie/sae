@@ -172,7 +172,11 @@ export class TransportManager {
 	getVideoEncodingConfig(source: "camera" | "screen" = "camera") {
 		const decision = this.getVideoEncodingDecision();
 		const isScreen = source === "screen";
-		const strategy = isScreen ? "simulcast" : decision.strategy;
+
+		// no adaptive streaming for screensharing
+		// as we don't reduce resolution for screenshare
+		// and fps is handled by the hint in the browser in case of congestion control
+		const strategy = isScreen ? "single" : decision.strategy;
 		const scalabilityMode =
 			strategy === "svc" ? decision.scalabilityMode : null;
 

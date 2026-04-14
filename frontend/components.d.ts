@@ -75,6 +75,8 @@ declare module "vue" {
 		)["default"];
 		LucideMoreVertical: typeof import("~icons/lucide/more-vertical")["default"];
 		LucidePhoneOff: typeof import("~icons/lucide/phone-off")["default"];
+		LucidePin: typeof import("~icons/lucide/pin")["default"];
+		LucidePinOff: typeof import("~icons/lucide/pin-off")["default"];
 		LucidePlay: typeof import("~icons/lucide/play")["default"];
 		LucidePlayCircle: typeof import("~icons/lucide/play-circle")["default"];
 		LucidePlus: typeof import("~icons/lucide/plus")["default"];
@@ -85,6 +87,7 @@ declare module "vue" {
 		LucideUserMinus: typeof import("~icons/lucide/user-minus")["default"];
 		LucideUserPlus: typeof import("~icons/lucide/user-plus")["default"];
 		LucideUsers: typeof import("~icons/lucide/users")["default"];
+		LucideUserX: typeof import("~icons/lucide/user-x")["default"];
 		LucideVideo: typeof import("~icons/lucide/video")["default"];
 		LucideVideoOff: typeof import("~icons/lucide/video-off")["default"];
 		LucideX: typeof import("~icons/lucide/x")["default"];
@@ -97,6 +100,9 @@ declare module "vue" {
 		)["default"];
 		MeetingInfoDialog: typeof import(
 			"./src/components/MeetingInfoDialog.vue",
+		)["default"];
+		MeetingLayout: typeof import(
+			"./src/components/MeetingLayout.vue",
 		)["default"];
 		MeetingPreview: typeof import(
 			"./src/components/MeetingPreview.vue",
@@ -132,15 +138,6 @@ declare module "vue" {
 		)["default"];
 		RouterLink: typeof import("vue-router")["RouterLink"];
 		RouterView: typeof import("vue-router")["RouterView"];
-		ScreenShareLayout: typeof import(
-			"./src/components/ScreenShareLayout.vue",
-		)["default"];
-		ScreenShareSidebar: typeof import(
-			"./src/components/ScreenShareSidebar.vue",
-		)["default"];
-		ScreenShareSidebarParticipantTile: typeof import(
-			"./src/components/ScreenShareSidebarParticipantTile.vue",
-		)["default"];
 		SettingsDialog: typeof import(
 			"./src/components/settings/SettingsDialog.vue",
 		)["default"];

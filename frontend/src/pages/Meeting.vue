@@ -45,15 +45,8 @@
 					<!-- Video column: video area + toolbar -->
 					<div class="flex flex-col min-h-0">
 						<!-- Video area -->
-						<div class="p-4 flex flex-col flex-1 min-h-0 overflow-auto text-white">
-							<!-- Screen share active view -->
-							<ScreenShareLayout
-								v-if="meetingState.displayScreenShares.value.length"
-								@open-people-panel="togglePeople"
-							/>
-
-							<!-- Normal video grid -->
-							<VideoGrid v-else @open-people-panel="togglePeople" />
+						<div class="p-4 flex flex-col flex-1 min-h-0 text-white">
+							<MeetingLayout @open-people-panel="togglePeople" />
 						</div>
 
 						<!-- Meeting controls -->
@@ -65,6 +58,7 @@
 							:isMicOn="meetingState.isMicOn.value"
 							:isCameraOn="meetingState.isCameraOn.value"
 							:isScreenSharing="meetingState.isScreenSharing.value"
+							:isFullscreen="isFullscreen"
 							:isHandRaised="isHandRaised"
 							:isReactionPickerOpen="isReactionPickerOpen"
 							@update:isReactionPickerOpen="isReactionPickerOpen = $event"
@@ -79,6 +73,7 @@
 							@toggle-microphone="toggleMicrophone"
 							@toggle-camera="toggleCamera"
 							@toggle-screen-share="toggleScreenShare"
+							@toggle-fullscreen="toggleFullscreen"
 							@toggle-raise-hand="toggleRaiseHand"
 							@end-call="endCall"
 							@device-changed="handleDeviceChanged"
@@ -180,13 +175,12 @@ import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import LobbyOverlay from "../components/LobbyOverlay.vue";
+import MeetingLayout from "../components/MeetingLayout.vue";
 import MeetingPreview from "../components/MeetingPreview.vue";
 import MeetingToolbar from "../components/MeetingToolbar.vue";
 import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
-import ScreenShareLayout from "../components/ScreenShareLayout.vue";
 import Spinner from "../components/Spinner.vue";
-import VideoGrid from "../components/VideoGrid.vue";
 
 import { provideMeetingContext } from "../composables/useMeetingContext.js";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
@@ -278,6 +272,11 @@ provide("meetingState", meetingState);
 provide("meetingId", meetingId.value);
 provide("sfuManager", sfuManager);
 provide("socket", socket);
+provide("isCurrentUserHost", isCurrentUserHost);
+provide("hostControls", {
+	muteParticipant: (...args) => handleMuteParticipant(...args),
+	kickParticipant: (...args) => handleKickParticipant(...args),
+});
 provide(
 	"meetingTitle",
 	computed(() => {
@@ -357,6 +356,7 @@ const lobbyUsersForNotifications = computed(() => {
 // Refs
 const chatNotificationQueue = ref(null);
 const isReactionPickerOpen = ref(false);
+const isFullscreen = ref(false);
 
 // Methods
 const resetToPreview = () => {
@@ -575,6 +575,31 @@ const handleNotificationClick = () => {
 	}
 };
 
+const syncFullscreenState = () => {
+	isFullscreen.value = !!document.fullscreenElement;
+};
+
+const toggleFullscreen = async () => {
+	try {
+		if (!document.fullscreenElement) {
+			const targetElement = document.body;
+
+			if (targetElement?.requestFullscreen) {
+				await targetElement.requestFullscreen();
+			}
+			return;
+		}
+
+		if (document.exitFullscreen) {
+			await document.exitFullscreen();
+		}
+	} catch (error) {
+		console.error("Failed to toggle fullscreen:", error);
+	} finally {
+		syncFullscreenState();
+	}
+};
+
 const setSinkIdOnVideoElements = async (sinkId) => {
 	// Set speaker output on all video elements
 	const videoElements = document.querySelectorAll("video");
@@ -664,6 +689,8 @@ const handleDeviceChanged = async (event) => {
 onMounted(async () => {
 	window.addEventListener("keydown", handleKeyDown);
 	window.addEventListener("keyup", handleKeyUp);
+	document.addEventListener("fullscreenchange", syncFullscreenState);
+	syncFullscreenState();
 
 	// Clear any stale error/connection state from previous navigations
 	if (typeof meetingState.resetConnectionState === "function") {
@@ -700,6 +727,10 @@ onMounted(async () => {
 		}
 	}
 
+	setupChatEvents(chatNotificationQueue.value);
+	setupReactionEvents();
+	setupRaiseHandEvents();
+
 	// Check authentication and handle guest sessions
 	if (!session.isLoggedIn) {
 		await initializeCamera();
@@ -725,15 +756,6 @@ onMounted(async () => {
 		await applySpeakerDevice();
 	}
 
-	// Setup chat events
-	setupChatEvents(chatNotificationQueue.value);
-
-	// Setup reaction events
-	setupReactionEvents();
-
-	// Setup raise hand events
-	setupRaiseHandEvents();
-
 	// Auto-join if just created
 	const wasJustCreated = route.query.created === "true";
 	if (wasJustCreated) {
@@ -744,6 +766,7 @@ onMounted(async () => {
 onUnmounted(() => {
 	window.removeEventListener("keydown", handleKeyDown);
 	window.removeEventListener("keyup", handleKeyUp);
+	document.removeEventListener("fullscreenchange", syncFullscreenState);
 
 	// Cleanup will be handled by the meeting logic composable
 });

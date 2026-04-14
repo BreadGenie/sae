@@ -554,22 +554,22 @@ export class MediasoupManager {
 		}
 
 		const safeWidth = Math.max(width, 0);
+		const safeHeight = Math.max(height, 0);
 
-		// Use width as the primary dimension for layer selection
-		// (videos are typically landscape, so width is more meaningful)
-		const primaryDimension = safeWidth;
+		// Use the maximum dimension to better handle portrait or square aspects alongside landscape
+		const primaryDimension = Math.max(safeWidth, safeHeight);
 
 		if (primaryDimension <= 0) {
 			return 0;
 		}
 
-		// Layer 2 (high): >= 640px
-		// Layer 1 (mid): 480-639px
-		// Layer 0 (low): < 480px
+		// Layer 2 (high): typical 1280x720, switch if container > 640px
+		// Layer 1 (mid): typical 640x360, switch if container > 320px
+		// Layer 0 (low): typical 320x180
 		let desiredLayer = 0;
 		if (primaryDimension >= 640) {
 			desiredLayer = 2;
-		} else if (primaryDimension >= 480) {
+		} else if (primaryDimension >= 320) {
 			desiredLayer = 1;
 		} else {
 			desiredLayer = 0;

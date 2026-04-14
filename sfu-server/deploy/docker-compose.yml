@@ -1,0 +1,92 @@
+# ==============================================================================
+# Frappe Meet SFU — Docker Compose Stack
+# ==============================================================================
+# Services:
+#   sfu     – Mediasoup SFU server (signaling on port 3000, media on UDP range)
+#   nginx   – Reverse proxy (SSL termination + WebSocket upgrade)
+#   certbot – Let's Encrypt certificate provisioning & renewal
+#
+# Usage:
+#   docker compose up -d        # start everything
+#   docker compose logs -f sfu  # tail SFU logs
+#   docker compose down         # stop everything
+#
+# See deploy.sh for the recommended workflow.
+# ==============================================================================
+
+services:
+  # ── SFU Server ──────────────────────────────────────────────────────────────
+  sfu:
+    image: ${SFU_IMAGE:-ghcr.io/frappe/meet/sfu-server:latest}
+    container_name: meet-sfu
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - PORT=${PORT:-3000}
+      - HOST=${HOST:-0.0.0.0}
+      - WEBRTC_LISTEN_IP=0.0.0.0
+      - WEBRTC_ANNOUNCED_IP=${WEBRTC_ANNOUNCED_IP}
+      - RTC_MIN_PORT=${RTC_MIN_PORT:-40000}
+      - RTC_MAX_PORT=${RTC_MAX_PORT:-40200}
+      - MEDIASOUP_NUM_WORKERS=${MEDIASOUP_NUM_WORKERS:-}
+      - MEDIASOUP_WORKER_LOGLEVEL=${MEDIASOUP_WORKER_LOGLEVEL:-warn}
+      - MEDIASOUP_LISTEN_IP=0.0.0.0
+      - MEDIASOUP_ANNOUNCED_IP=${WEBRTC_ANNOUNCED_IP}
+      - SFU_LOG_LEVEL=${SFU_LOG_LEVEL:-info}
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${PORT:-3000}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Nginx Reverse Proxy ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: meet-sfu-nginx
+    restart: unless-stopped
+    # host networking: nginx binds directly to host ports 80/443.
+    # No 'ports:' mapping needed (or allowed) with network_mode: host.
+    network_mode: host
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    environment:
+      - DOMAIN=${DOMAIN}
+      - SFU_UPSTREAM=127.0.0.1:${PORT:-3000}
+    # nginx:alpine uses envsubst automatically on /etc/nginx/templates/*.template
+    # Note: deploy.sh handles startup order (SFU first, then nginx)
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Certbot (SSL certificates) ──────────────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: meet-sfu-certbot
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    # Renew certificates every 12 hours (certbot is idempotent)
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 43200 & wait $${!}; done"
+    profiles:
+      - ssl
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+volumes:
+  certbot-webroot:
+  certbot-certs:

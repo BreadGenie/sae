@@ -82,6 +82,9 @@ export function useMeetingState() {
 	const localScreenShareStartedAt = ref(0);
 	const screenShareStreams = ref({});
 
+	// Pinned tile state: { type: 'screenshare' | 'participant', id: string } | null
+	const pinnedTile = ref(null);
+
 	const userInitials = computed(() => {
 		const name =
 			currentUser.value?.full_name ?? currentUser.value?.name ?? "You";
@@ -92,28 +95,31 @@ export function useMeetingState() {
 
 	// Display logic for screen shares
 	const displayScreenShares = computed(() => {
-		let latest = null;
+		const shares = [];
 
 		for (const share of activeScreenShareConsumers.value) {
-			if (!latest || (share.startedAt || 0) > (latest.startedAt || 0)) {
-				latest = share;
-			}
+			shares.push(share);
 		}
 
 		if (isScreenSharing.value && currentUser.value?.user_id) {
-			const localEntry = {
+			shares.push({
 				participantId: currentUser.value.user_id,
 				consumerId: "local-screen",
 				local: true,
 				startedAt: localScreenShareStartedAt.value || 0,
-			};
-			if (!latest || localEntry.startedAt >= (latest.startedAt || 0)) {
-				latest = localEntry;
-			}
+			});
 		}
 
-		return latest ? [latest] : [];
+		return shares.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 	});
+
+	const pinTile = (type, id) => {
+		pinnedTile.value = { type, id };
+	};
+
+	const unpinTile = () => {
+		pinnedTile.value = null;
+	};
 
 	const resetConnectionState = () => {
 		connectionError.value = null;
@@ -135,6 +141,7 @@ export function useMeetingState() {
 		activeScreenShareConsumers.value = [];
 		localScreenShareStartedAt.value = 0;
 		screenShareStreams.value = {};
+		pinnedTile.value = null;
 		isMicOn.value = false;
 		isCameraOn.value = false;
 		localStream.value = null;
@@ -226,10 +233,13 @@ export function useMeetingState() {
 		activeScreenShareConsumers,
 		localScreenShareStartedAt,
 		screenShareStreams,
+		pinnedTile,
 		userInitials,
 		userAvatar,
 		displayScreenShares,
 		resetConnectionState,
+		pinTile,
+		unpinTile,
 		setMediaState,
 		addParticipant,
 		removeParticipant,

@@ -19,12 +19,10 @@ export const svcEncodingTemplate = (scalabilityMode = "L3T1") => [
 	},
 ];
 
-// layer 0: medium quality (800 kbps)
-// layer 1: high quality (1.5 Mbps
-export const screenEncodings = [
-	{ maxBitrate: 800000 },
-	{ maxBitrate: 1500000 },
-];
+// no adaptive streaming for screensharing
+// as we don't reduce resolution for screenshare
+// and fps is handled by the hint in the browser in case of congestion control
+export const screenEncodings = [{ maxBitrate: 2000000 }];
 
 export const videoCodecOptions = {
 	videoGoogleStartBitrate: 2000,

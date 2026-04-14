@@ -40,7 +40,6 @@ export class RouteManager {
 			const stats: HealthStats = {
 				status: 'healthy',
 				uptime: process.uptime(),
-				memory: process.memoryUsage(),
 				rooms: this.mediasoup.rooms.getRoomCount(),
 				peers: this.mediasoup.peers.getPeerCount(),
 			};

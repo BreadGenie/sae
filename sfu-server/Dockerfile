@@ -13,10 +13,12 @@ COPY types /app/types
 
 # Copy sfu-server source code
 WORKDIR /app/sfu-server
-COPY sfu-server/package*.json sfu-server/tsconfig.json ./
-RUN npm ci
+COPY sfu-server/package.json sfu-server/yarn.lock sfu-server/tsconfig.json ./
+RUN corepack enable
+RUN corepack prepare yarn@1.22.22 --activate
+RUN yarn install --frozen-lockfile
 COPY sfu-server/src ./src
-RUN npm run build
+RUN yarn build
 
 # --- Runtime stage (minimal) ---
 FROM node:${NODE_VERSION} AS runtime

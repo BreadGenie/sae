@@ -247,9 +247,6 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 	"""
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
-	if not meeting.is_active:
-		frappe.throw(_("Meeting has ended"))
-
 	if frappe.session.user not in meeting.get_members():
 		frappe.throw(_("Not a meeting member"))
 
