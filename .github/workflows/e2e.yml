@@ -95,56 +95,72 @@ jobs:
         working-directory: /home/runner/frappe-bench
         run: |
           bench get-app meet $GITHUB_WORKSPACE
-          - name: Build SFU Server
-            working-directory: ${{ github.workspace }}/sfu-server
-            run: |
-              yarn install --frozen-lockfile
-              yarn build
+          bench setup requirements --dev
+          bench new-site --db-root-password root --admin-password admin meet.test
+          bench --site meet.test install-app meet
+          bench build
+        env:
+          CI: "Yes"
 
-          - name: Install E2E Dependencies
-            working-directory: ${{ github.workspace }}/e2e
-            run: |
-              yarn install --non-interactive
-              yarn playwright install chromium --with-deps
+      - name: Configure Site for E2E
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench --site meet.test set-config sfu_secret "e2e-test-secret-key-12345"
+          bench --site meet.test set-config sfu_server_url "http://localhost"
+          bench --site meet.test set-config sfu_server_port "3000"
+          bench --site meet.test set-config allow_tests true
+          bench --site meet.test set-config host_name "http://meet.test:8000"
 
-          - name: Start Frappe Server
-            working-directory: /home/runner/frappe-bench
-            run: |
-              sed -i 's/^watch:/# watch:/g' Procfile
-              sed -i 's/^schedule:/# schedule:/g' Procfile
-              bench start &> bench_start.log &
-              echo "Waiting for Frappe server to start..."
-              timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
-              echo "Frappe server is ready!"
+      - name: Build SFU Server
+        working-directory: ${{ github.workspace }}/sfu-server
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
 
-          - name: Start SFU Server
-            working-directory: ${{ github.workspace }}/sfu-server
-            run: |
-              yarn start &
-              echo "Waiting for SFU server..."
-              timeout 30 bash -c 'until curl -s http://localhost:3000/health > /dev/null 2>&1; do sleep 2; done'
-              echo "SFU server is ready"
-            env:
-              PORT: 3000
-              HOST: 0.0.0.0
-              JWT_SECRET: e2e-test-secret-key-12345
-              MEDIASOUP_ANNOUNCED_IP: 127.0.0.1
-              MEDIASOUP_NUM_WORKERS: 1
+      - name: Install E2E Dependencies
+        working-directory: ${{ github.workspace }}/e2e
+        run: |
+          yarn install --non-interactive
+          yarn playwright install chromium --with-deps
 
-          - name: Run E2E Tests
-            working-directory: ${{ github.workspace }}/e2e
-            run: yarn test
-            env:
-              BASE_URL: http://meet.test:8000
-              SFU_URL: http://localhost:3000
-              CI: true
+      - name: Start Frappe Server
+        working-directory: /home/runner/frappe-bench
+        run: |
+          sed -i 's/^watch:/# watch:/g' Procfile
+          sed -i 's/^schedule:/# schedule:/g' Procfile
+          bench start &> bench_start.log &
+          echo "Waiting for Frappe server to start..."
+          timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
+          echo "Frappe server is ready!"
 
-          - name: Upload Test Results
-            uses: actions/upload-artifact@v4
-            if: failure()
-            with:
-              name: playwright-report
-              path: |
-                e2e/playwright-report/
-                e2e/test-results/
-              retention-days: 7
+      - name: Start SFU Server
+        working-directory: ${{ github.workspace }}/sfu-server
+        run: |
+          yarn start &
+          echo "Waiting for SFU server..."
+          timeout 30 bash -c 'until curl -s http://localhost:3000/health > /dev/null 2>&1; do sleep 2; done'
+          echo "SFU server is ready"
+        env:
+          PORT: 3000
+          HOST: 0.0.0.0
+          JWT_SECRET: e2e-test-secret-key-12345
+          MEDIASOUP_ANNOUNCED_IP: 127.0.0.1
+          MEDIASOUP_NUM_WORKERS: 1
+
+      - name: Run E2E Tests
+        working-directory: ${{ github.workspace }}/e2e
+        run: yarn test
+        env:
+          BASE_URL: http://meet.test:8000
+          SFU_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
