@@ -12,7 +12,7 @@ export async function createMeetingViaApi(
 	meetingType: MeetingType = "open",
 ): Promise<string> {
 	const response = await request.post("/api/method/meet.api.meeting.create", {
-		data: {
+		form: {
 			meeting_type: meetingType,
 		},
 	});

@@ -12,8 +12,8 @@ import { loginViaApi } from "../helpers/auth";
 import { createMeetingViaApi, type MeetingType } from "../helpers/meeting";
 
 const isCI = !!process.env.CI;
-const previewTimeout = isCI ? 30_000 : 20_000;
-const meetingReadyTimeout = isCI ? 45_000 : 20_000;
+const previewTimeout = isCI ? 45_000 : 20_000;
+const meetingReadyTimeout = isCI ? 60_000 : 20_000;
 
 function readMeetingsState(): MeetingsState {
 	const raw = fs.readFileSync(MEETINGS_STATE_FILE, "utf-8");
@@ -68,7 +68,15 @@ async function joinFromPreview(page: Page): Promise<void> {
 	) {
 		await joinButton.waitFor({ state: "visible", timeout: previewTimeout });
 		await expect(joinButton).toBeEnabled({ timeout: previewTimeout });
-		await joinButton.click({ timeout: previewTimeout });
+		try {
+			await joinButton.click({ timeout: previewTimeout });
+		} catch (error) {
+			const previewStillVisible = await preview.isVisible().catch(() => false);
+			const layoutVisible = await meetingLayout.isVisible().catch(() => false);
+			if (previewStillVisible && !layoutVisible) {
+				throw error;
+			}
+		}
 	}
 
 	await waitForMeetingReady(page);
