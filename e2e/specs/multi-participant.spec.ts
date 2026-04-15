@@ -1,6 +1,6 @@
 import { test, expect, joinFromPreview } from "../fixtures/test";
 
-test.skip("Multi participant", () => {
+test.describe("Multi participant", () => {
 	test("host and two guests see the same meeting", async ({ hostPage, meetingId, createParticipant }) => {
 		const guestOne = await createParticipant();
 		const guestTwo = await createParticipant();
