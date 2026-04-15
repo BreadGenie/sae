@@ -8,4 +8,4 @@ from frappe.tests.utils import whitelist_for_tests
 @whitelist_for_tests()
 def clear_create_rate_limit() -> None:
 	"""Clear meeting creation rate limit cache. Only available in test/CI environments."""
-	frappe.cache.delete_keys("rl:meet.api.meeting.create:*")
+	frappe.cache.delete_keys("rl:meet.api.meeting.join_meeting_as_guest:*")
