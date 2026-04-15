@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import { MEETINGS_STATE_FILE, type MeetingsState } from "../global-setup";
 import { STUB_MEDIA_SCRIPT } from "./media";
 import { loginViaApi } from "../helpers/auth";
-import { createMeetingViaApi, type MeetingType } from "../helpers/meeting";
+import { clearMeetingCreateRateLimit, createMeetingViaApi, type MeetingType } from "../helpers/meeting";
 
 const isCI = !!process.env.CI;
 const previewTimeout = isCI ? 45_000 : 20_000;
@@ -187,6 +187,10 @@ export const test = base.extend<TestFixtures>({
 			participants.map((participant) => participant.context.close()),
 		);
 	},
+});
+
+test.beforeEach(async ({ hostPage }) => {
+	await clearMeetingCreateRateLimit(hostPage.request);
 });
 
 export { expect, joinFromPreview, waitForMeetingReady };
