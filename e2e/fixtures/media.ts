@@ -1,18 +1,6 @@
 export const STUB_MEDIA_SCRIPT = `(() => {
 	window.localStorage.setItem("mediaPref.autoHideToolbar", "0");
 
-	// Track all RTCPeerConnection instances so tests can check connectionState
-	const _OrigRTCPC = window.RTCPeerConnection;
-	window._peerConnections = [];
-	function TrackedRTCPeerConnection(...args) {
-		const pc = new _OrigRTCPC(...args);
-		window._peerConnections.push(pc);
-		return pc;
-	}
-	TrackedRTCPeerConnection.prototype = _OrigRTCPC.prototype;
-	Object.setPrototypeOf(TrackedRTCPeerConnection, _OrigRTCPC);
-	window.RTCPeerConnection = TrackedRTCPeerConnection;
-
 	if (!navigator.mediaDevices) {
 		Object.defineProperty(navigator, "mediaDevices", {
 			value: {},

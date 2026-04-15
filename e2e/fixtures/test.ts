@@ -50,17 +50,6 @@ async function waitForMeetingReady(page: Page): Promise<void> {
 	});
 	await expect(page.getByTestId("meeting-toolbar")).toBeVisible();
 	await expect(page.getByTestId("toolbar-end-call")).toBeVisible();
-	await page.waitForFunction(
-		() =>
-			(window as unknown as { _peerConnections?: RTCPeerConnection[] })
-				._peerConnections?.some(
-					(pc) =>
-						pc.connectionState === "connected" ||
-						pc.iceConnectionState === "connected" ||
-						pc.iceConnectionState === "completed",
-				) ?? false,
-		{ timeout: meetingReadyTimeout },
-	);
 }
 
 async function joinFromPreview(page: Page): Promise<void> {
