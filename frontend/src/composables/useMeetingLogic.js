@@ -1033,9 +1033,55 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	// ==================== MEETING MANAGEMENT ====================
 
 	/**
+	 * Continue guest join flow using the initial join API response.
+	 */
+	const handleGuestJoinResult = async (joinResult, guestName) => {
+		if (!guestName || !joinResult?.guest_id) {
+			meetingState.connectionError.value =
+				"Guest session not found. Please try joining again.";
+			return;
+		}
+
+		try {
+			meetingState.connectionError.value = null;
+
+			sessionStorage.setItem("guest_id", joinResult.guest_id);
+			sessionStorage.setItem("guest_name", guestName);
+			sessionStorage.setItem("guest_meeting_id", meetingId);
+			sessionStorage.setItem("guest_status", joinResult.status);
+
+			meetingState.guestId.value = joinResult.guest_id;
+			meetingState.guestAuthToken.value = joinResult.auth_token || null;
+			meetingState.guestSfuUrl.value = joinResult.sfu_url || null;
+			meetingState.guestSfuPort.value = joinResult.sfu_port || null;
+
+			if (joinResult.status === "waiting_for_approval") {
+				meetingState.isWaitingForApproval.value = true;
+				meetingState.isInPreview.value = false;
+				meetingState.isConnecting.value = false;
+				meetingState.guestAuthToken.value = null;
+				setupGuestApprovalListener(guestName);
+				return;
+			}
+
+			meetingState.isConnecting.value = true;
+			await setupSFUConnection(guestName, false, false);
+			setupFrappeRealtimeEventListeners();
+			meetingState.isInPreview.value = false;
+			meetingState.isConnecting.value = false;
+		} catch (error) {
+			console.error("Failed to complete guest join:", error);
+			meetingState.connectionError.value = error?.messages?.length
+				? error.messages.join(", ")
+				: error?.message || "Failed to join meeting";
+			meetingState.isConnecting.value = false;
+		}
+	};
+
+	/**
 	 * Join meeting room
 	 */
-	const joinMeetingRoom = async (guestName = null) => {
+	const joinMeetingRoom = async () => {
 		if (joiningInProgress.value) {
 			return;
 		}
@@ -1045,64 +1091,18 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			meetingState.isConnecting.value = true;
 			meetingState.connectionError.value = null;
 
-			let joinResult;
+			meetingState.guestAuthToken.value = null;
+			meetingState.guestSfuUrl.value = null;
+			meetingState.guestSfuPort.value = null;
 
-			if (guestName) {
-				const guestId =
-					meetingState.guestId.value || sessionStorage.getItem("guest_id");
-
-				if (!guestId) {
-					throw new Error("Guest session not found. Please try joining again.");
-				}
-
-				// Always call the API to get current status, especially for waiting guests
-				const apiResult = await frappeRequest({
-					url: "meet.api.meeting.join_meeting_as_guest",
-					params: {
-						meeting_id: meetingId,
-						guest_name: guestName,
-						guest_id: guestId,
-					},
-				});
-
-				joinResult = apiResult;
-			} else {
-				meetingState.guestAuthToken.value = null;
-				meetingState.guestSfuUrl.value = null;
-				meetingState.guestSfuPort.value = null;
-
-				const response = await joinMeetingAPI.fetch();
-				joinResult = response;
-			}
-
-			if (guestName && joinResult.guest_id) {
-				sessionStorage.setItem("guest_id", joinResult.guest_id);
-				sessionStorage.setItem("guest_name", guestName);
-				sessionStorage.setItem("guest_meeting_id", meetingId);
-				sessionStorage.setItem("guest_status", joinResult.status);
-
-				meetingState.guestId.value = joinResult.guest_id;
-				meetingState.guestAuthToken.value = joinResult.auth_token || null;
-				meetingState.guestSfuUrl.value = joinResult.sfu_url || null;
-				meetingState.guestSfuPort.value = joinResult.sfu_port || null;
-			}
+			const response = await joinMeetingAPI.fetch();
+			const joinResult = response;
 
 			if (joinResult.status === "waiting_for_approval") {
 				meetingState.isWaitingForApproval.value = true;
 				meetingState.isInPreview.value = false;
 				meetingState.isConnecting.value = false;
-
-				if (guestName && joinResult.guest_id) {
-					meetingState.guestAuthToken.value = null;
-					meetingState.guestSfuUrl.value = joinResult.sfu_url || null;
-					meetingState.guestSfuPort.value = joinResult.sfu_port || null;
-				}
-
-				if (guestName) {
-					setupGuestApprovalListener(guestName);
-				} else {
-					setupFrappeRealtimeEventListeners();
-				}
+				setupFrappeRealtimeEventListeners();
 
 				return;
 			}
@@ -1110,7 +1110,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			// Initialize SFU connection
 			console.log("Starting SFU connection setup...");
 			await setupSFUConnection(
-				guestName,
+				null,
 				joinResult?.is_host || false,
 				joinResult?.is_cohost || false,
 			);
@@ -2348,6 +2348,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 		applyBackgroundEffectsToLocalStream,
 
 		// Methods - Meeting
+		handleGuestJoinResult,
 		joinMeetingRoom,
 		endCall,
 

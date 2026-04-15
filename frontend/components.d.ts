@@ -146,7 +146,6 @@ declare module "vue" {
 		)["default"];
 		SFUDashboard: typeof import("./src/components/SFUDashboard.vue")["default"];
 		Spinner: typeof import("./src/components/Spinner.vue")["default"];
-		VideoGrid: typeof import("./src/components/VideoGrid.vue")["default"];
 		VideoPreview: typeof import("./src/components/VideoPreview.vue")["default"];
 	}
 }

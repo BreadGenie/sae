@@ -223,6 +223,7 @@ const meetingDoc = getMeetingDoc(meetingId.value);
 const {
 	initializeCamera,
 	acquireUserMedia,
+	handleGuestJoinResult,
 	joinMeetingRoom,
 	toggleMicrophone,
 	toggleCamera,
@@ -370,21 +371,21 @@ const joinMeetingFromPreview = async () => {
 	await joinMeetingRoom();
 };
 
-const handleGuestJoinComplete = async () => {
-	const guestId = meetingState.guestId.value;
-	const guestName = localStorage.getItem("guest_name");
+const handleGuestJoinComplete = async ({ guestName, joinResult }) => {
+	const guestId = joinResult?.guest_id || meetingState.guestId.value;
+	const resolvedGuestName = guestName || localStorage.getItem("guest_name");
 
-	if (guestId && guestName) {
+	if (guestId && resolvedGuestName) {
 		meetingState.currentUser.value = {
 			user_id: guestId,
-			name: guestName,
-			full_name: guestName,
+			name: resolvedGuestName,
+			full_name: resolvedGuestName,
 			avatar: null,
 			is_guest: true,
 		};
 	}
 
-	await joinMeetingRoom(guestName);
+	await handleGuestJoinResult(joinResult, resolvedGuestName);
 };
 
 const leaveWaitingRoom = () => {

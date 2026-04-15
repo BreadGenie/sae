@@ -245,7 +245,10 @@ const handleJoin = async () => {
 				meetingState.isWaitingForApproval.value = false;
 			}
 
-			emit("guest-join-complete");
+			emit("guest-join-complete", {
+				guestName: guestName.value.trim(),
+				joinResult: result,
+			});
 		} catch (error) {
 			console.error("Failed to join as guest:", error);
 			toast.error("Failed to join meeting. Please try again.");
