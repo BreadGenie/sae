@@ -922,6 +922,9 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 							height: { ideal: 1080, max: 1080 },
 							frameRate: { ideal: 10, max: 20 },
 						},
+						displaySurface: "window",
+						selfBrowserSurface: "exclude",
+						surfaceSwitching: "include",
 					},
 				);
 				if (!screenStream)

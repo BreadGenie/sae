@@ -18,8 +18,18 @@
 			playsinline
 		/>
 
+		<!-- Infinity mirror cover for local screen share presenter -->
 		<div
-			v-if="showAvatar && !isVideoEnabled"
+			v-if="participant.isLocalScreenShare && showBlur"
+			class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-md"
+		>
+			<lucide-monitor-up class="w-8 h-8 text-white mb-6" />
+			<div class="text-white font-medium text-lg mb-1">You are sharing your screen</div>
+			<div class="text-white font-medium text-sm">Everyone else can see what you are presenting</div>
+		</div>
+
+		<div
+			v-if="showAvatar && !isVideoEnabled && !participant.isLocalScreenShare"
 			class="absolute inset-0 flex items-center justify-center pointer-events-none"
 			:class="avatarBackgroundClass"
 		>
@@ -232,6 +242,8 @@ const props = defineProps({
 		default: "",
 	},
 });
+
+const showBlur = ref(props.participant.isLocalScreenShare);
 
 const { stream } = useAudioStream(props.participant.user_id);
 

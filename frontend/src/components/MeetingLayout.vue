@@ -250,6 +250,7 @@ const screenShareTileParticipants = computed(() => {
 				user_name: displayName,
 				avatar: "",
 				initials: getInitials(displayName),
+				isLocalScreenShare: isLocalSharer,
 			},
 		};
 	});
