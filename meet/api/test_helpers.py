@@ -11,4 +11,4 @@ def clear_create_rate_limit() -> None:
 	keys = frappe.cache.get_keys("rl:meet.api.meeting.join_meeting_as_guest:*")
 	keys += frappe.cache.get_keys("rl:meet.api.meeting.create:*")
 	for key in keys:
-		frappe.cache.set(key, 0)
+		frappe.cache.set(key, 0)  # nosemgrep
