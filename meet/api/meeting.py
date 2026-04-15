@@ -94,8 +94,6 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		"user_id": frappe.session.user,
 		"meeting_id": meeting_id,
 		"codec_strategy": _get_codec_strategy(),
-		"is_host": is_host,
-		"is_cohost": is_cohost,
 		"user_data": {
 			"name": user_fullname,
 			"email": frappe.session.user,
