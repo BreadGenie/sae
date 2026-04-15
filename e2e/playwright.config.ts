@@ -7,7 +7,7 @@ export default defineConfig({
 	fullyParallel: false,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
-	workers: process.env.CI ? 1 : 2,
+	workers: 1,
     maxFailures: process.env.CI ? 3 : undefined,
 	timeout: 60_000,
 	expect: {
@@ -38,6 +38,8 @@ export default defineConfig({
 				launchOptions: {
 					args: [
 						"--use-fake-ui-for-media-stream",
+						"--disable-audio-track-processing",
+						"--disable-webrtc-apm-in-audio-service",
 						"--allow-insecure-localhost",
 						"--autoplay-policy=no-user-gesture-required",
 						`--unsafely-treat-insecure-origin-as-secure=${baseURL}`,

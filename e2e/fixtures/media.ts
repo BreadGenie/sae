@@ -43,7 +43,7 @@ export const STUB_MEDIA_SCRIPT = `(() => {
 
 		draw();
 
-		const stream = canvas.captureStream(24);
+		const stream = canvas.captureStream(12);
 
 		try {
 			const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
