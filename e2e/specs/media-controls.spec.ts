@@ -28,5 +28,10 @@ test.describe("Media controls", () => {
 
 		await expect(guest.page.locator("[data-tile-id^='screenshare-']")).toHaveCount(1);
 		await expect(guest.page.getByText("Administrator's screen")).toBeVisible();
+
+		await hostPage.getByTestId("toolbar-screen-share").click();
+
+		await expect(guest.page.locator("[data-tile-id^='screenshare-']")).toHaveCount(0);
+		await expect(guest.page.getByText("Administrator's screen")).toHaveCount(0);
 	});
 });
