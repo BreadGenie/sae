@@ -68,7 +68,7 @@
 
 <script setup>
 import data from "@emoji-mart/data";
-import { SearchIndex, init } from "emoji-mart";
+import { init, SearchIndex } from "emoji-mart";
 import { Button, FormControl } from "frappe-ui";
 import { computed, nextTick, onMounted, ref, toRefs, watch } from "vue";
 import EmojiPicker from "./EmojiPicker.vue";

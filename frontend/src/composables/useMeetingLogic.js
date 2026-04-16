@@ -34,6 +34,7 @@ function getBackgroundEffectsFromStorage() {
 		localStorage.getItem("backgroundEffects.imageName") || "";
 	const blurIntensity = Number.parseInt(
 		localStorage.getItem("backgroundEffects.blurIntensity") || "12",
+		10,
 	);
 	const anyEnabled = blurEnabled || imageEnabled;
 
@@ -1295,7 +1296,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 	/**
 	 * Setup realtime listener for guest approval/rejection
 	 */
-	const setupGuestApprovalListener = (guestName) => {
+	const setupGuestApprovalListener = (_guestName) => {
 		const guestId = sessionStorage.getItem("guest_id");
 		if (!guestId) {
 			console.error("No guest_id found for realtime listener");
@@ -1572,7 +1573,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 				});
 			},
 
-			onParticipantUpdated: (participantId, participant, updates) => {
+			onParticipantUpdated: (participantId, _participant, updates) => {
 				// Propagate updates to meeting state so UI reacts
 				if (participantId) {
 					meetingState.updateParticipant(participantId, updates || {});
@@ -1724,7 +1725,7 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 					toggleMicrophone();
 				}
 			},
-			onHostKickedYou: (data) => {
+			onHostKickedYou: (_data) => {
 				toast.error("You have been removed from the meeting by the host");
 
 				setTimeout(() => {
@@ -2060,17 +2061,6 @@ export function useMeetingLogic(meetingState, meetingId, options = {}) {
 			if (userId) {
 				showReactionForUser(userId, reactionType, 5000);
 			}
-
-			const reaction = {
-				id: Date.now() + Math.random(),
-				user_id: meetingState.currentUser.value?.user_id,
-				user_name:
-					meetingState.currentUser.value?.full_name ||
-					meetingState.currentUser.value?.name ||
-					meetingState.currentUser.value?.user_id,
-				reaction: reactionType,
-				timestamp: new Date().toISOString(),
-			};
 
 			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {

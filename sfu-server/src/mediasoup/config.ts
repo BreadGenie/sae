@@ -108,8 +108,8 @@ const webRtcTransportOptions: WebRTCTransportOptions = {
 	enableTcp: true,
 	preferUdp: true,
 	portRange: {
-		min: Number.parseInt(process.env.RTC_MIN_PORT || '40000'),
-		max: Number.parseInt(process.env.RTC_MAX_PORT || '49999'),
+		min: Number.parseInt(process.env.RTC_MIN_PORT || '40000', 10),
+		max: Number.parseInt(process.env.RTC_MAX_PORT || '49999', 10),
 	},
 	// Add additional WebRTC options for better connectivity
 	maxIncomingBitrate: 1500000,
@@ -143,12 +143,12 @@ const workerSettings: WorkerSettings = {
 		'svc',
 		'sctp',
 	],
-	rtcMinPort: Number.parseInt(process.env.RTC_MIN_PORT || '40000'),
-	rtcMaxPort: Number.parseInt(process.env.RTC_MAX_PORT || '49999'),
+	rtcMinPort: Number.parseInt(process.env.RTC_MIN_PORT || '40000', 10),
+	rtcMaxPort: Number.parseInt(process.env.RTC_MAX_PORT || '49999', 10),
 };
 
 function resolveNumWorkers(): number {
-	const envVal = Number.parseInt(process.env.MEDIASOUP_NUM_WORKERS || '');
+	const envVal = Number.parseInt(process.env.MEDIASOUP_NUM_WORKERS || '', 10);
 	if (!Number.isNaN(envVal) && envVal > 0) return envVal;
 	const cpuCount = os.cpus()?.length || 2;
 	return Math.max(1, cpuCount);

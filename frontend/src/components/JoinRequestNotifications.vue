@@ -91,13 +91,13 @@ defineEmits(["approve-user", "reject-user", "view-all-requests"]);
 
 const dismissedRequests = ref([]);
 
-const waitingUsers = computed(() => {
+const resolvedWaitingUsers = computed(() => {
 	const users = props.waitingUsers?.value || props.waitingUsers;
 	return Array.isArray(users) ? users : [];
 });
 
 const joinRequests = computed(() => {
-	return waitingUsers.value
+	return resolvedWaitingUsers.value
 		.filter((user) => !dismissedRequests.value.includes(user.user_id))
 		.slice(-props.maxVisible)
 		.reverse();
@@ -113,7 +113,7 @@ defineExpose({ forceHide });
 
 const previousWaitingUsers = ref([]);
 watch(
-	() => waitingUsers.value,
+	() => resolvedWaitingUsers.value,
 	(newUsersArray, oldUsersArray) => {
 		if (oldUsersArray && newUsersArray.length < oldUsersArray.length) {
 			// Some users were removed, clear dismissed list

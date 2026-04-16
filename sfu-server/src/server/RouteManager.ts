@@ -1,9 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Application, Request, Response } from 'express';
 import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type { HealthStats } from '../types';
-
-import fs from 'node:fs';
-import path from 'node:path';
 
 export class RouteManager {
 	private app: Application;

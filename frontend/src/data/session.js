@@ -1,6 +1,6 @@
-import router from "@/router";
 import { createResource } from "frappe-ui";
 import { computed, reactive } from "vue";
+import router from "@/router";
 import { userResource } from "./user";
 
 export function sessionUser() {

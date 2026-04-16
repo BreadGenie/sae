@@ -9,8 +9,8 @@
 			:key="reaction.id"
 			class="absolute flex flex-col items-center animate-float-up"
 			:style="{
-				left: reaction.position.x + 'px',
-				top: reaction.position.y + 'px',
+				left: `${reaction.position.x}px`,
+				top: `${reaction.position.y}px`,
 			}"
 		>
 			<div class="text-3xl mb-1 animate-bounce-in">

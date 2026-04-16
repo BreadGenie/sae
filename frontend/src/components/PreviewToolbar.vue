@@ -25,7 +25,7 @@
 					:class="{
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': !isMicOn,
 					}"
-					:title="'Toggle Audio (' + ($platform === 'mac' ? '⌘+D' : 'Ctrl+D') + ')'"
+					:title="`Toggle Audio (${$platform === 'mac' ? '⌘+D' : 'Ctrl+D'})`"
 				>
 					<template #icon>
 						<lucide-mic-off v-if="!isMicOn" class="w-5 h-5 text-white" />
@@ -43,7 +43,7 @@
 					:class="{
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': !isCameraOn,
 					}"
-					:title="'Toggle Video (' + ($platform === 'mac' ? '⌘+E' : 'Ctrl+E') + ')'"
+					:title="`Toggle Video (${$platform === 'mac' ? '⌘+E' : 'Ctrl+E'})`"
 				>
 					<template #icon>
 						<lucide-video-off v-if="!isCameraOn" class="w-5 h-5 text-white" />

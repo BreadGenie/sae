@@ -51,9 +51,10 @@
 								<button
 									v-for="item in tab.items"
 									:key="item.label"
+									type="button"
 									class="flex h-7 w-full items-center gap-2 rounded px-2 py-1"
 									:class="[
-										activeTab?.label == item.label
+										activeTab?.label === item.label
 											? 'bg-surface-white shadow-sm'
 											: 'hover:bg-surface-gray-2',
 									]"

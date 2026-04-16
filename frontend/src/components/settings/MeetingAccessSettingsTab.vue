@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { FormControl, Switch, debounce, toast } from "frappe-ui";
+import { debounce, FormControl, Switch, toast } from "frappe-ui";
 import { onMounted, ref, watch } from "vue";
 import { useMeetingDoc } from "../../composables/useMeetingDoc";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";

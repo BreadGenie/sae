@@ -379,7 +379,7 @@ export class SFUMeetingManager {
 	}
 
 	async handleNewConsumer(consumer) {
-		const { participantId, kind, track, isScreen } = consumer;
+		const { participantId, kind, isScreen } = consumer;
 
 		if (this.processedConsumers?.has?.(consumer?.id)) {
 			return;
@@ -506,7 +506,7 @@ export class SFUMeetingManager {
 		const pending = this.bufferedProducerEvents.splice(0);
 		for (const event of pending) {
 			try {
-				if (!event || !event.producerId || !event.participantId) {
+				if (!event?.producerId || !event.participantId) {
 					console.warn("Skipping malformed buffered producer event:", event);
 					continue;
 				}
@@ -823,7 +823,7 @@ export class SFUMeetingManager {
 	}
 
 	async updateConsumerStreamPreferences(consumerId, preferences) {
-		if (!this.sfuClient || !this.sfuClient.isConnected()) {
+		if (!this.sfuClient?.isConnected()) {
 			return null;
 		}
 

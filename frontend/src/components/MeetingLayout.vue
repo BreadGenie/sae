@@ -23,14 +23,14 @@
 			class="h-full"
 			:class="[
 				mode === 'sidebar'
-					? 'grid gap-2 mt-3 sm:mt-0 sm:ml-3 ' + containerClass
+					? `grid gap-2 mt-3 sm:mt-0 sm:ml-3 ${containerClass}`
 					: 'relative call-grid',
 			]"
 			:style="containerStyle"
 		>
 			<!-- Local camera tile -->
 			<ParticipantTile
-				:key="'local-' + localParticipant.user_id"
+				:key="`local-${localParticipant.user_id}`"
 				:participant="localParticipant"
 				:isLocal="true"
 				:isVideoEnabled="isCameraOn"
@@ -51,7 +51,7 @@
 			<!-- Remote participants -->
 			<template
 				v-for="participant in allParticipants"
-				:key="'group-' + participant.user_id"
+				:key="`group-${participant.user_id}`"
 			>
 				<ParticipantTile
 					v-bind="getParticipantTileBindings(participant)"

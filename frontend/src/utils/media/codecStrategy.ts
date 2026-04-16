@@ -171,7 +171,10 @@ export function resolveCodecStrategy({
 export function shouldUseSVC({
 	preference,
 	deviceCapabilities,
-}: { preference: string; deviceCapabilities?: DeviceCapabilities }): boolean {
+}: {
+	preference: string;
+	deviceCapabilities?: DeviceCapabilities;
+}): boolean {
 	const decision = resolveCodecStrategy({ preference, deviceCapabilities });
 	return decision.strategy === "svc";
 }

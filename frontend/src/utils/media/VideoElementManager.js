@@ -214,7 +214,7 @@ export class VideoElementManager {
 	}
 
 	cleanup() {
-		for (const [participantId, element] of this.videoElements.entries()) {
+		for (const [_participantId, element] of this.videoElements.entries()) {
 			if (element?.srcObject) {
 				for (const track of element.srcObject.getTracks()) {
 					track.stop();
@@ -223,7 +223,7 @@ export class VideoElementManager {
 			}
 		}
 
-		for (const [participantId, audioElement] of this.audioElements.entries()) {
+		for (const [_participantId, audioElement] of this.audioElements.entries()) {
 			if (audioElement?.srcObject) {
 				for (const track of audioElement.srcObject.getTracks()) {
 					track.stop();

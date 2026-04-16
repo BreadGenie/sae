@@ -209,7 +209,6 @@ export class WebGLManager {
 	private outputCanvas: HTMLCanvasElement | null = null;
 
 	// Cached locations for blur program
-	private positionLocation = 0;
 	private texCoordLocation = -1;
 	private resolutionLocation: WebGLUniformLocation | null = null;
 	private directionLocation: WebGLUniformLocation | null = null;

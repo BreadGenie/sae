@@ -6,10 +6,6 @@ body {
 	overscroll-behavior: none;
 }
 
-.dropdown-content {
-	z-index: 9999 !important;
-}
-
 .wave {
 	display: inline-block;
 	transform-origin: 70% 70%;

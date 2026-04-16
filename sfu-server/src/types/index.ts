@@ -3,6 +3,15 @@ import type { Consumer } from 'mediasoup/node/lib/ConsumerTypes';
 import type { Producer } from 'mediasoup/node/lib/ProducerTypes';
 import type { Router } from 'mediasoup/node/lib/RouterTypes';
 import type {
+	RouterRtpCodecCapability,
+	RtpCodecCapability,
+} from 'mediasoup/node/lib/rtpParametersTypes';
+import type {
+	AppData,
+	RtpCapabilities,
+	RtpParameters,
+} from 'mediasoup/node/lib/types';
+import type {
 	DtlsParameters,
 	IceCandidate,
 	IceParameters,
@@ -14,12 +23,6 @@ import type {
 	WorkerSettings,
 } from 'mediasoup/node/lib/WorkerTypes';
 import type {
-	RouterRtpCodecCapability,
-	RtpCodecCapability,
-} from 'mediasoup/node/lib/rtpParametersTypes';
-import type { RtpCapabilities, RtpParameters } from 'mediasoup/node/lib/types';
-import type { AppData } from 'mediasoup/node/lib/types';
-import type {
 	ActiveSpeakerEvent,
 	AuthExpiredEvent,
 	ChatMessage,
@@ -47,62 +50,58 @@ import type {
 	RaiseHandRequest,
 	ReactionMessage,
 	ReactionSendRequest,
-	SFUErrorEvent,
-	SFUScope,
 	ScreenShareData,
 	ScreenShareRequest,
 	ScreenShareStartedEvent,
 	ScreenShareStoppedEvent,
+	SFUErrorEvent,
+	SFUScope,
 	UpdateTokenRequest,
 	UserData,
 	WebRTCSignalData,
 } from '../../../types';
 
 // Re-export mediasoup types
-export type { RtpCapabilities, RtpParameters };
-export type {
-	WebRtcTransport,
-	Producer,
-	Consumer,
-	Router,
-	AudioLevelObserver,
-	RouterRtpCodecCapability,
-	RtpCodecCapability,
-	IceParameters,
-	IceCandidate,
-	DtlsParameters,
-	WorkerLogLevel,
-	WorkerSettings,
-	WorkerLogTag,
-	AppData,
-};
 export type {
 	ActiveSpeakerEvent,
+	AppData,
+	AudioLevelObserver,
 	AuthExpiredEvent,
-	ChatSendRequest,
 	ChatMessage,
+	ChatSendRequest,
+	Consumer,
 	ConsumerClosedEvent,
 	ConsumerUpdatePreferencesRequest,
 	CreateWebRtcTransportRequest,
+	DtlsParameters,
 	ExistingRaisedHandsEvent,
 	HandRaisedEvent,
-	HostControlRequest,
 	HostControlAction,
+	HostControlRequest,
 	HostControlUpdateEvent,
+	IceCandidate,
+	IceParameters,
 	JoinRoomRequest,
 	LeaveRoomRequest,
-	MediaControlRequest,
 	MediaControlAction,
+	MediaControlRequest,
 	MediaControlUpdateEvent,
+	NetworkQualityUpdateEvent,
 	ParticipantInfo,
 	ParticipantJoinedEvent,
 	ParticipantLeftEvent,
-	ProducerCreatedEvent,
-	ProducerClosedEvent,
 	PreviewParticipantInfo,
+	Producer,
+	ProducerClosedEvent,
+	ProducerCreatedEvent,
 	RaiseHandRequest,
-	ReactionSendRequest,
 	ReactionMessage,
+	ReactionSendRequest,
+	Router,
+	RouterRtpCodecCapability,
+	RtpCapabilities,
+	RtpCodecCapability,
+	RtpParameters,
 	ScreenShareData,
 	ScreenShareRequest,
 	ScreenShareStartedEvent,
@@ -112,7 +111,10 @@ export type {
 	UpdateTokenRequest,
 	UserData,
 	WebRTCSignalData,
-	NetworkQualityUpdateEvent,
+	WebRtcTransport,
+	WorkerLogLevel,
+	WorkerLogTag,
+	WorkerSettings,
 };
 
 // Socket.IO types

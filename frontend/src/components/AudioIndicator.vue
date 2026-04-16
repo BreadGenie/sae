@@ -1,13 +1,13 @@
 <template>
-	<div class="flex items-center gap-1" :style="{ height: (props.maxHeight || 80) + 'px' }">
+	<div class="flex items-center gap-1" :style="{ height: `${props.maxHeight || 80}px` }">
 		<div
 			v-for="(bar, index) in bars"
 			:key="index"
 			class="audio-bar"
 			:class="bar.className"
 			:style="{
-				height: bar.height + 'px',
-				maxHeight: (props.maxHeight || 80) + 'px',
+				height: `${bar.height}px`,
+				maxHeight: `${props.maxHeight || 80}px`,
 				transition: 'height 0.1s ease-out',
 			}"
 		/>
@@ -58,7 +58,7 @@ let analyser = null;
 let microphone = null;
 let animationFrame = null;
 let isListening = false;
-let mediaStream = null;
+let localMediaStream = null;
 
 const startListening = async () => {
 	if (isListening || !props.isActive) return;
@@ -69,9 +69,9 @@ const startListening = async () => {
 		// Device settings doesn't need mediaStream
 		// But participant tiles do need for analysing
 		if (props.mediaStream) {
-			mediaStream = props.mediaStream;
+			localMediaStream = props.mediaStream;
 		} else {
-			mediaStream = await navigator.mediaDevices.getUserMedia({
+			localMediaStream = await navigator.mediaDevices.getUserMedia({
 				audio: {
 					deviceId: props.deviceId,
 					echoCancellation: true,
@@ -82,7 +82,7 @@ const startListening = async () => {
 
 		audioContext = new window.AudioContext();
 		analyser = audioContext.createAnalyser();
-		microphone = audioContext.createMediaStreamSource(mediaStream);
+		microphone = audioContext.createMediaStreamSource(localMediaStream);
 
 		// We do RMS (root mean square) analysis on the time-domain signal
 		// to get a better representation of perceived loudness.
@@ -182,12 +182,12 @@ const stopListening = () => {
 		microphone = null;
 	}
 
-	if (mediaStream && !props.mediaStream) {
-		for (const track of mediaStream.getTracks()) {
+	if (localMediaStream && !props.mediaStream) {
+		for (const track of localMediaStream.getTracks()) {
 			track.stop();
 		}
 	}
-	mediaStream = null;
+	localMediaStream = null;
 
 	if (audioContext && audioContext.state !== "closed") {
 		audioContext.close();

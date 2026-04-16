@@ -14,7 +14,7 @@ export class ConsumerManager {
 	}
 
 	addConsumer(consumer, participantIdOverride = null) {
-		if (!consumer || !consumer.id) {
+		if (!consumer?.id) {
 			console.error("Invalid consumer provided");
 			return false;
 		}

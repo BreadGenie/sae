@@ -1,4 +1,4 @@
-import { type Ref, computed, ref } from "vue";
+import { computed, type Ref, ref } from "vue";
 import {
 	convertToWebP,
 	deleteCustomImage,
@@ -23,18 +23,6 @@ interface BackgroundImage {
 	};
 }
 
-interface CustomImageRecord {
-	id: string;
-	name: string;
-	originalName: string;
-	data: string; // Base64 data URL
-	size: number;
-	width: number;
-	height: number;
-	format: string;
-	createdAt: string;
-}
-
 function readBool(key: string, def = false) {
 	const v = localStorage.getItem(key);
 	if (v === null) return def;
@@ -57,7 +45,7 @@ export const selectedBackgroundImage: Ref<string> = ref(
 	readString("backgroundEffects.imageName", ""),
 );
 export const blurIntensity: Ref<number> = ref(
-	Number.parseInt(readString("backgroundEffects.blurIntensity", "4")),
+	Number.parseInt(readString("backgroundEffects.blurIntensity", "4"), 10) || 4,
 );
 
 // Custom background images

@@ -26,7 +26,7 @@ export class SFUServer {
 			throw new Error('JWT_SECRET environment variable is required');
 		}
 		this.config = {
-			port: Number.parseInt(process.env.PORT || '3000'),
+			port: Number.parseInt(process.env.PORT || '3000', 10),
 			host: process.env.HOST || '0.0.0.0',
 			jwtSecret,
 		};

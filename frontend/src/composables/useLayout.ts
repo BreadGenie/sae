@@ -1,4 +1,4 @@
-import { type ComputedRef, type Ref, computed } from "vue";
+import { type ComputedRef, computed, type Ref } from "vue";
 import type { Participant } from "../types";
 import { useResponsiveGrid } from "./useResponsiveGrid";
 

@@ -85,9 +85,9 @@
 <script setup>
 import {
 	Button,
+	createResource,
 	Dropdown,
 	FormControl,
-	createResource,
 	toast,
 } from "frappe-ui";
 import { ref } from "vue";

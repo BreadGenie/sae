@@ -44,7 +44,7 @@ export function applyBlurEffect(
 			height,
 			blurIntensity / 2,
 		);
-	} catch (error) {
+	} catch (_error) {
 		throw new CompositingError("WebGL blur failed", "WEBGL_BLUR_FAILED");
 	}
 }

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type * as mediasoup from 'mediasoup';
-import type { AppData } from '../types';
 import type {
+	AppData,
 	CloseProducerResult,
 	ProducerData,
 	RtpParameters,

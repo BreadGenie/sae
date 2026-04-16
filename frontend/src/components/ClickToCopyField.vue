@@ -11,10 +11,10 @@
 						? 'scrollbar-width: none; -ms-overflow-style: none; -webkit-scrollbar: none;'
 						: ''
 				"
-				>{{ textContent }}</pre
-			>
+				>{{ textContent }}</pre>
 		</div>
 		<button
+			type="button"
 			class="absolute right-2 top-2 rounded-sm border border-gray-200 bg-white p-1 text-xs text-gray-600"
 			variant="outline"
 			@click="copyTextContentToClipboard"

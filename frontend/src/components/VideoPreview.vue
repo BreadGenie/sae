@@ -35,13 +35,13 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import {
 	cameraEnabled,
 	micEnabled,
 	setCameraEnabled,
 	setMicEnabled,
 } from "@/data/mediaPreferences";
-import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useBackgroundEffects } from "../composables/useBackgroundEffects";
 import {
 	backgroundBlurEnabled,

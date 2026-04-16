@@ -17,6 +17,7 @@
 						<button
 							v-for="emoji in reactionEmojis"
 							:key="emoji"
+							type="button"
 							@click="handleReactionSelect(emoji)"
 							class="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-2xl"
 							:aria-label="`Send ${emoji} reaction`"
@@ -26,6 +27,7 @@
 						</button>
 					</div>
 					<button
+						type="button"
 						@click="handleRaiseHand"
 						class="w-full py-2 px-4 bg-white/10 hover:bg-opacity-100 rounded-lg transition-colors flex items-center justify-center gap-3 font-medium text-white"
 						:class="{ '!bg-gray-800 hover:!bg-gray-800': isHandRaised }"

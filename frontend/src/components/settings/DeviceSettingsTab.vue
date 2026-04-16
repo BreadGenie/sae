@@ -325,14 +325,6 @@ const handleDeviceChange = () => {
 			deviceId: selectedMicIdLocal.value,
 		});
 		console.log("Auto-selected new microphone:", newMics[0].label);
-	} else if (newMics.length > 0) {
-		// if we already have a mic selected, still switch to the new one
-		selectedMicIdLocal.value = newMics[0].deviceId;
-		setSelectedMicId(selectedMicIdLocal.value);
-		emit("device-changed", {
-			type: "microphone",
-			deviceId: selectedMicIdLocal.value,
-		});
 	}
 	if (newSpeakers.length > 0) {
 		selectedSpeakerIdLocal.value = newSpeakers[0].deviceId;

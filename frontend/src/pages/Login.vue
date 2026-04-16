@@ -52,7 +52,7 @@
 </template>
 
 <script lang="ts" setup>
-import { Button, FormControl, createResource, toast } from "frappe-ui";
+import { Button, createResource, FormControl, toast } from "frappe-ui";
 import { useRoute, useRouter } from "vue-router";
 import { session } from "../data/session";
 import { userResource } from "../data/user";

@@ -1,9 +1,3 @@
-import { createApp } from "vue";
-
-import App from "./App.vue";
-import router from "./router";
-import { initSocket } from "./socket";
-
 import {
 	Alert,
 	Badge,
@@ -11,13 +5,17 @@ import {
 	Dialog,
 	ErrorMessage,
 	FormControl,
-	Input,
-	TextInput,
 	frappeRequest,
+	Input,
 	pageMetaPlugin,
 	resourcesPlugin,
 	setConfig,
+	TextInput,
 } from "frappe-ui";
+import { createApp } from "vue";
+import App from "./App.vue";
+import router from "./router";
+import { initSocket } from "./socket";
 
 import "./index.css";
 import { loadMediaPreferences } from "./data/mediaPreferences";

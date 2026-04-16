@@ -1,11 +1,11 @@
 import type { SelfieSegmentation } from "@mediapipe/selfie_segmentation";
 import { toast } from "frappe-ui";
-import { type Ref, onUnmounted, ref } from "vue";
+import { onUnmounted, type Ref, ref } from "vue";
 import { availableBackgroundImages } from "../data/backgroundEffects";
 import {
-	CompositingError,
 	applyBlurEffect,
 	applyVirtualBackground,
+	CompositingError,
 	getBackgroundImageData,
 } from "../utils/compositing";
 import { WebGLManager } from "../utils/webglShaders";
@@ -538,7 +538,7 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 							}
 
 							const results = latestResults;
-							if (!results || !results.segmentationMask) {
+							if (!results?.segmentationMask) {
 								outputCtx.clearRect(
 									0,
 									0,
@@ -647,7 +647,7 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 					}
 
 					const results = latestResults;
-					if (!results || !results.segmentationMask) {
+					if (!results?.segmentationMask) {
 						outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
 						outputCtx.drawImage(canvas, 0, 0);
 						animationId = requestAnimationFrame(processFrameWithRAF);

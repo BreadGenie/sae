@@ -1,5 +1,5 @@
-import { userResource } from "@/data/user";
 import { createRouter, createWebHistory } from "vue-router";
+import { userResource } from "@/data/user";
 import { session } from "./data/session";
 
 const routes = [
@@ -7,12 +7,6 @@ const routes = [
 		path: "/",
 		name: "Home",
 		component: () => import("@/pages/Home.vue"),
-	},
-	{
-		path: "/admin/sfu-dashboard",
-		name: "SFUDashboard",
-		component: () => import("@/pages/SFUDashboardPage.vue"),
-		meta: { requiresAdmin: true },
 	},
 	{
 		path: "/audio-test",
@@ -38,7 +32,7 @@ const router = createRouter({
 	routes,
 });
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
 	let isLoggedIn = session.isLoggedIn;
 	let user = null;
 	if (isLoggedIn || to.meta?.requiresAdmin) {
@@ -47,7 +41,7 @@ router.beforeEach(async (to, from, next) => {
 				await userResource.fetch();
 			}
 			user = userResource.data;
-		} catch (error) {
+		} catch (_error) {
 			isLoggedIn = false;
 		}
 	}

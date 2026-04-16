@@ -51,7 +51,7 @@
 		</div>
 
 		<NamePill
-			:name="displayName"
+			:name="resolvedDisplayName"
 			:size="labelSize"
 			:position="labelPosition"
 		/>
@@ -61,7 +61,7 @@
 			v-if="showReaction && currentReaction"
 			class="absolute top-1 px-2 py-1 rounded-md text-xl pointer-events-none animate-pop"
 			:class="{ 'left-2': !isHandRaised, 'left-10': isHandRaised }"
-			:aria-label="`Reaction ${currentReaction.emoji} from ${displayName}`"
+			:aria-label="`Reaction ${currentReaction.emoji} from ${resolvedDisplayName}`"
 			role="img"
 		>
 			<span class="text-2xl">{{ currentReaction.emoji }}</span>
@@ -71,7 +71,7 @@
 		<div
 			v-if="showRaisedHand && isHandRaised"
 			class="absolute top-2 left-2 px-2 py-1 rounded-full !bg-[#e54e17] text-white pointer-events-none flex items-center justify-center"
-			:aria-label="`${displayName} has raised their hand`"
+			:aria-label="`${resolvedDisplayName} has raised their hand`"
 		>
 			<lucide-hand class="w-4 h-4" :class="{ wave: isAnimating }" />
 		</div>
@@ -112,6 +112,7 @@
 		>
 			<button
 				v-if="canShowPinButton"
+				type="button"
 				class="rounded-full p-1.5 hover:bg-gray-600 transition-colors"
 				:class="{ 'bg-gray-600': isPinned }"
 				:title="isPinned ? 'Unpin participant' : 'Pin participant'"
@@ -122,6 +123,7 @@
 			</button>
 			<button
 				v-if="canShowHostControls && isAudioEnabled"
+				type="button"
 				class="rounded-full p-1.5 hover:bg-gray-600 transition-colors"
 				title="Mute participant"
 				@click="handleMute"
@@ -130,6 +132,7 @@
 			</button>
 			<button
 				v-if="canShowHostControls"
+				type="button"
 				class="rounded-full p-1.5 hover:bg-gray-600 transition-colors"
 				title="Remove participant"
 				@click="showKickDialog = true"
@@ -142,7 +145,7 @@
 		<KickParticipantDialog
 			v-if="canShowHostControls"
 			v-model="showKickDialog"
-			:participant-name="displayName || 'this participant'"
+			:participant-name="resolvedDisplayName || 'this participant'"
 			@confirm="handleKick"
 		/>
 	</div>
@@ -263,7 +266,7 @@ const { stream } = useAudioStream(props.participant.user_id);
 
 const { networkQuality } = useNetworkQuality();
 
-const displayName = computed(() => {
+const resolvedDisplayName = computed(() => {
 	return (
 		props.displayName ||
 		props.participant.user_name ||
@@ -285,7 +288,7 @@ const showNetworkIndicator = computed(() => {
 const networkQualityMessage = computed(() => {
 	const quality = computedNetworkQuality.value;
 	const isLocal = props.isLocal;
-	const name = displayName.value || "This participant";
+	const name = resolvedDisplayName.value || "This participant";
 
 	if (quality === "critical") {
 		return isLocal

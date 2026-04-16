@@ -1,5 +1,5 @@
 import { createDocumentResource } from "frappe-ui";
-import { type ComputedRef, type Ref, computed, ref } from "vue";
+import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { session } from "../data/session.js";
 
 interface MeetingDocument {
@@ -98,7 +98,7 @@ export function useMeetingDoc(): UseMeetingDocReturn {
 	const isCurrentUserCohost = computed((): boolean => {
 		const currentUserId = session.user?.sessionUser;
 		const coHosts = meetingCoHosts.value;
-		return Boolean(currentUserId && coHosts && coHosts.includes(currentUserId));
+		return Boolean(currentUserId && coHosts?.includes(currentUserId));
 	});
 
 	const meetingType = computed((): string => {

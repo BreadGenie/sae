@@ -1,6 +1,7 @@
-import type { AppData, Consumer } from '../types';
 import type {
+	AppData,
 	CloseProducerResult,
+	Consumer,
 	DtlsParameters,
 	ExistingProducer,
 	IceCandidate,
@@ -16,12 +17,12 @@ import type {
 } from '../types';
 import { loggers } from '../utils/logger';
 import { ConsumerManager } from './ConsumerManager';
+import { mediasoupConfig } from './config';
 import { PeerManager } from './PeerManager';
 import { ProducerManager } from './ProducerManager';
 import { RoomManager } from './RoomManager';
 import { TransportManager } from './TransportManager';
 import { WorkerManager } from './WorkerManager';
-import { mediasoupConfig } from './config';
 
 export class MediasoupManager {
 	private workerManager = new WorkerManager();

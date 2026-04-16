@@ -23,7 +23,7 @@
 					:class="{
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': !isMicOn,
 					}"
-					:title="'Toggle Audio (' + ($platform === 'mac' ? '⌘+D' : 'Ctrl+D') + ')'"
+					:title="`Toggle Audio (${$platform === 'mac' ? '⌘+D' : 'Ctrl+D'})`"
 					data-testid="toolbar-microphone"
 				>
 					<template #icon>
@@ -42,7 +42,7 @@
 					:class="{
 						'!bg-[#e54e17] hover:!bg-[#e54e17]': !isCameraOn,
 					}"
-					:title="'Toggle Video (' + ($platform === 'mac' ? '⌘+E' : 'Ctrl+E') + ')'"
+					:title="`Toggle Video (${$platform === 'mac' ? '⌘+E' : 'Ctrl+E'})`"
 					data-testid="toolbar-camera"
 				>
 					<template #icon>
@@ -420,7 +420,7 @@ const handleShortcut = (event) => {
 	}
 };
 
-const handleDropdownClick = (event) => {
+const handleDropdownClick = (_event) => {
 	isDropdownOpen.value = !isDropdownOpen.value;
 
 	if (isDropdownOpen.value) {

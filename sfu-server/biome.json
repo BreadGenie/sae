@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -7,15 +7,16 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"ignore": [
-			"dist/**",
-			"node_modules/**",
-			"logs/**",
-			"scripts/**",
-			"package.json",
-			"package-lock.json",
-			"tsconfig.json",
-			"biome.json"
+		"includes": [
+			"**",
+			"!**/dist",
+			"!**/node_modules",
+			"!**/logs",
+			"!**/scripts",
+			"!**/package.json",
+			"!**/package-lock.json",
+			"!**/tsconfig.json",
+			"!**/biome.json"
 		]
 	},
 	"formatter": {
@@ -37,7 +38,17 @@
 			"style": {
 				"noNonNullAssertion": "off",
 				"useConst": "error",
-				"useImportType": "error"
+				"useImportType": "error",
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"noUnusedTemplateLiteral": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noUselessElse": "error"
 			},
 			"suspicious": {
 				"noExplicitAny": "warn"

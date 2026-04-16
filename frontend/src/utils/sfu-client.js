@@ -173,11 +173,11 @@ class SFUClient {
 				reject(new Error(`SFU connection failed: ${error.message || error}`));
 			});
 
-			this.socket.on("disconnect", (reason) => {
+			this.socket.on("disconnect", () => {
 				this.connected = false;
 			});
 
-			this.socket.on("reconnect_attempt", async (attemptNumber) => {
+			this.socket.on("reconnect_attempt", async (_attemptNumber) => {
 				if (this.isTokenExpiringSoon()) {
 					try {
 						const newToken = await this.refreshToken({

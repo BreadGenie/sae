@@ -1,6 +1,6 @@
 import { debounce } from "frappe-ui";
-import { inject, onBeforeUnmount } from "vue";
 import type { Ref } from "vue";
+import { inject, onBeforeUnmount } from "vue";
 
 type SFUMeetingManagerLike = {
 	getVideoConsumerEntry: (participantId: string) => { id: string } | null;
