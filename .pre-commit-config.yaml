@@ -35,7 +35,7 @@ repos:
     hooks:
       - id: biome-check
         name: Biome Check (Frontend)
-        entry: bash -c 'cd frontend && yarn lint:fix'
+        entry: bash -c 'cd frontend && npx biome check --write .'
         language: system
         files: "frontend/.*\\.(js|ts|vue|json|jsx|tsx)$"
         # Ignore any files that might contain jinja / bundles
@@ -52,7 +52,7 @@ repos:
 
       - id: biome-check
         name: Biome Check (SFU Server)
-        entry: bash -c 'cd sfu-server && yarn lint:fix'
+        entry: bash -c 'cd sfu-server && npx biome check --write .'
         language: system
         files: "sfu-server/.*\\.(js|ts|json)$"
         exclude: |
