@@ -15,7 +15,7 @@
 		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"allowSyntheticDefaultImports": true,
-		"ignoreDeprecations": "6.0",
+		"ignoreDeprecations": "5.0",
 		"moduleResolution": "node"
 	},
 	"include": ["src/**/*", "../types/index.ts"],
