@@ -859,7 +859,7 @@ media-typer@0.3.0:
   resolved "https://registry.yarnpkg.com/media-typer/-/media-typer-0.3.0.tgz#8710d7af0aa626f8fffa1ce00168545263255748"
   integrity sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==
 
-mediasoup@^3.19.14:
+mediasoup@^3.19.19:
   version "3.19.19"
   resolved "https://registry.yarnpkg.com/mediasoup/-/mediasoup-3.19.19.tgz#ce249627d0106b6e3721d69c919c3a2d24b8cc7f"
   integrity sha512-rhaDxUEy+r54LlNBFNDowiWHNzoRTmFLN4PVWjarTrv7BRKq6qkNAkNadiMneo7vgV7YkRCMzfKy76XURP1fYw==
