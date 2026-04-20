@@ -78,8 +78,6 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SettingsLayoutBase: typeof import('./src/components/settings/SettingsLayoutBase.vue')['default']
-    SFUDashboard: typeof import('./src/components/SFUDashboard.vue')['default']
     Spinner: typeof import('./src/components/Spinner.vue')['default']
-    VideoPreview: typeof import('./src/components/VideoPreview.vue')['default']
   }
 }
