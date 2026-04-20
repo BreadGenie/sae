@@ -35,6 +35,9 @@ jobs:
       - name: Install SFU Server dependencies
         run: cd sfu-server && yarn install --frozen-lockfile
 
+      - name: Install E2E dependencies
+        run: cd e2e && yarn install --frozen-lockfile
+
       - uses: pre-commit/action@v3.0.0
 
       - name: Download Semgrep rules
