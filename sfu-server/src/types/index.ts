@@ -3,6 +3,15 @@ import type { Consumer } from 'mediasoup/node/lib/ConsumerTypes';
 import type { Producer } from 'mediasoup/node/lib/ProducerTypes';
 import type { Router } from 'mediasoup/node/lib/RouterTypes';
 import type {
+	RouterRtpCodecCapability,
+	RtpCodecCapability,
+} from 'mediasoup/node/lib/rtpParametersTypes';
+import type {
+	AppData,
+	RtpCapabilities,
+	RtpParameters,
+} from 'mediasoup/node/lib/types';
+import type {
 	DtlsParameters,
 	IceCandidate,
 	IceParameters,
@@ -12,15 +21,6 @@ import type {
 	WorkerLogLevel,
 	WorkerSettings,
 } from 'mediasoup/node/lib/WorkerTypes';
-import type {
-	RouterRtpCodecCapability,
-	RtpCodecCapability,
-} from 'mediasoup/node/lib/rtpParametersTypes';
-import type {
-	AppData,
-	RtpCapabilities,
-	RtpParameters,
-} from 'mediasoup/node/lib/types';
 import type {
 	ActiveSpeakerEvent,
 	AuthExpiredEvent,
@@ -48,12 +48,11 @@ import type {
 	RaiseHandRequest,
 	ReactionMessage,
 	ReactionSendRequest,
-	SFUErrorEvent,
-	SFUScope,
-	ScreenShareData,
 	ScreenShareRequest,
 	ScreenShareStartedEvent,
 	ScreenShareStoppedEvent,
+	SFUErrorEvent,
+	SFUScope,
 	UpdateTokenRequest,
 	UserData,
 	WebRTCSignalData,
