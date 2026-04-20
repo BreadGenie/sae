@@ -7,8 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"include": ["**"],
-		"ignore": ["components.d.ts", "auto-imports.d.ts"]
+		"includes": ["**", "!components.d.ts", "!auto-imports.d.ts"]
 	},
 	"formatter": {
 		"enabled": true,
@@ -42,7 +41,7 @@
 	},
 	"overrides": [
 		{
-			"include": ["**/*.vue"],
+			"includes": ["**/*.vue"],
 			"linter": {
 				"rules": {
 					"style": {

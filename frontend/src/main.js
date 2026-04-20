@@ -5,12 +5,12 @@ import {
 	Dialog,
 	ErrorMessage,
 	FormControl,
-	Input,
-	TextInput,
 	frappeRequest,
+	Input,
 	pageMetaPlugin,
 	resourcesPlugin,
 	setConfig,
+	TextInput,
 } from "frappe-ui";
 import { createApp } from "vue";
 import App from "./App.vue";

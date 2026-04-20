@@ -1,4 +1,4 @@
-import { type Ref, nextTick, onUnmounted, ref, watch } from "vue";
+import { nextTick, onUnmounted, type Ref, ref, watch } from "vue";
 import type { PinnedTile } from "./useLayout";
 
 interface UsePinnedTileAnimationOptions {

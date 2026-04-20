@@ -3,6 +3,16 @@ import type { Consumer } from 'mediasoup/node/lib/ConsumerTypes';
 import type { Producer } from 'mediasoup/node/lib/ProducerTypes';
 import type { Router } from 'mediasoup/node/lib/RouterTypes';
 import type {
+	DtlsParameters,
+	IceCandidate,
+	IceParameters,
+	WebRtcTransport,
+} from 'mediasoup/node/lib/WebRtcTransportTypes';
+import type {
+	WorkerLogLevel,
+	WorkerSettings,
+} from 'mediasoup/node/lib/WorkerTypes';
+import type {
 	RouterRtpCodecCapability,
 	RtpCodecCapability,
 } from 'mediasoup/node/lib/rtpParametersTypes';
@@ -11,17 +21,6 @@ import type {
 	RtpCapabilities,
 	RtpParameters,
 } from 'mediasoup/node/lib/types';
-import type {
-	DtlsParameters,
-	IceCandidate,
-	IceParameters,
-	WebRtcTransport,
-} from 'mediasoup/node/lib/WebRtcTransportTypes';
-import type {
-	WorkerLogLevel,
-	WorkerLogTag,
-	WorkerSettings,
-} from 'mediasoup/node/lib/WorkerTypes';
 import type {
 	ActiveSpeakerEvent,
 	AuthExpiredEvent,
@@ -32,7 +31,6 @@ import type {
 	CreateWebRtcTransportRequest,
 	ExistingRaisedHandsEvent,
 	HandRaisedEvent,
-	HostControlAction,
 	HostControlRequest,
 	HostControlUpdateEvent,
 	JoinRoomRequest,
@@ -50,12 +48,12 @@ import type {
 	RaiseHandRequest,
 	ReactionMessage,
 	ReactionSendRequest,
+	SFUErrorEvent,
+	SFUScope,
 	ScreenShareData,
 	ScreenShareRequest,
 	ScreenShareStartedEvent,
 	ScreenShareStoppedEvent,
-	SFUErrorEvent,
-	SFUScope,
 	UpdateTokenRequest,
 	UserData,
 	WebRTCSignalData,
@@ -76,7 +74,6 @@ export type {
 	DtlsParameters,
 	ExistingRaisedHandsEvent,
 	HandRaisedEvent,
-	HostControlAction,
 	HostControlRequest,
 	HostControlUpdateEvent,
 	IceCandidate,
@@ -102,7 +99,6 @@ export type {
 	RtpCapabilities,
 	RtpCodecCapability,
 	RtpParameters,
-	ScreenShareData,
 	ScreenShareRequest,
 	ScreenShareStartedEvent,
 	ScreenShareStoppedEvent,
@@ -113,7 +109,6 @@ export type {
 	WebRTCSignalData,
 	WebRtcTransport,
 	WorkerLogLevel,
-	WorkerLogTag,
 	WorkerSettings,
 };
 
@@ -218,10 +213,6 @@ export interface ClientToServerEvents {
 	leave_room: (data?: LeaveRoomRequest) => void;
 }
 
-export interface InterServerEvents {
-	ping: () => void;
-}
-
 export interface SocketData {
 	userId: string;
 	userName: string;
@@ -278,13 +269,6 @@ export interface ExistingProducersResponse extends SFUResponse {
 
 export interface RoomParticipantsResponse extends SFUResponse {
 	participants: ParticipantInfo[] | PreviewParticipantInfo[];
-}
-
-export interface WebRTCTransportParams {
-	id: string;
-	iceParameters: IceParameters;
-	iceCandidates: IceCandidate[];
-	dtlsParameters: DtlsParameters;
 }
 
 export interface ProducerInfo {

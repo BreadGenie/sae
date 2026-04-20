@@ -42,7 +42,7 @@ function createMediaHandler() {
 	};
 }
 
-export class SFUMeetingManager {
+class SFUMeetingManager {
 	constructor() {
 		this.meetingId = null;
 		this.currentUser = { value: null };

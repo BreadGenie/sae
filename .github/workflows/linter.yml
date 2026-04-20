@@ -29,6 +29,9 @@ jobs:
           cache: "yarn"
           cache-dependency-path: "**/yarn.lock"
 
+      - name: Install root dependencies
+        run: yarn install --frozen-lockfile
+
       - name: Install SFU Server dependencies
         run: cd sfu-server && yarn install --frozen-lockfile
 

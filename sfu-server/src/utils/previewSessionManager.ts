@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-export interface PreviewSession {
+interface PreviewSession {
 	sessionId: string;
 	token: string;
 	meetingId: string;

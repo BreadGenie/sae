@@ -35,11 +35,3 @@ export const audioCodecOptions = {
 	opusFec: 1, // enable FEC to improve audio quality in case of packet loss
 	opusMaxAverageBitrate: 48000,
 };
-
-export default {
-	audioCodecOptions,
-	videoEncodings,
-	screenEncodings,
-	videoCodecOptions,
-	svcEncodingTemplate,
-};

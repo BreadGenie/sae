@@ -1,4 +1,4 @@
-export interface RateLimitEntry {
+interface RateLimitEntry {
 	count: number;
 	resetTime: number;
 }

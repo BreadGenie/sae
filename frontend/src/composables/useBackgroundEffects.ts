@@ -1,11 +1,11 @@
 import type { SelfieSegmentation } from "@mediapipe/selfie_segmentation";
 import { toast } from "frappe-ui";
-import { type Ref, onUnmounted, ref } from "vue";
+import { onUnmounted, type Ref, ref } from "vue";
 import { availableBackgroundImages } from "../data/backgroundEffects";
 import {
-	CompositingError,
 	applyBlurEffect,
 	applyVirtualBackground,
+	CompositingError,
 	getBackgroundImageData,
 } from "../utils/compositing";
 import { WebGLManager } from "../utils/webglShaders";

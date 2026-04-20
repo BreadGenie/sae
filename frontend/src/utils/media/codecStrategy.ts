@@ -6,7 +6,7 @@ type RtpCodec = {
 type DeviceCapabilities = { codecs?: RtpCodec[] } | null;
 type RouterCapabilities = { codecs?: RtpCodec[] } | null;
 
-export type CodecDecision = {
+type CodecDecision = {
 	strategy: "svc" | "simulcast";
 	scalabilityMode: string | null;
 	didDowngrade: boolean;
@@ -166,15 +166,4 @@ export function resolveCodecStrategy({
 		didDowngrade: normalizedPref === "svc" && strategy !== "svc",
 		requested: normalizedPref,
 	};
-}
-
-export function shouldUseSVC({
-	preference,
-	deviceCapabilities,
-}: {
-	preference: string;
-	deviceCapabilities?: DeviceCapabilities;
-}): boolean {
-	const decision = resolveCodecStrategy({ preference, deviceCapabilities });
-	return decision.strategy === "svc";
 }

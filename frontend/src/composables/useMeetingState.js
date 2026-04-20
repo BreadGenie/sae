@@ -250,7 +250,3 @@ export function useMeetingState() {
 	meetingStateInstance = stateObject;
 	return stateObject;
 }
-
-export function resetMeetingState() {
-	meetingStateInstance = null;
-}

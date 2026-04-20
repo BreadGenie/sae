@@ -7,16 +7,16 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": [
-			"**",
-			"!**/dist",
-			"!**/node_modules",
-			"!**/logs",
-			"!**/scripts",
-			"!**/package.json",
-			"!**/package-lock.json",
-			"!**/tsconfig.json",
-			"!**/biome.json"
+		"include": ["**"],
+		"ignore": [
+			"**/dist",
+			"**/node_modules",
+			"**/logs",
+			"**/scripts",
+			"**/package.json",
+			"**/package-lock.json",
+			"**/tsconfig.json",
+			"**/biome.json"
 		]
 	},
 	"formatter": {

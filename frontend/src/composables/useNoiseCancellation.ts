@@ -1,4 +1,4 @@
-import { type Ref, onUnmounted, ref } from "vue";
+import { onUnmounted, type Ref, ref } from "vue";
 
 interface NoiseCancellationResult {
 	stream: MediaStream;

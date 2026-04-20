@@ -11,7 +11,7 @@ export class CompositingError extends Error {
 	}
 }
 
-export interface CompositingOptions {
+interface CompositingOptions {
 	blurIntensity?: number;
 	segmentationThreshold?: number;
 	webglManager?: WebGLManager;

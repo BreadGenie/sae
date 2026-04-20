@@ -1,0 +1,33 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    ".github/workflows/e2e.yml",
+    "meet/meet/doctype/**/*.js",
+    "realtime/handlers.js"
+  ],
+  "tags": [
+    "-lintignore"
+  ],
+  "workspaces": {
+    "e2e": {
+      "entry": "playwright.config.ts",
+      "project": [
+        "fixtures/**/*.ts",
+        "global-setup.ts",
+        "helpers/**/*.ts",
+        "specs/**/*.ts",
+        "!playwright.config.ts"
+      ]
+    },
+    "frontend": {
+      "entry": "src/main.js",
+      "project": ["src/**/*.{js,vue,ts}", "!src/main.js"],
+      "ignore": ["src/composables/rnnoise.d.ts"],
+      "ignoreUnresolved": ["~icons/lucide/*"]
+    },
+    "sfu-server": {
+      "entry": "src/server.ts",
+      "project": ["src/**/*.ts", "!src/server.ts"]
+    }
+  }
+}

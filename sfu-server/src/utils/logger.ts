@@ -1,13 +1,13 @@
 import { format } from 'node:util';
 
-export enum LogLevel {
+enum LogLevel {
 	DEBUG = 0,
 	INFO = 1,
 	WARN = 2,
 	ERROR = 3,
 }
 
-export class Logger {
+class Logger {
 	private component: string;
 	private minLevel: LogLevel;
 

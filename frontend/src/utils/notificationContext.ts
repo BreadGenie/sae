@@ -155,5 +155,6 @@ class NotificationContextManager {
 	}
 }
 
-export const notificationContextManager = new NotificationContextManager();
+const notificationContextManager = new NotificationContextManager();
+
 export default notificationContextManager;

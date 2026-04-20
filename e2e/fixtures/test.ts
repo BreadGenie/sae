@@ -193,5 +193,4 @@ test.beforeEach(async ({ hostPage }) => {
 	await clearMeetingCreateRateLimit(hostPage.request);
 });
 
-export { expect, joinFromPreview, waitForMeetingReady };
-export type { Participant };
+export { expect, joinFromPreview };

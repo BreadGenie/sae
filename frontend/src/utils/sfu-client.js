@@ -656,9 +656,3 @@ export function getSFUClient() {
 	}
 	return sfuClient;
 }
-
-export function createSFUClient() {
-	return new SFUClient();
-}
-
-export default getSFUClient;

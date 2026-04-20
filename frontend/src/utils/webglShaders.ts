@@ -1,5 +1,5 @@
 // WebGL shader management for background effects
-export const SHADERS = {
+const SHADERS = {
 	vertex: `
     attribute vec2 a_position;
     attribute vec2 a_texCoord;
@@ -189,7 +189,7 @@ export const SHADERS = {
   `,
 };
 
-export class WebGLError extends Error {
+class WebGLError extends Error {
 	constructor(
 		message: string,
 		public code = "WEBGL_ERROR",

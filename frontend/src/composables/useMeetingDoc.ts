@@ -1,5 +1,5 @@
 import { createDocumentResource } from "frappe-ui";
-import { type ComputedRef, type Ref, computed, ref } from "vue";
+import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { session } from "../data/session.js";
 
 interface MeetingDocument {

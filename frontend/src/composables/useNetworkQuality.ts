@@ -3,7 +3,7 @@ import { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
 
 type NetworkQuality = "good" | "poor" | "critical";
 
-export interface NetworkStats {
+interface NetworkStats {
 	rtt: number;
 	packetLoss: number;
 	availableOutgoingBitrate: number;

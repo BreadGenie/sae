@@ -1,5 +1,5 @@
 import { createResource } from "frappe-ui";
-import { type Socket, io } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 import { computed, onUnmounted, readonly, ref } from "vue";
 import { session } from "../data/session";
 import type {

@@ -2,7 +2,6 @@
   "name": "meet",
   "version": "0.1.0",
   "description": "Video conferencing app",
-  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:e2e": "cd e2e && yarn test",
@@ -11,9 +10,18 @@
     "test:e2e:ui": "cd e2e && yarn test:ui",
     "postinstall": "cd frontend && yarn install",
     "dev": "cd frontend && yarn dev",
-    "build": "cd frontend && yarn build"
+    "build": "cd frontend && yarn build",
+    "knip:e2e": "knip --workspace e2e",
+    "knip:frontend": "knip --workspace frontend",
+    "knip:sfu-server": "knip --workspace sfu-server",
+    "knip": "knip"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "knip": "^6.4.1",
+    "typescript": "^6.0.3"
+  }
 }

@@ -133,7 +133,7 @@
 </template>
 
 <script setup>
-import { Button, FormControl, createResource, toast } from "frappe-ui";
+import { Button, createResource, FormControl, toast } from "frappe-ui";
 import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
 import PreviewToolbar from "../components/PreviewToolbar.vue";

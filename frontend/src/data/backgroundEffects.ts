@@ -1,4 +1,4 @@
-import { type Ref, computed, ref } from "vue";
+import { computed, type Ref, ref } from "vue";
 import {
 	convertToWebP,
 	deleteCustomImage,
@@ -221,29 +221,4 @@ function fileToDataUrl(file: File): Promise<string> {
 		reader.onerror = reject;
 		reader.readAsDataURL(file);
 	});
-}
-
-export function getSelectedBackgroundImage(): BackgroundImage | null {
-	if (!backgroundImageEnabled.value || !selectedBackgroundImage.value) {
-		return null;
-	}
-	return (
-		availableBackgroundImages.find(
-			(img) => img.name === selectedBackgroundImage.value,
-		) ||
-		customBackgroundImages.value.find(
-			(img) => img.name === selectedBackgroundImage.value,
-		) ||
-		null
-	);
-}
-
-export function isAnyBackgroundEffectEnabled(): boolean {
-	return backgroundBlurEnabled.value || backgroundImageEnabled.value;
-}
-
-export function resetBackgroundEffects(): void {
-	setBackgroundBlurEnabled(false);
-	setBackgroundImageEnabled(false);
-	setSelectedBackgroundImage("");
 }

@@ -1,5 +1,5 @@
-import { userResource } from "@/data/user";
 import { createRouter, createWebHistory } from "vue-router";
+import { userResource } from "@/data/user";
 import { session } from "./data/session";
 
 const routes = [

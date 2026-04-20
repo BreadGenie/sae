@@ -2,7 +2,7 @@
  * Device Management Utilities
  */
 
-export class DeviceManager {
+class DeviceManager {
 	constructor() {
 		this.cameras = [];
 		this.microphones = [];

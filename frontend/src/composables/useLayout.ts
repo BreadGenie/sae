@@ -1,4 +1,4 @@
-import { type ComputedRef, type Ref, computed } from "vue";
+import { type ComputedRef, computed, type Ref } from "vue";
 import type { Participant } from "../types";
 import { useResponsiveGrid } from "./useResponsiveGrid";
 
@@ -19,7 +19,7 @@ interface DisplayParticipantsResult {
 	extra: number;
 }
 
-export interface LayoutParticipant extends Participant {
+interface LayoutParticipant extends Participant {
 	isVisible: boolean;
 	slotIndex: number;
 }
@@ -44,7 +44,7 @@ interface TileStyle {
 	[key: string]: string | undefined;
 }
 
-export interface UseLayoutReturn {
+interface UseLayoutReturn {
 	mode: ComputedRef<"grid" | "sidebar">;
 	containerStyle: ComputedRef<ContainerStyle>;
 	containerClass: ComputedRef<string>;

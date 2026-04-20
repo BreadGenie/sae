@@ -26,12 +26,10 @@ export interface ParticipantPreview {
 }
 
 export type {
-	ParticipantInfo,
 	ParticipantJoinedEvent,
 	ParticipantLeftEvent,
 	PresenceJoinResponse,
 	PresenceParticipantsResponse,
 	PresenceTokenResponse,
-	PreviewParticipantInfo,
 	UserData,
 } from "../../types";
