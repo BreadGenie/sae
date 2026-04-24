@@ -70,7 +70,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          secrets: |
+          secret-files: |
             apps_json=${{ github.workspace }}/apps.json
           cache-from: type=gha
           cache-to: type=gha,mode=max
