@@ -93,7 +93,7 @@ services:
 
   # ── MariaDB ─────────────────────────────────────────────────────────────────
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:11.8
     container_name: meet-mariadb
     restart: unless-stopped
     environment:
