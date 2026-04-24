@@ -21,8 +21,8 @@ set -a
 source "$DEPLOY_DIR/.env"
 set +a
 
-if [ -z "${DOMAIN:-}" ] || [ -z "${SFU_DOMAIN:-}" ]; then
-    echo "[-] DOMAIN and SFU_DOMAIN must be set in .env"
+if [ -z "${DOMAIN:-}" ]; then
+    echo "[-] DOMAIN must be set in .env"
     exit 1
 fi
 
@@ -31,7 +31,7 @@ if [ -z "${SSL_EMAIL:-}" ]; then
     exit 1
 fi
 
-echo "[*] Provisioning SSL certificates for: $DOMAIN, $SFU_DOMAIN"
+echo "[*] Provisioning SSL certificate for: $DOMAIN"
 echo "[*] Registration email: $SSL_EMAIL"
 echo ""
 
@@ -72,20 +72,18 @@ echo "▶ Starting nginx for ACME challenge..."
 $COMPOSE_CMD up -d nginx
 sleep 3
 
-# Step 3: Request certificates
-for CERT_DOMAIN in "$DOMAIN" "$SFU_DOMAIN"; do
-    echo "▶ Requesting certificate for $CERT_DOMAIN..."
-    $COMPOSE_CMD \
-        run --rm --entrypoint certbot certbot \
-        certonly \
-        --webroot \
-        --webroot-path=/var/www/certbot \
-        --email "$SSL_EMAIL" \
-        --agree-tos \
-        --no-eff-email \
-        --force-renewal \
-        -d "$CERT_DOMAIN"
-done
+# Step 3: Request certificate
+echo "▶ Requesting certificate for $DOMAIN..."
+$COMPOSE_CMD \
+    run --rm --entrypoint certbot certbot \
+    certonly \
+    --webroot \
+    --webroot-path=/var/www/certbot \
+    --email "$SSL_EMAIL" \
+    --agree-tos \
+    --no-eff-email \
+    --force-renewal \
+    -d "$DOMAIN"
 
 # Step 4: Restore real nginx config
 if [ -f "$BACKUP_CONF" ]; then

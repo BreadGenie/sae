@@ -120,27 +120,30 @@ class SFUClient {
 		};
 	}
 
-	async getSFUEndpoint() {
+	getSFUEndpoint() {
 		const { sfuUrl, sfuPort } = this.connectionDetails;
 
-		let sfuEndpoint;
 		const urlObj = new URL(sfuUrl);
 		const isSecured = urlObj.protocol === "https:";
 
-		if (isSecured) {
-			sfuEndpoint = urlObj.origin;
-		} else {
-			sfuEndpoint = `${urlObj.protocol}//${urlObj.hostname}:${sfuPort}`;
-		}
+		const origin = isSecured
+			? urlObj.origin
+			: `${urlObj.protocol}//${urlObj.hostname}:${sfuPort}`;
 
-		return sfuEndpoint;
+		// If the URL has a pathname (e.g. /sfu), use it as the socket.io path prefix.
+		// Otherwise fall back to the default /socket.io/.
+		const basePath = urlObj.pathname.replace(/\/$/, ""); // strip trailing slash
+		const socketPath = basePath ? `${basePath}/socket.io` : "/socket.io";
+
+		return { origin, socketPath };
 	}
 
 	async establishSocketConnection() {
-		const sfuEndpoint = await this.getSFUEndpoint();
+		const { origin, socketPath } = this.getSFUEndpoint();
 		const { authToken } = this.connectionDetails;
 
-		this.socket = io(sfuEndpoint, {
+		this.socket = io(origin, {
+			path: socketPath,
 			auth: { token: authToken },
 			reconnection: true,
 			reconnectionAttempts: 5,
@@ -167,7 +170,8 @@ class SFUClient {
 					description: error.description,
 					context: error.context,
 					type: error.type,
-					endpoint: sfuEndpoint,
+					endpoint: origin,
+					path: socketPath,
 				});
 				this.connected = false;
 				reject(new Error(`SFU connection failed: ${error.message || error}`));

@@ -96,7 +96,7 @@ check_env() {
     local errors=false
 
     # Required fields
-    for var in DOMAIN SFU_DOMAIN SSL_EMAIL DB_ROOT_PASSWORD DB_PASSWORD ADMIN_PASSWORD SITE_NAME; do
+    for var in DOMAIN SSL_EMAIL DB_ROOT_PASSWORD DB_PASSWORD ADMIN_PASSWORD SITE_NAME; do
         if [ -z "${!var:-}" ]; then
             err "$var must be set in .env"
             errors=true
@@ -122,8 +122,8 @@ check_env() {
     fi
 
     ok "DOMAIN = $DOMAIN"
-    ok "SFU_DOMAIN = $SFU_DOMAIN"
     ok "WEBRTC_ANNOUNCED_IP = $WEBRTC_ANNOUNCED_IP"
+    ok "SFU served at https://$DOMAIN/sfu/"
     ok "Configuration is valid"
 }
 
@@ -185,7 +185,7 @@ cmd_setup() {
     fi
 
     # Set SFU config on site
-    run_bench --site "$SITE_NAME" set-config sfu_server_url "https://$SFU_DOMAIN"
+    run_bench --site "$SITE_NAME" set-config sfu_server_url "https://$DOMAIN/sfu"
     run_bench --site "$SITE_NAME" set-config sfu_secret "$SFU_SECRET"
     ok "SFU configuration applied"
 
@@ -210,7 +210,7 @@ cmd_setup() {
     echo ""
     header "Setup complete!"
     ok "Meet is live at https://$DOMAIN"
-    ok "SFU is running at https://$SFU_DOMAIN"
+    ok "SFU endpoint: https://$DOMAIN/sfu/"
     info "Login: Administrator / <your ADMIN_PASSWORD>"
     echo ""
 }

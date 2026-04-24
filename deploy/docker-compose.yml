@@ -148,7 +148,6 @@ services:
       - certbot-certs:/etc/letsencrypt:ro
     environment:
       DOMAIN: ${DOMAIN}
-      SFU_DOMAIN: ${SFU_DOMAIN}
       FRAPPE_UPSTREAM: frappe-frontend:8080
       SFU_UPSTREAM: ${WEBRTC_ANNOUNCED_IP:-127.0.0.1}:${SFU_PORT:-3000}
     depends_on:
