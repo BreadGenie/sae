@@ -63,6 +63,10 @@ jobs:
             type=raw,value=${{ github.event.inputs.tag || 'latest' }},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha,prefix=,format=short
 
+      - name: Inject Cache Buster
+        run: |
+          sed -i 's/RUN --mount=type=secret,id=apps_json/ARG CACHE_BUSTER\nRUN echo "Cache Buster: $CACHE_BUSTER"\nRUN --mount=type=secret,id=apps_json/' frappe_docker/images/custom/Containerfile
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -71,6 +75,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CACHE_BUSTER=${{ github.sha }}
           secret-files: |
             apps_json=${{ github.workspace }}/apps.json
           cache-from: type=gha
