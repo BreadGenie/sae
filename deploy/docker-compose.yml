@@ -60,7 +60,7 @@ services:
     environment:
       BACKEND: backend:8000
       SOCKETIO: websocket:9000
-      FRAPPE_SITE_NAME_HEADER: $$host
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME}
       PROXY_READ_TIMEOUT: 120
       CLIENT_MAX_BODY_SIZE: 50m
     volumes:
