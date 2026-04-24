@@ -40,7 +40,7 @@ jobs:
 
       - name: Prepare apps.json
         run: |
-          echo '[{"url":"https://github.com/frappe/meet","branch":"'"$GITHUB_SHA"'"}]' > apps.json
+          echo '[{"url":"https://github.com/frappe/meet","branch":"'"$GITHUB_REF_NAME"'"}]' > apps.json
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
