@@ -245,8 +245,10 @@ cmd_update() {
     docker pull "${SFU_IMAGE:-ghcr.io/frappe/meet/sfu-server:latest}"
     ok "Images pulled"
 
+    # --no-deps: update only these services without re-running dependencies
     header "Recreating containers"
-    compose_with_ssl up -d --force-recreate backend frappe-frontend websocket queue-short queue-long scheduler sfu
+    compose up -d --no-deps backend frappe-frontend websocket queue-short queue-long scheduler
+    compose_with_ssl up -d --no-deps sfu
     sleep 5
     ok "Containers recreated"
 
