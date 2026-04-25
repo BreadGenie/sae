@@ -180,6 +180,7 @@ cmd_setup() {
             --db-root-password "$DB_ROOT_PASSWORD" \
             --admin-password "$ADMIN_PASSWORD" \
             --install-app meet \
+            --mariadb-user-host-login-scope "%" \
             --set-default
         ok "Site $SITE_NAME created with Meet installed"
     fi
