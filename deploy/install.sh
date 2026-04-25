@@ -11,7 +11,7 @@ set -euo pipefail
 REPO="frappe/meet"
 BRANCH="${1:-develop}"
 BASE_URL="https://raw.githubusercontent.com/$REPO/$BRANCH/deploy"
-INSTALL_DIR="${MEET_INSTALL_DIR:-/opt/frappe-meet}"
+INSTALL_DIR="${MEET_INSTALL_DIR:-$PWD/frappe-meet}"
 
 # Colors
 GREEN='\033[0;32m'
