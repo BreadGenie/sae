@@ -29,6 +29,10 @@ Frappe Meet is a video conferencing app built with simplicity, quality, and reli
 - [Frappe Framework](https://github.com/frappe/frappe): A full-stack web application framework.
 - [Frappe UI](https://github.com/frappe/frappe-ui): A Vue-based UI library, to provide a modern user interface.
 
+### Self-Hosting
+
+Deploying Frappe Meet on your own server is quick and easy using our automated Docker Compose setup. For complete instructions, check out the [Self-Hosting Guide](deploy/README.md).
+
 ### Local Development
 
 #### Prerequisites
