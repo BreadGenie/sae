@@ -4,12 +4,11 @@ on:
   push:
     branches:
       - develop
-      - deploy
-    # paths:
-    #   - "meet/**"
-    #   - "frontend/**"
-    #   - "realtime/**"
-    #   - "pyproject.toml"
+    paths:
+      - "meet/**"
+      - "frontend/**"
+      - "realtime/**"
+      - "pyproject.toml"
   workflow_dispatch:
     inputs:
       tag:
