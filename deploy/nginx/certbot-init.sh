@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Certbot Initialization — Provision SSL for both DOMAIN and SFU_DOMAIN
+# Certbot Initialization — Provision SSL for DOMAIN
 # ==============================================================================
 
 set -euo pipefail
