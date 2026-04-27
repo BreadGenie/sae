@@ -1,4 +1,4 @@
-name: Build and Push Meet image
+name: Build and Push Meet Image
 
 on:
   push:
