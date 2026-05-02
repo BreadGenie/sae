@@ -2,10 +2,8 @@
 # For license information, please see license.txt
 
 import json
-import re
 import secrets
 import time
-import unicodedata
 from typing import TYPE_CHECKING
 
 import frappe
@@ -13,6 +11,7 @@ import jwt
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
+from meet.utils.meeting import validate_custom_room_name
 from meet.utils.sfu_config import get_sfu_config
 from meet.utils.user import (
 	get_guest_session,
@@ -23,46 +22,6 @@ from meet.utils.user import (
 
 if TYPE_CHECKING:
 	from meet.meet.doctype.sae_meeting.sae_meeting import SaeMeeting
-
-
-CUSTOM_ROOM_MIN_LENGTH = 3
-CUSTOM_ROOM_MAX_LENGTH = 64
-
-
-def _canonicalize_custom_room_name(room_name: str) -> str:
-	if not isinstance(room_name, str):
-		return ""
-
-	# normalize to ascii
-	ascii_name = unicodedata.normalize("NFKD", room_name).encode("ascii", "ignore").decode("ascii")
-	ascii_name = ascii_name.strip().lower()
-	ascii_name = re.sub(r"[\s_]+", "-", ascii_name)  # replace spaces and underscores with hyphens
-	ascii_name = re.sub(r"[^a-z0-9-]", "", ascii_name)  # remove any character that is not a-z, 0-9, or hyphen
-	return ascii_name.strip("-")  # remove leading/trailing hyphens
-
-
-def _validate_custom_room_name(room_name: str) -> str:
-	slug = _canonicalize_custom_room_name(room_name)
-
-	if not slug:
-		frappe.throw(_("Please enter a valid room name"), frappe.ValidationError)
-
-	if len(slug) < CUSTOM_ROOM_MIN_LENGTH:
-		frappe.throw(
-			_(f"Room name must be longer than {CUSTOM_ROOM_MIN_LENGTH} characters"),
-			frappe.ValidationError,
-		)
-
-	if len(slug) > CUSTOM_ROOM_MAX_LENGTH:
-		frappe.throw(
-			_(f"Room name must be shorter than {CUSTOM_ROOM_MAX_LENGTH} characters"),
-			frappe.ValidationError,
-		)
-
-	if re.search(r"-{3,}", slug):
-		frappe.throw(_("Please enter a simpler room name"), frappe.ValidationError)
-
-	return slug
 
 
 def _get_codec_strategy() -> str:
@@ -95,7 +54,7 @@ def create_or_join_custom_room(room_name: str) -> dict:
 
 	Custom rooms are authenticated-only and always created with guest access disabled.
 	"""
-	meeting_id = _validate_custom_room_name(room_name)
+	meeting_id = validate_custom_room_name(room_name)
 	meeting: SaeMeeting = frappe.get_doc(
 		{
 			"doctype": "Sae Meeting",
