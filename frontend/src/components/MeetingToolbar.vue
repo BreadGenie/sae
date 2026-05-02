@@ -285,10 +285,7 @@ const props = defineProps({
 });
 
 const { getMeetingDoc } = useMeetingDoc();
-
-if (props.meetingId) {
-	getMeetingDoc(props.meetingId);
-}
+getMeetingDoc(props.meetingId);
 
 const emit = defineEmits([
 	"toggle-chat",

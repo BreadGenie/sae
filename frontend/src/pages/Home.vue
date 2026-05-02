@@ -12,7 +12,7 @@
 				<div class="space-y-3">
 					<form @submit.prevent="joinMeeting" class="space-y-3" data-testid="join-meeting-form">
 						<label class="block text-sm font-medium text-gray-700 text-left">
-							Join with Meeting Code
+							Meeting code
 						</label>
 						<div class="flex gap-3 items-center">
 							<div class="flex-1">
@@ -20,7 +20,6 @@
 									v-model="meetingCode"
 									placeholder="abcd-efgh-ijkl"
 									size="lg"
-									:error="meetingCodeError"
 									class="text-center sm:text-left"
 									data-testid="meeting-code-input"
 								/>
@@ -29,10 +28,11 @@
 								size="lg"
 								type="submit"
 								class="whitespace-nowrap px-6 py-3"
-								:disabled="!isMeetingCodeValid(meetingCode)"
+								:loading="createOrJoinCustomRoom.loading"
+								:disabled="!meetingCode.trim()"
 								data-testid="join-meeting-button"
 							>
-								Join
+								Start
 							</Button>
 						</div>
 					</form>
@@ -50,20 +50,20 @@
 							variant="solid"
 							size="lg"
 							:loading="createMeeting.loading"
-							class="whitespace-nowrap px-6 py-3 rounded-r-none"
+							class="whitespace-nowrap px-6 py-3 rounded-r-none focus-within:z-10"
 							@click="() => startNewMeeting('open')"
 							data-testid="create-open-meeting-button"
 						>
 							<template #prefix>
 								<lucide-plus class="h-4 w-4" />
 							</template>
-							Start new meeting
+							Create an instant meeting
 						</Button>
 
 						<Dropdown
 							size="lg"
 							variant="solid"
-							class="rounded-l-none"
+							class="rounded-l-none focus-within:z-10"
 							icon="chevron-down"
 							:disabled="createMeeting.loading"
 							data-testid="create-meeting-options"
@@ -96,7 +96,6 @@ import FrappeMeetingLogo from "../icons/FrappeMeetingLogo.vue";
 
 const router = useRouter();
 const meetingCode = ref("");
-const meetingCodeError = ref("");
 
 const createMeeting = createResource({
 	url: "meet.api.meeting.create",
@@ -114,6 +113,11 @@ const createMeeting = createResource({
 	},
 });
 
+const createOrJoinCustomRoom = createResource({
+	url: "meet.api.meeting.create_or_join_custom_room",
+	method: "POST",
+});
+
 const startNewMeeting = (meetingType) => {
 	toast.promise(createMeeting.submit({ meeting_type: meetingType }), {
 		loading: "Creating meeting...",
@@ -122,29 +126,38 @@ const startNewMeeting = (meetingType) => {
 	});
 };
 
-const joinMeeting = () => {
-	meetingCodeError.value = "";
+const joinMeeting = async () => {
+	const inputValue = meetingCode.value.trim();
 
-	if (!meetingCode.value.trim()) {
-		meetingCodeError.value = "Please enter a meeting code";
+	if (!inputValue) {
+		toast.error("Please enter a meeting code");
 		return;
 	}
 
-	if (!isMeetingCodeValid(meetingCode.value.trim())) {
-		meetingCodeError.value =
-			"Please enter a valid meeting code (format: xxxx-xxxx-xxxx)";
-		return;
+	try {
+		const response = await createOrJoinCustomRoom.submit({
+			room_name: inputValue,
+		});
+		const meetingId = response?.meeting_id;
+		if (!meetingId) {
+			throw new Error("Custom room request did not return a meeting ID");
+		}
+
+		if (response.created) {
+			toast.success("Custom room created successfully");
+		}
+
+		router.push({
+			name: "Meeting",
+			params: { meetingId: meetingId.toLowerCase() },
+			query: { created: response.created ? "true" : undefined },
+		});
+	} catch (error) {
+		const err =
+			error?.messages?.length > 0
+				? error.messages.join(", ")
+				: "Unable to create or join room. Please try again.";
+		toast.error(err);
 	}
-
-	router.push({
-		name: "Meeting",
-		params: { meetingId: meetingCode.value.trim() },
-	});
-};
-
-const isMeetingCodeValid = (code) => {
-	// Ensure code is of the form xxxx-xxxx-xxxx
-	const regex = /^[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}$/;
-	return regex.test(code);
 };
 </script>

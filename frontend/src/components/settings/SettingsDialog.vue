@@ -125,9 +125,7 @@ const { isCurrentUserHost, isCurrentUserCohost, getMeetingDoc } =
 
 // sometimes we won't see meeting access tab right after creating a meeting
 // this loads the meeting doc to avoid that
-if (props.meetingId) {
-	getMeetingDoc(props.meetingId);
-}
+getMeetingDoc(props.meetingId);
 
 const show = computed({
 	get: () => props.modelValue,

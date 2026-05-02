@@ -41,12 +41,12 @@ interface UseMeetingDocReturn {
 	isCurrentUserCohost: ComputedRef<boolean>;
 }
 
-const meetingDoc: Ref<DocumentResource | null> = ref(null);
-const currentMeetingId: Ref<string | null> = ref(null);
-
 export function useMeetingDoc(): UseMeetingDocReturn {
+	const meetingDoc: Ref<DocumentResource | null> = ref(null);
+	const currentMeetingId: Ref<string | null> = ref(null);
+
 	const getMeetingDoc = (meetingId: string): DocumentResource => {
-		if (meetingDoc.value) {
+		if (meetingDoc.value && currentMeetingId.value === meetingId) {
 			return meetingDoc.value;
 		}
 
