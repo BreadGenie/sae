@@ -153,7 +153,7 @@
 
 <script setup>
 import { computed, inject, ref, watch } from "vue";
-import { useAudioStream } from "../composables/useAudioLevels.js";
+import { useAudioStream } from "../composables/useAudioLevels";
 import { useNetworkQuality } from "../composables/useNetworkQuality";
 import WifiAlertIcon from "../icons/WifiAlertIcon.vue";
 import AudioIndicator from "./AudioIndicator.vue";
@@ -262,7 +262,11 @@ const showScreenShareCopy = computed(() => {
 	return !meetingState?.pinnedTile?.value || isPinned.value;
 });
 
-const { stream } = useAudioStream(props.participant.user_id);
+const meetingCtx = inject("meetingState");
+const { stream } = useAudioStream(props.participant.user_id, {
+	mediaState: meetingCtx,
+	currentUser: meetingCtx,
+});
 
 const { networkQuality } = useNetworkQuality();
 

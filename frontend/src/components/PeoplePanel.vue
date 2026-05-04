@@ -112,6 +112,7 @@ interface Props {
 	isCameraOn: boolean;
 	creatorUserId: string;
 	coHosts: string[];
+	lobbyUsers?: LobbyUser[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -122,6 +123,7 @@ const props = withDefaults(defineProps<Props>(), {
 	isCameraOn: false,
 	creatorUserId: "",
 	coHosts: () => [],
+	lobbyUsers: undefined,
 });
 
 const emit = defineEmits<{
@@ -149,6 +151,9 @@ const isHost = computed(() => {
 });
 
 const lobbyUsers = computed(() => {
+	if (props.lobbyUsers !== undefined) {
+		return props.lobbyUsers;
+	}
 	return meetingState?.lobbyUsers?.value || [];
 });
 

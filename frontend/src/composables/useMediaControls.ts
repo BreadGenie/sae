@@ -1,0 +1,1174 @@
+import { toast } from "frappe-ui";
+import { onUnmounted, ref, watch } from "vue";
+import {
+	cameraEnabled as prefCameraEnabled,
+	micEnabled as prefMicEnabled,
+	noiseCancellationEnabled as prefNoiseCancellationEnabled,
+	selectedCameraId,
+	selectedMicId,
+	selectedSpeakerId,
+	setCameraEnabled,
+	setMicEnabled,
+	setSelectedCameraId,
+	setSelectedMicId,
+	setSelectedSpeakerId,
+} from "../data/mediaPreferences";
+import type { deviceManager } from "../utils/media/DeviceManager.js";
+import notificationContextManager from "../utils/notificationContext";
+import { getSFUClient } from "../utils/sfu-client.js";
+import type { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
+import type { ConnectionState } from "./useConnectionState";
+import type { CurrentUser } from "./useCurrentUser";
+import type { MediaState } from "./useMediaState";
+import type { RaiseHandStore } from "./useRaiseHandStore";
+
+function getBackgroundEffectsFromStorage() {
+	const blurEnabled = localStorage.getItem("backgroundEffects.blur") === "1";
+	const imageEnabled = localStorage.getItem("backgroundEffects.image") === "1";
+	const selectedImage =
+		localStorage.getItem("backgroundEffects.imageName") || "";
+	const blurIntensity = Number.parseInt(
+		localStorage.getItem("backgroundEffects.blurIntensity") || "12",
+		10,
+	);
+	const anyEnabled = blurEnabled || imageEnabled;
+
+	return {
+		blurEnabled,
+		imageEnabled,
+		selectedImage,
+		blurIntensity,
+		anyEnabled,
+	};
+}
+
+interface BackgroundEffectsAPI {
+	applyBackgroundEffects: (
+		stream: MediaStream,
+		options: Record<string, unknown>,
+	) => Promise<{
+		stream: MediaStream;
+		cleanup: () => void;
+		updateOptions: (opts: Record<string, unknown>) => Promise<void>;
+	}>;
+	stopProcessing: () => void;
+	processedStream: Ref<MediaStream | null>;
+}
+
+interface NoiseCancellationAPI {
+	applyNoiseCancellation: (
+		stream: MediaStream,
+	) => Promise<{ stream: MediaStream; cleanup: () => void }>;
+	isProcessing: Ref<boolean>;
+	error: Ref<Error | null>;
+}
+
+interface ToastAPI {
+	success: (message: string) => void;
+	error: (message: string) => void;
+	warning: (message: string) => void;
+	create: (options: Record<string, unknown>) => void;
+}
+
+interface MediaPreferencesAPI {
+	micEnabled: Ref<boolean>;
+	cameraEnabled: Ref<boolean>;
+	selectedCameraId: Ref<string>;
+	selectedMicId: Ref<string>;
+	selectedSpeakerId: Ref<string>;
+	pushToTalkEnabled: Ref<boolean>;
+	noiseCancellationEnabled: Ref<boolean>;
+	setMicEnabled: (v: boolean) => void;
+	setCameraEnabled: (v: boolean) => void;
+	setSelectedCameraId: (v: string) => void;
+	setSelectedMicId: (v: string) => void;
+	setSelectedSpeakerId: (v: string) => void;
+}
+
+interface MediaControlsDeps {
+	mediaState: MediaState;
+	connectionState: ConnectionState;
+	raiseHandStore: RaiseHandStore;
+	currentUser: CurrentUser;
+	sfuManager: Ref<ReturnType<typeof getSFUMeetingManager> | null>;
+	deviceManager: typeof deviceManager;
+	backgroundEffects: BackgroundEffectsAPI;
+	noiseCancellation: NoiseCancellationAPI;
+	toast: ToastAPI;
+	mediaPreferences: MediaPreferencesAPI;
+}
+
+interface MediaControlsAPI {
+	initializeCamera: () => Promise<void>;
+	acquireUserMedia: (
+		videoEnabled: boolean,
+		audioEnabled: boolean,
+		deviceOverrides?: Record<string, string>,
+	) => Promise<{ stream: MediaStream; constraints: Record<string, unknown> }>;
+	toggleMicrophone: () => Promise<void>;
+	toggleCamera: () => Promise<void>;
+	toggleScreenShare: () => Promise<void>;
+	applySpeakerDevice: () => Promise<void>;
+	applyBackgroundEffectsToLocalStream: () => Promise<void>;
+	setLocalVideoRef: (el: HTMLElement | null) => void;
+	setRemoteVideoRef: (participantId: string, el: HTMLElement) => void;
+	setScreenShareVideoRef: (el: HTMLElement) => void;
+	processedStream: Ref<MediaStream | null>;
+}
+
+export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
+	const {
+		mediaState,
+		connectionState,
+		raiseHandStore,
+		currentUser,
+		sfuManager,
+		deviceManager,
+		backgroundEffects,
+		noiseCancellation,
+	} = deps;
+
+	const localVideo = ref<HTMLElement | null>(null);
+	const screenShareVideoElements = new Map<string, HTMLElement>();
+	const _unmutedByPushToTalk = ref(false);
+
+	let backgroundSession: {
+		stream: MediaStream;
+		cleanup: () => void;
+		updateOptions: (opts: Record<string, unknown>) => Promise<void>;
+	} | null = null;
+	let noiseCancellationSession: {
+		stream: MediaStream;
+		cleanup: () => void;
+	} | null = null;
+
+	const confirmScreenShareOverride = () =>
+		new Promise<boolean>((resolve) => {
+			toast.create({
+				title: "Start Screen Share Anyway?",
+				message:
+					"Someone is already sharing their screen. Starting yours may result in multiple active screen shares.",
+				actions: [
+					{
+						label: "Start Sharing",
+						onClick: () => resolve(true),
+					},
+					{
+						label: "Cancel",
+						onClick: () => resolve(false),
+					},
+				],
+			});
+		});
+
+	const replacePublishedVideoTrack = async (
+		stream: MediaStream | null,
+		reason = "background-effect",
+	) => {
+		const manager = sfuManager.value;
+		const mediaHandler = manager?.mediaHandler;
+		if (!mediaHandler?.videoProducer || mediaState.isScreenSharing.value) {
+			return;
+		}
+
+		const targetStream = stream || mediaState.localStream.value;
+		if (!targetStream) {
+			return;
+		}
+
+		const [track] = targetStream.getVideoTracks();
+		if (!track) {
+			console.warn(
+				`Skipped video track swap (${reason}) - no video track available`,
+			);
+			return;
+		}
+		if (track.readyState === "ended") {
+			console.warn(
+				`Skipped video track swap (${reason}) - track already ended`,
+			);
+			return;
+		}
+
+		try {
+			await mediaHandler.videoProducer.replaceTrack({ track });
+			track.enabled = true;
+			console.log(`Replaced video track (${reason})`);
+
+			if (localVideo.value) {
+				setLocalVideoRef(localVideo.value);
+			}
+		} catch (error) {
+			console.warn(`Failed to replace video track (${reason}):`, error);
+		}
+	};
+
+	const applyBackgroundEffectsToLocalStream = async () => {
+		const bgEffects = getBackgroundEffectsFromStorage();
+		const wantsEffects = bgEffects.anyEnabled;
+		const localStream = mediaState.localStream.value;
+		const hasLiveVideoTrack =
+			!!localStream &&
+			localStream.getVideoTracks().some((track) => track.readyState === "live");
+
+		if (!localStream || !hasLiveVideoTrack) {
+			if (wantsEffects) {
+				shouldApplyBackgroundEffectsWhenVideoAvailable = true;
+			}
+			if (backgroundSession) {
+				backgroundSession.cleanup();
+				backgroundSession = null;
+			}
+			if (mediaState.processedStream.value) {
+				backgroundEffects.stopProcessing();
+				mediaState.processedStream.value = null;
+			}
+			return;
+		}
+
+		shouldApplyBackgroundEffectsWhenVideoAvailable = false;
+
+		try {
+			if (backgroundSession) {
+				await backgroundSession.updateOptions({
+					blurIntensity: bgEffects.blurIntensity,
+					backgroundBlurEnabled: bgEffects.blurEnabled,
+					backgroundImageEnabled: bgEffects.imageEnabled,
+					selectedBackgroundImage: bgEffects.selectedImage,
+				});
+				return;
+			}
+
+			const result = await backgroundEffects.applyBackgroundEffects(
+				localStream,
+				{
+					blurIntensity: bgEffects.blurIntensity,
+					backgroundBlurEnabled: bgEffects.blurEnabled,
+					backgroundImageEnabled: bgEffects.imageEnabled,
+					selectedBackgroundImage: bgEffects.selectedImage,
+				},
+			);
+			backgroundSession = result;
+			mediaState.processedStream.value = result.stream;
+			await replacePublishedVideoTrack(result.stream, "background-enabled");
+		} catch (error) {
+			console.warn(
+				"Failed to apply background effects to local stream:",
+				error,
+			);
+			await replacePublishedVideoTrack(localStream, "background-error");
+			if (backgroundSession) {
+				backgroundSession.cleanup();
+				backgroundSession = null;
+			}
+			if (mediaState.processedStream.value) {
+				mediaState.processedStream.value = null;
+				backgroundEffects.stopProcessing();
+			}
+		}
+	};
+
+	let shouldApplyBackgroundEffectsWhenVideoAvailable = false;
+
+	const getFreshMicTrack = async () => {
+		try {
+			const { stream: freshStream } = await acquireUserMedia(false, true, {
+				micDeviceId: selectedMicId.value || null,
+			});
+			const freshTrack = freshStream.getAudioTracks()[0];
+
+			if (!freshTrack) {
+				return null;
+			}
+
+			if (mediaState.localStream.value) {
+				const oldAudioTracks = mediaState.localStream.value.getAudioTracks();
+				for (const track of oldAudioTracks) {
+					mediaState.localStream.value.removeTrack(track);
+					track.stop();
+				}
+				mediaState.localStream.value.addTrack(freshTrack);
+			}
+
+			return freshTrack;
+		} catch (error) {
+			console.error("[Audio] Failed to get fresh mic track:", error);
+			return null;
+		}
+	};
+
+	const getProcessedAudioTrack = async (stream: MediaStream) => {
+		const originalTrack = stream.getAudioTracks()[0];
+		if (!originalTrack) {
+			return null;
+		}
+
+		if (!prefNoiseCancellationEnabled.value) {
+			if (noiseCancellationSession) {
+				noiseCancellationSession.cleanup();
+				noiseCancellationSession = null;
+			}
+
+			if (originalTrack.readyState === "ended") {
+				return await getFreshMicTrack();
+			}
+
+			return originalTrack;
+		}
+
+		try {
+			const audioStream = new MediaStream([originalTrack]);
+			const result =
+				await noiseCancellation.applyNoiseCancellation(audioStream);
+			noiseCancellationSession = result;
+
+			const processedTrack = result.stream.getAudioTracks()[0];
+			if (processedTrack) {
+				return processedTrack;
+			}
+
+			console.warn("[Noise Cancellation] No processed track returned");
+			return originalTrack;
+		} catch (error) {
+			console.error("[Noise Cancellation] Failed to apply:", error);
+			return originalTrack;
+		}
+	};
+
+	const getValidDeviceId = async (
+		storedDeviceId: string | null,
+		deviceType: string,
+	) => {
+		if (!storedDeviceId) return null;
+
+		try {
+			await deviceManager.enumerateDevices({
+				video: false,
+				audio: false,
+			});
+
+			if (deviceManager.isDeviceAvailable(storedDeviceId, deviceType)) {
+				return storedDeviceId;
+			}
+
+			const defaultDevice = deviceManager.getDefaultDevice(deviceType);
+			if (defaultDevice) {
+				if (deviceType === "camera") {
+					setSelectedCameraId(defaultDevice.deviceId);
+				} else if (deviceType === "microphone") {
+					setSelectedMicId(defaultDevice.deviceId);
+				} else if (deviceType === "speaker") {
+					setSelectedSpeakerId(defaultDevice.deviceId);
+				}
+
+				return defaultDevice.deviceId;
+			}
+
+			if (deviceType === "camera") {
+				setSelectedCameraId("");
+			} else if (deviceType === "microphone") {
+				setSelectedMicId("");
+			} else if (deviceType === "speaker") {
+				setSelectedSpeakerId("");
+			}
+			return null;
+		} catch (error) {
+			console.warn(
+				`Could not validate ${deviceType} device availability:`,
+				error,
+			);
+			return storedDeviceId;
+		}
+	};
+
+	const buildMediaConstraints = async (
+		videoEnabled: boolean,
+		audioEnabled: boolean,
+	) => {
+		const constraints: Record<string, unknown> = {};
+
+		const audioConstraints = {
+			channelCount: 1,
+			echoCancellation: true,
+			noiseSuppression: true,
+			autoGainControl: true,
+			sampleRate: 48000,
+			sampleSize: 16,
+		};
+
+		if (videoEnabled) {
+			constraints.video = {
+				width: { ideal: 1280, min: 960 },
+				height: { ideal: 720, min: 540 },
+				frameRate: { ideal: 30, max: 30 },
+			};
+
+			const validCameraId = await getValidDeviceId(
+				selectedCameraId.value,
+				"camera",
+			);
+			if (validCameraId) {
+				(constraints.video as Record<string, unknown>).deviceId = {
+					exact: validCameraId,
+				};
+			}
+		}
+
+		if (audioEnabled) {
+			constraints.audio = { ...audioConstraints };
+
+			const validMicId = await getValidDeviceId(
+				selectedMicId.value,
+				"microphone",
+			);
+			if (validMicId) {
+				(constraints.audio as Record<string, unknown>).deviceId = {
+					exact: validMicId,
+				};
+			}
+		}
+
+		return constraints;
+	};
+
+	const acquireUserMedia = async (
+		videoEnabled: boolean,
+		audioEnabled: boolean,
+		deviceOverrides: Record<string, string> = {},
+	) => {
+		const constraints = await buildMediaConstraints(videoEnabled, audioEnabled);
+
+		if (videoEnabled && Object.hasOwn(deviceOverrides, "cameraDeviceId")) {
+			const validCameraId = await getValidDeviceId(
+				deviceOverrides.cameraDeviceId,
+				"camera",
+			);
+			if (validCameraId && constraints.video) {
+				(constraints.video as Record<string, unknown>).deviceId = {
+					exact: validCameraId,
+				};
+			} else if ((constraints.video as Record<string, unknown>)?.deviceId) {
+				delete (constraints.video as Record<string, unknown>).deviceId;
+			}
+		}
+
+		if (audioEnabled && Object.hasOwn(deviceOverrides, "micDeviceId")) {
+			const validMicId = await getValidDeviceId(
+				deviceOverrides.micDeviceId,
+				"microphone",
+			);
+			if (validMicId && constraints.audio) {
+				(constraints.audio as Record<string, unknown>).deviceId = {
+					exact: validMicId,
+				};
+			} else if ((constraints.audio as Record<string, unknown>)?.deviceId) {
+				delete (constraints.audio as Record<string, unknown>).deviceId;
+			}
+		}
+
+		const stream = await navigator.mediaDevices.getUserMedia(constraints);
+		return { stream, constraints };
+	};
+
+	const applySpeakerDevice = async () => {
+		try {
+			const validSpeakerId = await getValidDeviceId(
+				selectedSpeakerId.value,
+				"speaker",
+			);
+
+			if (validSpeakerId && sfuManager.value?.videoManager) {
+				const audioElements = sfuManager.value.videoManager.audioElements;
+
+				for (const [, audioElement] of audioElements) {
+					try {
+						await audioElement.setSinkId(validSpeakerId);
+					} catch (error) {
+						console.warn("Failed to set speaker for participant:", error);
+					}
+				}
+			}
+		} catch (error) {
+			console.warn("Failed to apply speaker device:", error);
+		}
+	};
+
+	const initializeCamera = async () => {
+		try {
+			mediaState.setMediaState(prefMicEnabled.value, prefCameraEnabled.value);
+
+			if (mediaState.isCameraOn.value || mediaState.isMicOn.value) {
+				const { stream } = await acquireUserMedia(
+					mediaState.isCameraOn.value,
+					mediaState.isMicOn.value,
+				);
+				mediaState.localStream.value = stream;
+				if (connectionState.connectionError.value) {
+					connectionState.connectionError.value = null;
+				}
+				if (mediaState.isCameraOn.value) {
+					mediaState.cameraPermissionGranted.value = true;
+					await applyBackgroundEffectsToLocalStream();
+				}
+				if (mediaState.isMicOn.value) {
+					mediaState.microphonePermissionGranted.value = true;
+				}
+			}
+		} catch (error) {
+			console.error("Failed to initialize camera:", error);
+
+			mediaState.setMediaState(false, false);
+			setMicEnabled(false);
+			setCameraEnabled(false);
+
+			const isPermissionError =
+				(error as Error).name === "NotAllowedError" ||
+				(error as Error).name === "PermissionDeniedError";
+			toast.warning(
+				isPermissionError
+					? "Media access denied. Enable permissions in browser settings."
+					: "Media access failed. You can join without media.",
+			);
+		}
+	};
+
+	const toggleMicrophone = async () => {
+		try {
+			const enable = !mediaState.isMicOn.value;
+			const mh = sfuManager.value?.mediaHandler;
+			let stream = mediaState.localStream.value;
+
+			if (enable) {
+				if (!stream) {
+					try {
+						const { stream: nextStream } = await acquireUserMedia(
+							mediaState.isCameraOn.value,
+							enable,
+						);
+						stream = nextStream;
+						mediaState.localStream.value = stream;
+						mediaState.cameraPermissionGranted.value = true;
+						mediaState.microphonePermissionGranted.value = true;
+					} catch (err) {
+						console.error("Failed to get microphone stream:", err);
+						const isPermissionError =
+							(err as Error).name === "NotAllowedError" ||
+							(err as Error).name === "PermissionDeniedError";
+						toast.error(
+							isPermissionError
+								? "Microphone access denied. Enable in browser settings."
+								: "Failed to access microphone",
+						);
+						return;
+					}
+				} else {
+					const hasAudio = stream.getAudioTracks().length > 0;
+					if (!hasAudio) {
+						try {
+							const { stream: audioOnly } = await acquireUserMedia(false, true);
+							const newTrack = audioOnly.getAudioTracks()[0];
+							if (newTrack) {
+								stream.addTrack(newTrack);
+								mediaState.microphonePermissionGranted.value = true;
+							}
+						} catch (err) {
+							console.error("Failed to add audio track:", err);
+							const isPermissionError =
+								(err as Error).name === "NotAllowedError" ||
+								(err as Error).name === "PermissionDeniedError";
+							toast.error(
+								isPermissionError
+									? "Microphone access denied. Enable in browser settings."
+									: "Could not enable microphone",
+							);
+							return;
+						}
+					} else {
+						const at = stream.getAudioTracks()[0];
+						if (at.readyState === "ended") {
+							try {
+								const { stream: audioOnly } = await acquireUserMedia(
+									false,
+									true,
+								);
+								const newTrack = audioOnly.getAudioTracks()[0];
+								if (newTrack) {
+									stream.removeTrack(at);
+									stream.addTrack(newTrack);
+									mediaState.microphonePermissionGranted.value = true;
+								}
+							} catch (err) {
+								console.error("Failed to replace audio track:", err);
+								const isPermissionError =
+									(err as Error).name === "NotAllowedError" ||
+									(err as Error).name === "PermissionDeniedError";
+								toast.error(
+									isPermissionError
+										? "Microphone access denied. Enable in browser settings."
+										: "Could not enable microphone",
+								);
+								return;
+							}
+						} else {
+							at.enabled = true;
+						}
+					}
+				}
+
+				const track = await getProcessedAudioTrack(stream);
+				if (mh?.audioProducer) {
+					const currentTrack = mh.audioProducer.track;
+					if (currentTrack && currentTrack.readyState === "ended") {
+						await mh.audioProducer.replaceTrack({
+							track: track as MediaStreamTrack,
+						});
+					} else if (track) {
+						track.enabled = true;
+					}
+					mh.audioProducer.resume?.();
+
+					const sfuClient = getSFUClient();
+					if (sfuClient.isConnected()) {
+						sfuClient.resumeProducer(mh.audioProducer.id).catch(() => {});
+					}
+				} else if (track && sfuManager.value?.transportManager) {
+					const producer =
+						await sfuManager.value.transportManager.createProducer(track, {
+							type: "microphone",
+						});
+					mh?.setProducers({ audioProducer: producer });
+				}
+			} else {
+				if (stream) {
+					const at = stream.getAudioTracks()[0];
+					if (at) {
+						at.stop();
+						stream.removeTrack(at);
+					}
+				}
+
+				if (noiseCancellationSession) {
+					noiseCancellationSession.cleanup();
+					noiseCancellationSession = null;
+				}
+
+				if (mh?.audioProducer) {
+					mh.audioProducer.pause?.();
+
+					const sfuClient = getSFUClient();
+					if (sfuClient.isConnected()) {
+						sfuClient.pauseProducer(mh.audioProducer.id);
+					}
+				}
+			}
+
+			mediaState.isMicOn.value = enable;
+			setMicEnabled(enable);
+
+			if (
+				enable &&
+				raiseHandStore.raisedHands.value?.[getSFUClient().getUserId()]
+			) {
+				try {
+					await getSFUClient().sendRaiseHand(false);
+					raiseHandStore.lowerHand(getSFUClient().getUserId());
+				} catch (error) {
+					console.error("Failed to lower hand on unmute:", error);
+				}
+			}
+
+			const sfuClient = getSFUClient();
+			if (sfuClient.isConnected()) {
+				try {
+					sfuClient.sendMediaControl(enable ? "unmute" : "mute");
+				} catch (_) {
+					sfuClient.sendMediaControl({ type: "audio", enabled: enable });
+				}
+			}
+		} catch (error) {
+			console.error("Failed to toggle microphone:", error);
+			toast.error("Failed to toggle microphone");
+		}
+	};
+
+	const toggleCamera = async () => {
+		try {
+			const enable = !mediaState.isCameraOn.value;
+			const mh = sfuManager.value?.mediaHandler;
+			let stream = mediaState.localStream.value;
+
+			if (enable) {
+				if (!stream) {
+					try {
+						const { stream: nextStream } = await acquireUserMedia(
+							true,
+							mediaState.isMicOn.value,
+						);
+						stream = nextStream;
+						mediaState.localStream.value = stream;
+						mediaState.cameraPermissionGranted.value = true;
+						if (mediaState.isMicOn.value) {
+							mediaState.microphonePermissionGranted.value = true;
+						}
+					} catch (err) {
+						console.error("Failed to get camera stream:", err);
+						const isPermissionError =
+							(err as Error).name === "NotAllowedError" ||
+							(err as Error).name === "PermissionDeniedError";
+						toast.error(
+							isPermissionError
+								? "Camera access denied. Enable in browser settings."
+								: "Failed to access camera",
+						);
+						return;
+					}
+				} else {
+					const hasVideo = stream.getVideoTracks().length > 0;
+					if (!hasVideo) {
+						try {
+							const { stream: videoOnly } = await acquireUserMedia(true, false);
+							const newTrack = videoOnly.getVideoTracks()[0];
+							if (newTrack) {
+								stream.addTrack(newTrack);
+								mediaState.cameraPermissionGranted.value = true;
+								if (mediaState.localVideo.value) {
+									const videoTracks = stream.getVideoTracks();
+									if (videoTracks.length > 0) {
+										mediaState.localVideo.value.srcObject = new MediaStream(
+											videoTracks,
+										);
+									}
+								}
+							}
+						} catch (err) {
+							console.error("Failed to add video track:", err);
+							const isPermissionError =
+								(err as Error).name === "NotAllowedError" ||
+								(err as Error).name === "PermissionDeniedError";
+							toast.error(
+								isPermissionError
+									? "Camera access denied. Enable in browser settings."
+									: "Could not enable camera",
+							);
+							return;
+						}
+					} else {
+						const vt = stream.getVideoTracks()[0];
+						if (vt.readyState === "ended") {
+							try {
+								const { stream: videoOnly } = await acquireUserMedia(
+									true,
+									false,
+								);
+								const newTrack = videoOnly.getVideoTracks()[0];
+								if (newTrack) {
+									stream.removeTrack(vt);
+									stream.addTrack(newTrack);
+									mediaState.cameraPermissionGranted.value = true;
+									if (mediaState.localVideo.value) {
+										const videoTracks = stream.getVideoTracks();
+										if (videoTracks.length > 0) {
+											mediaState.localVideo.value.srcObject = new MediaStream(
+												videoTracks,
+											);
+										}
+									}
+								}
+							} catch (err) {
+								console.error("Failed to replace video track:", err);
+								const isPermissionError =
+									(err as Error).name === "NotAllowedError" ||
+									(err as Error).name === "PermissionDeniedError";
+								toast.error(
+									isPermissionError
+										? "Camera access denied. Enable in browser settings."
+										: "Could not enable camera",
+								);
+								return;
+							}
+						} else {
+							vt.enabled = true;
+						}
+					}
+				}
+
+				const bgEffects = getBackgroundEffectsFromStorage();
+				if (
+					bgEffects.anyEnabled ||
+					shouldApplyBackgroundEffectsWhenVideoAvailable
+				) {
+					await applyBackgroundEffectsToLocalStream();
+				}
+
+				const track = stream.getVideoTracks()[0];
+				if (mh?.videoProducer) {
+					const trackToReplace = mediaState.processedStream.value
+						? mediaState.processedStream.value.getVideoTracks()[0]
+						: track;
+					try {
+						await mh.videoProducer.replaceTrack({ track: trackToReplace });
+					} catch (error) {
+						console.warn("Failed to replace video track:", error);
+					}
+				} else if (track && sfuManager.value?.transportManager) {
+					const trackToPublish = mediaState.processedStream.value
+						? mediaState.processedStream.value.getVideoTracks()[0]
+						: track;
+
+					const producer =
+						await sfuManager.value.transportManager.createProducer(
+							trackToPublish,
+							{ type: "camera" },
+						);
+					mh?.setProducers({ videoProducer: producer });
+				}
+			} else {
+				if (stream) {
+					const vt = stream.getVideoTracks()[0];
+					if (vt) {
+						vt.stop();
+						stream.removeTrack(vt);
+					}
+				}
+
+				if (backgroundSession) {
+					backgroundSession.cleanup();
+					backgroundSession = null;
+				}
+				if (mediaState.processedStream.value) {
+					backgroundEffects.stopProcessing();
+					mediaState.processedStream.value = null;
+				}
+
+				if (mh?.videoProducer) {
+					mh.videoProducer.close?.();
+
+					const sfuClient = getSFUClient();
+					if (sfuClient.isConnected()) {
+						sfuClient.closeProducer(mh.videoProducer.id).catch(() => {});
+					}
+
+					mh.videoProducer = null;
+				}
+			}
+
+			mediaState.isCameraOn.value = enable;
+			setCameraEnabled(enable);
+
+			const sfuClient = getSFUClient();
+			if (sfuClient.isConnected()) {
+				try {
+					sfuClient.sendMediaControl(enable ? "video_on" : "video_off");
+				} catch (_) {
+					sfuClient.sendMediaControl({ type: "video", enabled: enable });
+				}
+			}
+		} catch (error) {
+			console.error("Failed to toggle camera:", error);
+			toast.error("Failed to toggle camera");
+		}
+	};
+
+	const toggleScreenShare = async () => {
+		try {
+			if (mediaState.isScreenSharing.value) {
+				if (sfuManager.value?.mediaHandler) {
+					const sp = sfuManager.value.mediaHandler.screenProducer;
+					if (sp?.id) {
+						sp.close?.();
+						const sfuClient = getSFUClient();
+						if (sfuClient.isConnected()) {
+							sfuClient.closeProducer(sp.id);
+						}
+					}
+					sfuManager.value.mediaHandler.stopScreenShare();
+				}
+
+				const tracks = mediaState.screenShareStream.value?.getTracks?.();
+				if (tracks) {
+					for (const t of tracks) {
+						t.stop();
+					}
+				}
+				mediaState.isScreenSharing.value = false;
+				const selfId = (
+					currentUser.currentUser.value as Record<string, unknown>
+				)?.user_id as string;
+				if (selfId && mediaState.screenShareStreams.value) {
+					if (mediaState.screenShareStreams.value[selfId]) {
+						delete mediaState.screenShareStreams.value[selfId];
+					}
+				}
+				mediaState.screenShareStream.value = null;
+				const sfuClient = getSFUClient();
+				if (sfuClient.isConnected()) {
+					sfuClient.sendScreenShare("stop_share");
+				}
+			} else {
+				const hasOngoingRemoteShare =
+					(mediaState.activeScreenShareConsumers.value || []).length > 0;
+				if (hasOngoingRemoteShare) {
+					const shouldContinue = await confirmScreenShareOverride();
+					if (!shouldContinue) {
+						return;
+					}
+				}
+
+				let screenStream: MediaStream | null = null;
+				const getDisplay =
+					navigator.mediaDevices?.getDisplayMedia ||
+					(navigator as unknown as Record<string, unknown>).getDisplayMedia;
+				if (!getDisplay)
+					throw new Error("getDisplayMedia not supported in this browser");
+
+				screenStream = (await (
+					navigator.mediaDevices as Record<string, unknown>
+				).getDisplayMedia.call(navigator.mediaDevices || navigator, {
+					video: {
+						width: { ideal: 1920, max: 1920 },
+						height: { ideal: 1080, max: 1080 },
+						frameRate: { ideal: 10, max: 20 },
+					},
+					displaySurface: "window",
+					selfBrowserSurface: "exclude",
+					surfaceSwitching: "include",
+				})) as MediaStream;
+				if (!screenStream)
+					throw new Error("Failed to obtain screen share stream");
+
+				mediaState.screenShareStream.value = screenStream;
+				mediaState.isScreenSharing.value = true;
+				mediaState.localScreenShareStartedAt.value = Date.now();
+
+				try {
+					const screenTrack = screenStream.getVideoTracks()[0];
+					if (!screenTrack || !sfuManager.value?.transportManager) {
+						throw new Error("Screen share transport is not available");
+					}
+
+					const producer =
+						await sfuManager.value.transportManager.createProducer(
+							screenTrack,
+							{ type: "screen" },
+						);
+					if (sfuManager.value?.mediaHandler) {
+						sfuManager.value.mediaHandler.setProducers({
+							screenProducer: producer,
+						});
+					}
+
+					// Ensure audio producer is available
+					const mh = sfuManager.value?.mediaHandler;
+					if (mh?.audioProducer?.paused) {
+						mh.audioProducer.resume?.();
+					} else if (!mh?.audioProducer) {
+						const localStream = mediaState.localStream.value;
+						const micTrack = localStream?.getAudioTracks?.()[0];
+						if (micTrack && sfuManager.value?.transportManager) {
+							try {
+								const newProducer =
+									await sfuManager.value.transportManager.createProducer(
+										micTrack,
+										{ type: "microphone" },
+									);
+								mh?.setProducers({ audioProducer: newProducer });
+							} catch (err) {
+								console.warn(
+									"Failed to create audio producer after starting screen share",
+									err,
+								);
+							}
+						}
+					}
+				} catch (pubErr) {
+					console.error("Failed to publish screen share producer:", pubErr);
+					mediaState.isScreenSharing.value = false;
+					mediaState.screenShareStream.value = null;
+					for (const t of screenStream.getTracks()) {
+						t.stop();
+					}
+					throw pubErr;
+				}
+
+				screenStream.getVideoTracks()[0].addEventListener("ended", () => {
+					if (mediaState.isScreenSharing.value) {
+						toggleScreenShare();
+					}
+				});
+
+				const sfuClient = getSFUClient();
+				if (sfuClient.isConnected()) {
+					sfuClient.sendScreenShare("start_share", {
+						startedAt: mediaState.localScreenShareStartedAt.value,
+					});
+				}
+			}
+		} catch (error) {
+			if ((error as Error).name === "NotAllowedError") {
+				console.log("User cancelled screen share");
+			} else {
+				console.error("Screen share failed:", error);
+				toast.error("Failed to start screen sharing");
+			}
+		}
+	};
+
+	function setLocalVideoRef(el: HTMLElement | null) {
+		localVideo.value = el;
+		if (el && mediaState.localStream.value) {
+			const streamToUse =
+				mediaState.processedStream.value || mediaState.localStream.value;
+
+			const currentStreamId = streamToUse.id;
+			const trackedStreamId = el.dataset.sourceStreamId;
+
+			if (!el.srcObject || trackedStreamId !== currentStreamId) {
+				const videoTracks = streamToUse.getVideoTracks();
+				if (videoTracks.length > 0) {
+					el.srcObject = new MediaStream(videoTracks);
+					el.dataset.sourceStreamId = currentStreamId;
+				} else {
+					el.srcObject = streamToUse;
+					el.dataset.sourceStreamId = currentStreamId;
+				}
+				el.muted = true;
+			}
+		}
+		mediaState.localVideo.value = el;
+	}
+
+	const setRemoteVideoRef = (participantId: string, el: HTMLElement) => {
+		if (sfuManager.value?.videoManager) {
+			sfuManager.value.videoManager.registerVideoElement(participantId, el);
+		}
+	};
+
+	const setScreenShareVideoRef = (el: HTMLElement) => {
+		if (!el) return;
+
+		const participantId = (
+			el as HTMLElement & { dataset: Record<string, string> }
+		).dataset?.participantId;
+		if (participantId) {
+			screenShareVideoElements.set(participantId, el);
+
+			const store = mediaState.screenShareStreams.value || {};
+			let stream = store[participantId] || null;
+			if (
+				!stream &&
+				(currentUser.currentUser.value as Record<string, unknown>)?.user_id ===
+					participantId
+			) {
+				stream = mediaState.screenShareStream.value || null;
+			}
+
+			if (stream instanceof MediaStream) {
+				const currentStreamId = stream.id;
+				const existingStreamId = (el as HTMLVideoElement).srcObject?.id;
+
+				if (
+					!(el as HTMLVideoElement).srcObject ||
+					existingStreamId !== currentStreamId
+				) {
+					(el as HTMLVideoElement).srcObject = stream;
+					(el as HTMLVideoElement).play?.().catch(() => {});
+				}
+			}
+		}
+	};
+
+	// Watch noise cancellation toggle
+	watch(prefNoiseCancellationEnabled, async (enabled) => {
+		if (!mediaState.isMicOn.value || !sfuManager.value?.mediaHandler) {
+			return;
+		}
+
+		try {
+			const freshTrack = await getFreshMicTrack();
+			if (!freshTrack) {
+				return;
+			}
+
+			if (noiseCancellationSession) {
+				noiseCancellationSession.cleanup();
+				noiseCancellationSession = null;
+			}
+
+			let trackToPublish = freshTrack;
+
+			if (enabled) {
+				const audioStream = new MediaStream([freshTrack]);
+				const result =
+					await noiseCancellation.applyNoiseCancellation(audioStream);
+				noiseCancellationSession = result;
+
+				const processedTrack = result.stream.getAudioTracks()[0];
+				if (processedTrack && processedTrack.readyState === "live") {
+					trackToPublish = processedTrack;
+				}
+			}
+
+			const mh = sfuManager.value.mediaHandler;
+			if (mh?.audioProducer && trackToPublish.readyState === "live") {
+				await mh.audioProducer.replaceTrack({ track: trackToPublish });
+			}
+		} catch (error) {
+			console.error("[Noise Cancellation] Failed to toggle:", error);
+		}
+	});
+
+	// Watch chat state for notification context
+	watch(
+		() => mediaState.isScreenSharing.value,
+		(isSharing) => {
+			notificationContextManager.updateScreenShareState(isSharing);
+		},
+	);
+
+	// Watch processed stream changes and update producer track
+	watch(mediaState.processedStream, async (newStream) => {
+		const reason = newStream
+			? "processed-stream-change"
+			: "processed-stream-removed";
+		await replacePublishedVideoTrack(newStream, reason);
+	});
+
+	onUnmounted(() => {
+		if (backgroundSession) {
+			backgroundSession.cleanup();
+			backgroundSession = null;
+		}
+		backgroundEffects.stopProcessing();
+
+		if (noiseCancellationSession) {
+			noiseCancellationSession.cleanup();
+			noiseCancellationSession = null;
+		}
+
+		if (mediaState.localStream.value) {
+			for (const track of mediaState.localStream.value.getTracks()) {
+				track.stop();
+			}
+		}
+
+		if (mediaState.screenShareStream.value) {
+			for (const track of mediaState.screenShareStream.value.getTracks()) {
+				track.stop();
+			}
+		}
+	});
+
+	return {
+		initializeCamera,
+		acquireUserMedia,
+		toggleMicrophone,
+		toggleCamera,
+		toggleScreenShare,
+		applySpeakerDevice,
+		applyBackgroundEffectsToLocalStream,
+		setLocalVideoRef,
+		setRemoteVideoRef,
+		setScreenShareVideoRef,
+		processedStream: mediaState.processedStream,
+	};
+}

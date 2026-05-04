@@ -14,7 +14,7 @@
 				<div class="text-red-500 mb-4">
 					<lucide-alert-circle class="w-12 h-12 mx-auto" />
 				</div>
-				<p class="text-lg mb-4">{{ meetingState.connectionError }}</p>
+				<p class="text-lg mb-4">{{ connectionState.connectionError }}</p>
 				<Button @click="resetToPreview" variant="outline" theme="red">Try Again</Button>
 			</div>
 		</div>
@@ -23,8 +23,8 @@
 		<MeetingPreview
 			v-else-if="showPreview"
 			:meetingId="meetingId"
-			@toggle-microphone="toggleMicrophone"
-			@toggle-camera="toggleCamera"
+			@toggle-microphone="mediaControls.toggleMicrophone()"
+			@toggle-camera="mediaControls.toggleCamera()"
 			@join-from-preview="joinMeetingFromPreview"
 			@guest-join-complete="handleGuestJoinComplete"
 			@leave-waiting-room="leaveWaitingRoom"
@@ -51,32 +51,32 @@
 
 						<!-- Meeting controls -->
 						<MeetingToolbar
-							:isChatOpen="meetingState.isChatOpen.value"
-							:isPeopleOpen="meetingState.isPeopleOpen.value"
-							:hasUnread="meetingState.hasUnreadMessages.value"
-							:lobbyUserCount="meetingState.lobbyUsers?.value?.length || 0"
-							:isMicOn="meetingState.isMicOn.value"
-							:isCameraOn="meetingState.isCameraOn.value"
-							:isScreenSharing="meetingState.isScreenSharing.value"
+							:isChatOpen="chatStore.isChatOpen.value"
+							:isPeopleOpen="isPeopleOpen"
+							:hasUnread="chatStore.hasUnreadMessages.value"
+							:lobbyUserCount="lobbyStore.lobbyUsers?.value?.length || 0"
+							:isMicOn="mediaState.isMicOn.value"
+							:isCameraOn="mediaState.isCameraOn.value"
+							:isScreenSharing="mediaState.isScreenSharing.value"
 							:isFullscreen="isFullscreen"
 							:isHandRaised="isHandRaised"
 							:isReactionPickerOpen="isReactionPickerOpen"
 							@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 							:meetingId="meetingId"
-							:meetingTitle="meetingTitle.value"
-							:currentUser="meetingState.currentUser.value"
-							:cameraPermissionGranted="meetingState.cameraPermissionGranted.value"
-							:microphonePermissionGranted="meetingState.microphonePermissionGranted.value"
+							:meetingTitle="meetingTitle"
+							:currentUser="currentUser.currentUser.value"
+							:cameraPermissionGranted="mediaState.cameraPermissionGranted.value"
+							:microphonePermissionGranted="mediaState.microphonePermissionGranted.value"
 							@toggle-chat="toggleChat"
 							@toggle-people="togglePeople"
 							@toggle-reactions="toggleReactions($event)"
-							@toggle-microphone="toggleMicrophone"
-							@toggle-camera="toggleCamera"
-							@toggle-screen-share="toggleScreenShare"
+							@toggle-microphone="mediaControls.toggleMicrophone()"
+							@toggle-camera="mediaControls.toggleCamera()"
+							@toggle-screen-share="mediaControls.toggleScreenShare()"
 							@toggle-fullscreen="toggleFullscreen"
-							@toggle-raise-hand="toggleRaiseHand"
+							@toggle-raise-hand="raiseHand.toggleRaiseHand()"
 							@report-problem="handleReportProblem"
-							@end-call="endCall"
+							@end-call="sfuConnection.endCall()"
 							@device-changed="handleDeviceChanged"
 						/>
 					</div>
@@ -104,27 +104,28 @@
 							<ChatPanel
 								v-if="activePanel === 'chat'"
 								:open="true"
-								:messages="meetingState.chatMessages.value"
-								:user-id="meetingState.currentUser.value?.user_id || ''"
+								:messages="chatStore.chatMessages.value"
+								:user-id="(currentUser.currentUser.value as Record<string, unknown>)?.user_id as string || ''"
 								:user-name="
-									meetingState.currentUser.value?.full_name ||
-									meetingState.currentUser.value?.name ||
+									((currentUser.currentUser.value as Record<string, unknown>)?.full_name as string) ||
+									((currentUser.currentUser.value as Record<string, unknown>)?.name as string) ||
 									'You'
 								"
 								@close="toggleChat"
-								@send="onSendChat"
+								@send="chat.onSendChat"
 							/>
 
 							<!-- People Panel -->
 							<PeoplePanel
 								v-if="activePanel === 'people'"
 								:open="true"
-								:currentUser="meetingState.currentUser.value"
-								:participants="meetingState.participants.value"
-								:isMicOn="meetingState.isMicOn.value"
-								:isCameraOn="meetingState.isCameraOn.value"
-								:creatorUserId="creatorUserId"
+								:currentUser="currentUser.currentUser.value"
+								:participants="participantStore.participants.value"
+								:isMicOn="mediaState.isMicOn.value"
+								:isCameraOn="mediaState.isCameraOn.value"
+								:creatorUserId="meetingOwner"
 								:coHosts="meetingCoHosts"
+								:lobbyUsers="lobbyStore.lobbyUsers.value"
 								@close="togglePeople"
 								@muteParticipant="handleMuteParticipant"
 								@kickParticipant="handleKickParticipant"
@@ -160,14 +161,14 @@
 		<!-- Join request notifications -->
 		<JoinRequestNotifications
 			:waitingUsers="lobbyUsersForNotifications"
-			@approve-user="approveUser"
-			@reject-user="rejectUser"
+			@approve-user="lobby.approveUser"
+			@reject-user="lobby.rejectUser"
 		/>
 	</div>
 </template>
 
-<script setup>
-import { Button, frappeRequest } from "frappe-ui";
+<script setup lang="ts">
+import { Button, frappeRequest, toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
@@ -181,35 +182,61 @@ import MeetingToolbar from "../components/MeetingToolbar.vue";
 import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
 import Spinner from "../components/Spinner.vue";
-
-import { provideMeetingContext } from "../composables/useMeetingContext.js";
+import { useBackgroundEffects } from "../composables/useBackgroundEffects";
+import { useChat } from "../composables/useChat";
+import { useChatStore } from "../composables/useChatStore";
+import { useConnectionState } from "../composables/useConnectionState";
+import { useCurrentUser } from "../composables/useCurrentUser";
+import { useGridLayout } from "../composables/useGridLayout";
+import { useKeyboardShortcuts } from "../composables/useKeyboardShortcuts";
+import { useLobby } from "../composables/useLobby";
+import { useLobbyStore } from "../composables/useLobbyStore";
+import { useMediaControls } from "../composables/useMediaControls";
+import { useMediaState } from "../composables/useMediaState";
+import {
+	MEETING_CONTEXT_KEY,
+	provideMeetingContext,
+} from "../composables/useMeetingContext";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
-import { useMeetingLogic } from "../composables/useMeetingLogic.js";
-import { useMeetingState } from "../composables/useMeetingState.js";
+import { useNoiseCancellation } from "../composables/useNoiseCancellation";
+import { useParticipantStore } from "../composables/useParticipantStore";
+import { useRaiseHand } from "../composables/useRaiseHand";
+import { useRaiseHandStore } from "../composables/useRaiseHandStore";
+import { useReactionStore } from "../composables/useReactionStore";
+import { useReactions } from "../composables/useReactions";
 import { useResponsiveGrid } from "../composables/useResponsiveGrid";
+import { useSFUConnection } from "../composables/useSFUConnection";
 import {
 	selectedCameraId,
 	selectedMicId,
 	selectedSpeakerId,
 } from "../data/mediaPreferences";
-import { session } from "../data/session.js";
+import { session } from "../data/session";
 import { useSocket } from "../socket.js";
-import { openProblemReportEmail } from "../utils/diagnostics/problemReport.ts";
-import { deviceManager } from "../utils/media/DeviceManager.js";
-import { getSFUClient } from "../utils/sfu-client.js";
+import { openProblemReportEmail } from "../utils/diagnostics/problemReport";
+import { deviceManager } from "../utils/media/DeviceManager";
+import { getSFUClient } from "../utils/sfu-client";
 
-// Router access
+// Router
 const route = useRoute();
 const router = useRouter();
-const meetingId = computed(() => route.params.meetingId);
+const meetingId = computed(() => route.params.meetingId as string);
 
-// Meeting state management
-const meetingState = useMeetingState();
-const socket = useSocket();
+// --- Stores (singletons) ---
+const connectionState = useConnectionState();
+const currentUser = useCurrentUser();
+const mediaState = useMediaState();
+const participantStore = useParticipantStore();
+const chatStore = useChatStore();
+const lobbyStore = useLobbyStore();
+const reactionStore = useReactionStore();
+const raiseHandStore = useRaiseHandStore();
+const gridLayout = useGridLayout(mediaState);
 
-// Lobby user notification tracking
-const notifiedLobbyUsers = ref(new Set());
+// --- Lobby notification tracking ---
+const notifiedLobbyUsers = ref(new Set<string>());
 
+// --- Meeting doc ---
 const {
 	getMeetingDoc,
 	meetingTitle,
@@ -217,67 +244,201 @@ const {
 	isCurrentUserHost,
 	meetingCoHosts,
 } = useMeetingDoc();
-
 const meetingDoc = getMeetingDoc(meetingId.value);
 
-// Meeting logic composable
-const {
-	initializeCamera,
-	acquireUserMedia,
-	handleGuestJoinResult,
-	joinMeetingRoom,
-	toggleMicrophone,
-	toggleCamera,
-	toggleScreenShare,
-	endCall,
-	approveUser,
-	approveAllUsers,
-	rejectUser,
-	setLocalVideoRef,
-	setRemoteVideoRef,
-	setScreenShareVideoRef,
-	onSendChat,
-	setupChatEvents,
-	setupReactionEvents,
-	setupRaiseHandEvents,
-	toggleRaiseHand,
-	handleKeyDown,
-	handleKeyUp,
-	sfuManager,
-	applySpeakerDevice,
-	processedStream,
-	applyBackgroundEffectsToLocalStream,
-	onSendReaction,
-} = useMeetingLogic(meetingState, meetingId.value, {
-	notifiedLobbyUsers,
+// --- Background effects & noise cancellation ---
+const backgroundEffects = useBackgroundEffects();
+const noiseCancellation = useNoiseCancellation();
+
+// --- Lobby notification conversion ---
+const lobbyUsersForNotifications = computed(() => {
+	return lobbyStore.lobbyUsers.value
+		.filter((user) => !notifiedLobbyUsers.value.has(user.userId))
+		.map((user) => ({
+			user_id: user.userId,
+			user_name: user.name,
+			user_image: user.avatar,
+		}));
 });
 
+// --- Guest session ---
 const isGuestSession = computed(
 	() =>
 		!session.isLoggedIn &&
-		(!!meetingState.guestAuthToken.value ||
-			meetingState.isWaitingForApproval.value),
+		(!!connectionState.guestAuthToken.value ||
+			lobbyStore.isWaitingForApproval.value),
 );
 
-// Provide meeting context for child components
-provideMeetingContext({
-	processedStream,
-	isInMeeting: computed(() => true),
-	onBackgroundEffectsChanged: applyBackgroundEffectsToLocalStream,
+// --- SFU Connection ---
+const sfuConnection = useSFUConnection({
+	connectionState,
+	currentUser,
+	mediaState,
+	participantStore,
+	lobbyStore,
+	gridLayout,
+	meetingId: meetingId.value,
+	notifiedLobbyUsers,
+	onHostMutedYou: () => mediaControls.toggleMicrophone(),
+	onHostKickedYou: () => sfuConnection.endCall(),
+	onScreenShareStarted: (data: Record<string, unknown>) => {
+		const pid = (data as Record<string, unknown>).participantId as string;
+		if (!pid) return;
+		const prev = mediaState.activeScreenShareConsumers.value || [];
+		const filtered = prev.filter((s) => s.participantId !== pid);
+		mediaState.activeScreenShareConsumers.value = [
+			...filtered,
+			{
+				participantId: pid,
+				consumerId:
+					((
+						(data as Record<string, unknown>).consumer as Record<
+							string,
+							unknown
+						>
+					)?.id as string) || "remote-screen",
+				startedAt:
+					((data as Record<string, unknown>).startedAt as number) || Date.now(),
+			},
+		];
+		if ((data as Record<string, unknown>).stream instanceof MediaStream) {
+			try {
+				const store = mediaState.screenShareStreams?.value || {};
+				store[pid] = (data as Record<string, unknown>).stream as MediaStream;
+				mediaState.screenShareStreams.value = store;
+			} catch (err) {
+				console.warn("Failed to store screen share stream:", err);
+			}
+		}
+	},
+	onScreenShareStopped: (data: Record<string, unknown>) => {
+		const pid = (data as Record<string, unknown>).participantId as string;
+		const list = mediaState.activeScreenShareConsumers.value || [];
+		mediaState.activeScreenShareConsumers.value = list.filter(
+			(share) => share.participantId !== pid,
+		);
+		const store = mediaState.screenShareStreams?.value || {};
+		if (pid && store[pid]) {
+			const stream = store[pid];
+			const tracks = (stream as MediaStream)?.getTracks?.();
+			if (tracks) {
+				for (const t of tracks) {
+					t.stop();
+				}
+			}
+			delete store[pid];
+			mediaState.screenShareStreams.value = store;
+		}
+	},
+	onActiveSpeakerChanged: (participantIds: string[]) => {
+		participantStore.activeSpeakerIds.value = participantIds;
+	},
 });
 
-provide("setLocalVideoRef", setLocalVideoRef);
-provide("setRemoteVideoRef", setRemoteVideoRef);
-provide("setScreenShareVideoRef", setScreenShareVideoRef);
-provide("getParticipantName", meetingState.getParticipantName);
-provide("meetingState", meetingState);
+// --- Media Controls ---
+const mediaControls = useMediaControls({
+	mediaState,
+	connectionState,
+	raiseHandStore,
+	currentUser,
+	sfuManager: sfuConnection.sfuManager,
+	deviceManager,
+	backgroundEffects,
+	noiseCancellation,
+	toast,
+	mediaPreferences: {
+		micEnabled: ref(false),
+		cameraEnabled: ref(false),
+		selectedCameraId,
+		selectedMicId,
+		selectedSpeakerId,
+		pushToTalkEnabled: ref(false),
+		noiseCancellationEnabled: ref(false),
+		setMicEnabled: (_v: boolean) => {
+			/* handled via mediaState */
+		},
+		setCameraEnabled: (_v: boolean) => {
+			/* handled via mediaState */
+		},
+		setSelectedCameraId: () => {},
+		setSelectedMicId: () => {},
+		setSelectedSpeakerId: () => {},
+	},
+});
+
+// --- Chat ---
+const chat = useChat({
+	chatStore,
+	currentUser,
+});
+
+// --- Reactions ---
+const reactions = useReactions({
+	reactionStore,
+	currentUser,
+});
+
+// --- Raise Hand ---
+const raiseHand = useRaiseHand({
+	raiseHandStore,
+	currentUser,
+});
+
+// --- Lobby ---
+const lobby = useLobby({
+	lobbyStore,
+	meetingId: meetingId.value as string,
+});
+
+// --- Keyboard Shortcuts ---
+const keyboardShortcuts = useKeyboardShortcuts({
+	mediaControls: {
+		toggleMicrophone: () => mediaControls.toggleMicrophone(),
+		toggleCamera: () => mediaControls.toggleCamera(),
+	},
+	mediaState,
+});
+
+// --- Provide meeting context for child components ---
+provideMeetingContext({
+	mediaState,
+	participantStore,
+	currentUser,
+	chatStore,
+	gridLayout,
+	sfuManager: sfuConnection.sfuManager,
+	processedStream: mediaState.processedStream,
+	isInMeeting: computed(() => true),
+	onBackgroundEffectsChanged: mediaControls.applyBackgroundEffectsToLocalStream,
+});
+
+// Provide backward-compatible strings for legacy inject calls
+provide("setLocalVideoRef", mediaControls.setLocalVideoRef);
+provide("setRemoteVideoRef", mediaControls.setRemoteVideoRef);
+provide("setScreenShareVideoRef", mediaControls.setScreenShareVideoRef);
+provide("getParticipantName", participantStore.getParticipantName);
+provide("meetingState", {
+	...connectionState,
+	...mediaState,
+	...participantStore,
+	...chatStore,
+	...lobbyStore,
+	...reactionStore,
+	...raiseHandStore,
+	...gridLayout,
+	currentUser: currentUser.currentUser,
+	userInitials: currentUser.userInitials,
+	userAvatar: currentUser.userAvatar,
+});
 provide("meetingId", meetingId.value);
-provide("sfuManager", sfuManager);
-provide("socket", socket);
+provide("sfuManager", sfuConnection.sfuManager);
+provide("socket", useSocket());
 provide("isCurrentUserHost", isCurrentUserHost);
 provide("hostControls", {
-	muteParticipant: (...args) => handleMuteParticipant(...args),
-	kickParticipant: (...args) => handleKickParticipant(...args),
+	muteParticipant: (...args: unknown[]) =>
+		handleMuteParticipant(args[0] as string),
+	kickParticipant: (...args: unknown[]) =>
+		handleKickParticipant(args[0] as string, args[1] as boolean),
 });
 provide(
 	"meetingTitle",
@@ -289,15 +450,17 @@ provide(
 	}),
 );
 
-// Computed properties
-const isConnecting = computed(() => meetingState.isConnecting.value);
-const hasConnectionError = computed(() => !!meetingState.connectionError.value);
-const isInLobby = computed(() => meetingState.isInLobby?.value || false);
+// --- Computed properties ---
+const isConnecting = computed(() => connectionState.isConnecting.value);
+const hasConnectionError = computed(
+	() => !!connectionState.connectionError.value,
+);
+const isInLobby = computed(() => lobbyStore.isInLobby?.value || false);
 const isWaitingForApproval = computed(
-	() => meetingState.isWaitingForApproval?.value || false,
+	() => lobbyStore.isWaitingForApproval?.value || false,
 );
 const isRejected = computed(
-	() => meetingState.isJoinRequestRejected?.value || false,
+	() => lobbyStore.isJoinRequestRejected?.value || false,
 );
 const showPreview = computed(() => {
 	const isUnauthenticatedGuest = !session.isLoggedIn && !isGuestSession.value;
@@ -308,21 +471,22 @@ const showPreview = computed(() => {
 	if (isGuestSession.value) {
 		return false;
 	}
-	if (meetingState.isInLobby?.value) {
+	if (lobbyStore.isInLobby?.value) {
 		return false;
 	}
-	if (meetingState.isWaitingForApproval?.value) {
+	if (lobbyStore.isWaitingForApproval.value) {
 		return false;
 	}
-	const inPreview = meetingState.isInPreview.value;
-	const joinRequestRejected = meetingState.isJoinRequestRejected.value;
+	const inPreview = connectionState.isInPreview.value;
+	const joinRequestRejected = lobbyStore.isJoinRequestRejected.value;
 	return inPreview || joinRequestRejected;
 });
 
+const isPeopleOpen = ref(false);
+
 const activePanel = computed(() => {
-	if (meetingState.isChatOpen.value) return "chat";
-	if (meetingState.isPeopleOpen.value) return "people";
-	if (meetingState.isPeopleOpen.value) return "people";
+	if (chatStore.isChatOpen.value) return "chat";
+	if (isPeopleOpen.value) return "people";
 	return null;
 });
 
@@ -331,67 +495,68 @@ const isMobile = computed(() => windowWidth.value < 768);
 
 const panelWidth = computed(() => {
 	if (!activePanel.value) return "0rem";
-	// On mobile, panel overlays, so it doesn't take up grid space
 	if (isMobile.value) return "0rem";
 	return "24rem";
 });
 
 const isHandRaised = computed(() => {
-	const currentUserId = meetingState.currentUser.value?.user_id;
+	const currentUserId = (
+		currentUser.currentUser.value as Record<string, unknown>
+	)?.user_id as string;
 	return currentUserId
-		? !!meetingState.raisedHands.value?.[currentUserId]
+		? !!raiseHandStore.raisedHands.value?.[currentUserId]
 		: false;
 });
 
-const creatorUserId = computed(() => meetingOwner.value);
-
-const lobbyUsersForNotifications = computed(() => {
-	return meetingState.lobbyUsers.value
-		.filter((user) => !notifiedLobbyUsers.value.has(user.userId))
-		.map((user) => ({
-			user_id: user.userId,
-			user_name: user.name,
-			user_image: user.avatar,
-		}));
-});
-
-// Refs
-const chatNotificationQueue = ref(null);
+// --- Refs ---
+const chatNotificationQueue = ref<InstanceType<
+	typeof ChatNotificationQueue
+> | null>(null);
 const isReactionPickerOpen = ref(false);
 const isFullscreen = ref(false);
 
-// Methods
+// --- Methods ---
 const resetToPreview = () => {
-	meetingState.connectionError.value = null;
-	meetingState.isConnecting.value = false;
-	meetingState.isInPreview.value = true;
-	// Reset to preview state
+	connectionState.connectionError.value = null;
+	connectionState.isConnecting.value = false;
+	connectionState.isInPreview.value = true;
 };
 
 const joinMeetingFromPreview = async () => {
-	await joinMeetingRoom();
+	await sfuConnection.joinMeetingRoom();
 };
 
-const handleGuestJoinComplete = async ({ guestName, joinResult }) => {
-	const guestId = joinResult?.guest_id || meetingState.guestId.value;
+const handleGuestJoinComplete = async ({
+	guestName,
+	joinResult,
+}: {
+	guestName: string;
+	joinResult: Record<string, unknown>;
+}) => {
+	const guestId =
+		(joinResult?.guest_id as string) ||
+		(connectionState.guestId.value as string);
 	const resolvedGuestName = guestName || localStorage.getItem("guest_name");
 
 	if (guestId && resolvedGuestName) {
-		meetingState.currentUser.value = {
+		currentUser.setCurrentUser({
 			user_id: guestId,
 			name: resolvedGuestName,
 			full_name: resolvedGuestName,
 			avatar: null,
 			is_guest: true,
-		};
+		});
 	}
 
-	await handleGuestJoinResult(joinResult, resolvedGuestName);
+	await sfuConnection.handleGuestJoinResult(
+		joinResult,
+		resolvedGuestName || "",
+	);
 };
 
 const leaveWaitingRoom = () => {
-	meetingState.isWaitingForApproval.value = false;
-	meetingState.isJoinRequestRejected.value = false;
+	lobbyStore.isWaitingForApproval.value = false;
+	lobbyStore.isJoinRequestRejected.value = false;
 	router.push({ name: "Home" });
 };
 
@@ -402,74 +567,66 @@ const leaveLobby = async () => {
 		sfuClient.disconnect();
 	}
 
-	meetingState.isInLobby.value = false;
-	meetingState.isWaitingForApproval.value = false;
-	meetingState.lobbyParticipantCount.value = 0;
+	lobbyStore.isInLobby.value = false;
+	lobbyStore.isWaitingForApproval.value = false;
+	lobbyStore.lobbyParticipantCount.value = 0;
 
 	router.push({ name: "Home" });
 };
 
 const goHome = () => {
-	meetingState.isJoinRequestRejected.value = false;
-	meetingState.isInLobby.value = false;
-
+	lobbyStore.isJoinRequestRejected.value = false;
+	lobbyStore.isInLobby.value = false;
 	router.push({ name: "Home" });
 };
 
 const tryJoinAgain = async () => {
-	meetingState.isJoinRequestRejected.value = false;
+	lobbyStore.isJoinRequestRejected.value = false;
 
 	if (isGuestSession.value) {
-		meetingState.isInPreview.value = true;
+		connectionState.isInPreview.value = true;
 		return;
 	}
 
-	await joinMeetingRoom();
+	await sfuConnection.joinMeetingRoom();
 };
 
-const toggleReactions = (payload) => {
-	onSendReaction(payload);
+const toggleReactions = (payload: string) => {
+	reactions.onSendReaction(payload);
 	isReactionPickerOpen.value = false;
 };
 
 const toggleChat = () => {
-	meetingState.isChatOpen.value = !meetingState.isChatOpen.value;
-	if (meetingState.isChatOpen.value) {
-		meetingState.hasUnreadMessages.value = false;
-		// Close people panel when opening chat
-		meetingState.isPeopleOpen.value = false;
+	chatStore.isChatOpen.value = !chatStore.isChatOpen.value;
+	if (chatStore.isChatOpen.value) {
+		chatStore.hasUnreadMessages.value = false;
+		isPeopleOpen.value = false;
 	}
 };
 
 const togglePeople = () => {
-	meetingState.isPeopleOpen.value = !meetingState.isPeopleOpen.value;
-	if (meetingState.isPeopleOpen.value) {
-		// Close chat when opening people panel
-		meetingState.isChatOpen.value = false;
+	isPeopleOpen.value = !isPeopleOpen.value;
+	if (isPeopleOpen.value) {
+		chatStore.isChatOpen.value = false;
 	}
 };
 
-const handleMuteParticipant = async (participantId) => {
+const handleMuteParticipant = async (participantId: string) => {
 	try {
-		console.log("Muting participant:", participantId);
-
-		if (sfuManager.value?.sfuClient) {
-			sfuManager.value.sfuClient.sendEvent("host_control", {
+		if (sfuConnection.sfuManager.value?.sfuClient) {
+			sfuConnection.sfuManager.value.sfuClient.sendEvent("host_control", {
 				action: "mute_participant",
 				targetParticipantId: participantId,
 			});
 		} else {
 			console.error("SFU client not available");
 		}
-
-		// Note: the remote participant will receive `host_control_update` event
-		// and that will handle muting their microphone
 	} catch (error) {
 		console.error("Failed to mute participant:", error);
 	}
 };
 
-const handleKickParticipant = async (participantId, ban = false) => {
+const handleKickParticipant = async (participantId: string, ban = false) => {
 	try {
 		if (ban) {
 			try {
@@ -484,8 +641,8 @@ const handleKickParticipant = async (participantId, ban = false) => {
 			}
 		}
 
-		if (sfuManager.value?.sfuClient) {
-			sfuManager.value.sfuClient.sendEvent("host_control", {
+		if (sfuConnection.sfuManager.value?.sfuClient) {
+			sfuConnection.sfuManager.value.sfuClient.sendEvent("host_control", {
 				action: "kick_participant",
 				targetParticipantId: participantId,
 			});
@@ -497,12 +654,10 @@ const handleKickParticipant = async (participantId, ban = false) => {
 	}
 };
 
-const handleLowerHand = async (participantId) => {
+const handleLowerHand = async (participantId: string) => {
 	try {
-		console.log("Lowering hand for participant:", participantId);
-
-		if (sfuManager.value?.sfuClient) {
-			sfuManager.value.sfuClient.sendEvent("host_control", {
+		if (sfuConnection.sfuManager.value?.sfuClient) {
+			sfuConnection.sfuManager.value.sfuClient.sendEvent("host_control", {
 				action: "lower_hand",
 				targetParticipantId: participantId,
 			});
@@ -514,10 +669,8 @@ const handleLowerHand = async (participantId) => {
 	}
 };
 
-const handlePromoteToCohost = async (participantId) => {
+const handlePromoteToCohost = async (participantId: string) => {
 	try {
-		console.log("Promoting participant to co-host:", participantId);
-
 		const response = await frappeRequest({
 			url: "meet.api.meeting.promote_to_cohost",
 			params: {
@@ -526,7 +679,7 @@ const handlePromoteToCohost = async (participantId) => {
 			},
 		});
 
-		if (response?.meeting_id) {
+		if ((response as Record<string, unknown>)?.meeting_id) {
 			toast.success("User promoted to co-host");
 			await meetingDoc.reload();
 		}
@@ -536,22 +689,18 @@ const handlePromoteToCohost = async (participantId) => {
 	}
 };
 
-const handleApproveLobbyUser = async (participantId) => {
+const handleApproveLobbyUser = async (participantId: string) => {
 	try {
-		console.log("Approving lobby user:", participantId);
-
-		await approveUser(participantId);
+		await lobby.approveUser(participantId);
 		notifiedLobbyUsers.value.add(participantId);
 	} catch (error) {
 		console.error("Failed to approve lobby user:", error);
 	}
 };
 
-const handleApproveAllLobbyUsers = async (participantIds) => {
+const handleApproveAllLobbyUsers = async (participantIds: string[]) => {
 	try {
-		console.log("Approving all lobby users");
-
-		await approveAllUsers(participantIds);
+		await lobby.approveAllUsers();
 		for (const userId of participantIds) {
 			notifiedLobbyUsers.value.add(userId);
 		}
@@ -560,11 +709,9 @@ const handleApproveAllLobbyUsers = async (participantIds) => {
 	}
 };
 
-const handleRejectLobbyUser = async (participantId) => {
+const handleRejectLobbyUser = async (participantId: string) => {
 	try {
-		console.log("Rejecting lobby user:", participantId);
-
-		await rejectUser(participantId);
+		await lobby.rejectUser(participantId);
 		notifiedLobbyUsers.value.add(participantId);
 	} catch (error) {
 		console.error("Failed to reject lobby user:", error);
@@ -572,7 +719,7 @@ const handleRejectLobbyUser = async (participantId) => {
 };
 
 const handleNotificationClick = () => {
-	if (!meetingState.isChatOpen.value) {
+	if (!chatStore.isChatOpen.value) {
 		toggleChat();
 	}
 };
@@ -585,13 +732,11 @@ const toggleFullscreen = async () => {
 	try {
 		if (!document.fullscreenElement) {
 			const targetElement = document.body;
-
 			if (targetElement?.requestFullscreen) {
 				await targetElement.requestFullscreen();
 			}
 			return;
 		}
-
 		if (document.exitFullscreen) {
 			await document.exitFullscreen();
 		}
@@ -602,31 +747,24 @@ const toggleFullscreen = async () => {
 	}
 };
 
-const setSinkIdOnVideoElements = async (sinkId) => {
-	// Set speaker output on all video elements
+const setSinkIdOnVideoElements = async (sinkId: string) => {
 	const videoElements = document.querySelectorAll("video");
-
-	if (videoElements.length === 0) {
-		console.warn("No video elements found yet");
-	}
-
 	const promises = [];
 	for (const videoEl of videoElements) {
-		const promise = videoEl.setSinkId(sinkId).catch((error) => {
-			console.error("Failed to set speaker for video element:", error);
-		});
+		const promise = (videoEl as HTMLVideoElement)
+			.setSinkId(sinkId)
+			.catch((error: Error) => {
+				console.error("Failed to set speaker for video element:", error);
+			});
 		promises.push(promise);
 	}
 
-	if (sfuManager.value?.videoManager) {
-		const audioElements = sfuManager.value.videoManager.audioElements;
-
-		for (const [participantId, audioElement] of audioElements) {
-			const promise = audioElement.setSinkId(sinkId).catch((error) => {
-				console.warn(
-					`Failed to set speaker for audio element ${participantId}:`,
-					error,
-				);
+	if (sfuConnection.sfuManager.value?.videoManager) {
+		const audioElements =
+			sfuConnection.sfuManager.value.videoManager.audioElements;
+		for (const [, audioElement] of audioElements) {
+			const promise = audioElement.setSinkId(sinkId).catch((error: Error) => {
+				console.warn("Failed to set speaker for audio element:", error);
 			});
 			promises.push(promise);
 		}
@@ -638,47 +776,49 @@ const setSinkIdOnVideoElements = async (sinkId) => {
 const handleReportProblem = async () => {
 	await openProblemReportEmail({
 		meetingId: String(meetingId.value || ""),
-		networkQuality: meetingState.networkQuality?.value,
-		localStream: meetingState.localStream.value,
-		transportManager: sfuManager.value?.transportManager || null,
+		networkQuality: connectionState.networkQuality?.value,
+		localStream: mediaState.localStream.value,
+		transportManager: sfuConnection.sfuManager.value?.transportManager || null,
 	});
 };
 
-const handleDeviceChanged = async (event) => {
+const handleDeviceChanged = async (event: Record<string, unknown>) => {
 	if (event.type === "speaker") {
-		await applySpeakerDevice();
+		await mediaControls.applySpeakerDevice();
 		return;
 	}
 
-	if (meetingState.isCameraOn.value || meetingState.isMicOn.value) {
+	if (mediaState.isCameraOn.value || mediaState.isMicOn.value) {
 		try {
-			// Stop old tracks else we won't release the camera/mic
-			const oldStream = meetingState.localStream.value;
+			const oldStream = mediaState.localStream.value;
 			if (oldStream) {
 				for (const track of oldStream.getTracks()) {
 					track.stop();
 				}
 			}
 
-			// Use selected devices unless this event overrides a specific one
 			const cameraDeviceId =
-				event.type === "camera" ? event.deviceId : selectedCameraId.value;
+				event.type === "camera"
+					? (event.deviceId as string)
+					: selectedCameraId.value;
 			const micDeviceId =
-				event.type === "microphone" ? event.deviceId : selectedMicId.value;
+				event.type === "microphone"
+					? (event.deviceId as string)
+					: selectedMicId.value;
 
-			const { stream: newStream } = await acquireUserMedia(
-				meetingState.isCameraOn.value,
-				meetingState.isMicOn.value,
+			const { stream: newStream } = await mediaControls.acquireUserMedia(
+				mediaState.isCameraOn.value,
+				mediaState.isMicOn.value,
 				{ cameraDeviceId, micDeviceId },
 			);
-			meetingState.localStream.value = newStream;
+			mediaState.localStream.value = newStream;
 
-			if (meetingState.localVideo) {
-				meetingState.localVideo.srcObject = newStream;
+			if (mediaState.localVideo.value) {
+				mediaState.localVideo.value.srcObject = newStream;
 			}
 
-			if (sfuManager.value?.mediaHandler) {
-				const mh = sfuManager.value.mediaHandler;
+			if (sfuConnection.sfuManager.value?.mediaHandler) {
+				const mh = sfuConnection.sfuManager.value.mediaHandler;
 
 				if (mh.audioProducer && newStream.getAudioTracks().length > 0) {
 					const audioTrack = newStream.getAudioTracks()[0];
@@ -696,24 +836,22 @@ const handleDeviceChanged = async (event) => {
 	}
 };
 
-// Lifecycle
+// --- Lifecycle ---
 onMounted(async () => {
-	window.addEventListener("keydown", handleKeyDown);
-	window.addEventListener("keyup", handleKeyUp);
+	// Reset all stores
+	connectionState.resetConnectionState();
+	mediaState.resetMediaState();
+	participantStore.resetParticipantStore();
+	chatStore.resetChatStore();
+	lobbyStore.resetLobbyStore();
+	reactionStore.resetReactionStore();
+	raiseHandStore.resetRaiseHandStore();
+	gridLayout.resetGridLayout();
+
+	window.addEventListener("keydown", keyboardShortcuts.handleKeyDown);
+	window.addEventListener("keyup", keyboardShortcuts.handleKeyUp);
 	document.addEventListener("fullscreenchange", syncFullscreenState);
 	syncFullscreenState();
-
-	// Clear any stale error/connection state from previous navigations
-	if (typeof meetingState.resetConnectionState === "function") {
-		meetingState.resetConnectionState();
-		// Reset meeting connection state on mount
-	} else {
-		// Fallback: minimally clear error
-		if (meetingState.connectionError?.value) {
-			meetingState.connectionError.value = null;
-			// Cleared connectionError on mount
-		}
-	}
 
 	// Check meeting access for unauthenticated users
 	if (!session.isLoggedIn) {
@@ -725,7 +863,7 @@ onMounted(async () => {
 				},
 			});
 
-			if (!accessData.allow_guest) {
+			if (!(accessData as Record<string, unknown>).allow_guest) {
 				router.push({
 					name: "Login",
 					query: { next: `/${meetingId.value}` },
@@ -738,33 +876,35 @@ onMounted(async () => {
 		}
 	}
 
-	setupChatEvents(chatNotificationQueue.value);
-	setupReactionEvents();
-	setupRaiseHandEvents();
+	// Setup event handlers
+	chat.setupChatEvents(chatNotificationQueue.value);
+	reactions.setupReactionEvents();
+	raiseHand.setupRaiseHandEvents();
 
-	// Check authentication and handle guest sessions
+	// Setup notification context watchers
+
 	if (!session.isLoggedIn) {
-		await initializeCamera();
+		await mediaControls.initializeCamera();
 		if (selectedSpeakerId.value) {
-			await applySpeakerDevice();
+			await mediaControls.applySpeakerDevice();
 		}
-		meetingState.isInPreview.value = true;
+		connectionState.isInPreview.value = true;
 		return;
 	}
 
-	// Setup current user (ensure we assign strings, not reactive objects)
-	meetingState.currentUser.value = {
+	// Setup current user
+	currentUser.setCurrentUser({
 		user_id: session.user?.sessionUser || "",
 		name: session.user?.full_name || session.user?.sessionUser || "",
 		full_name: session.user?.full_name || "",
 		avatar: session.user?.avatar || "",
-	};
+	});
 
 	// Initialize camera
-	await initializeCamera();
+	await mediaControls.initializeCamera();
 
 	if (selectedSpeakerId.value) {
-		await applySpeakerDevice();
+		await mediaControls.applySpeakerDevice();
 	}
 
 	// Auto-join if just created
@@ -775,43 +915,44 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-	window.removeEventListener("keydown", handleKeyDown);
-	window.removeEventListener("keyup", handleKeyUp);
+	window.removeEventListener("keydown", keyboardShortcuts.handleKeyDown);
+	window.removeEventListener("keyup", keyboardShortcuts.handleKeyUp);
 	document.removeEventListener("fullscreenchange", syncFullscreenState);
-
-	// Cleanup will be handled by the meeting logic composable
 });
 
 // Watch for localVideo element and localStream connection
-// Check the data attribute to avoid unnecessary updates when ref callback already handled it
 watch(
-	[() => meetingState.localVideo, () => meetingState.localStream],
+	[() => mediaState.localVideo.value, () => mediaState.localStream.value],
 	async ([videoElement, stream]) => {
 		if (videoElement && stream) {
 			try {
-				// only update srcObject if the source stream ID has changed
-				// to prevent flashing when re-rendering
 				const currentStreamId = stream.id;
-				const trackedStreamId = videoElement.dataset.sourceStreamId;
+				const trackedStreamId = (videoElement as HTMLElement).dataset
+					?.sourceStreamId;
 
 				if (trackedStreamId !== currentStreamId) {
 					const videoTracks = stream.getVideoTracks();
 					if (videoTracks.length > 0) {
-						videoElement.srcObject = new MediaStream(videoTracks);
+						(videoElement as HTMLVideoElement).srcObject = new MediaStream(
+							videoTracks,
+						);
 					} else {
-						videoElement.srcObject = stream;
+						(videoElement as HTMLVideoElement).srcObject = stream;
 					}
-					videoElement.dataset.sourceStreamId = currentStreamId;
-					videoElement.muted = true;
-					await videoElement.play();
+					(videoElement as HTMLElement).dataset.sourceStreamId =
+						currentStreamId;
+					(videoElement as HTMLVideoElement).muted = true;
+					await (videoElement as HTMLVideoElement).play();
 				}
 
 				if (
 					selectedSpeakerId.value &&
-					typeof videoElement.setSinkId === "function"
+					typeof (videoElement as HTMLVideoElement).setSinkId === "function"
 				) {
 					try {
-						await videoElement.setSinkId(selectedSpeakerId.value);
+						await (videoElement as HTMLVideoElement).setSinkId(
+							selectedSpeakerId.value,
+						);
 					} catch (error) {
 						console.warn("Could not set speaker for local video:", error);
 					}
@@ -833,10 +974,9 @@ watch(selectedSpeakerId, async (newSpeakerId) => {
 	}
 });
 
-// this is to avoid showing notifications for existing lobby users
-// when the host joins the meeting
+// Watch lobby users for notification tracking
 watch(
-	() => meetingState.lobbyUsers?.value,
+	() => lobbyStore.lobbyUsers?.value,
 	(newUsers, oldUsers) => {
 		if (isCurrentUserHost.value) {
 			const newUserIds = new Set((newUsers || []).map((u) => u.userId));

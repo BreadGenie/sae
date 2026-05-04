@@ -1,25 +1,29 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
-import { useMeetingState } from "./useMeetingState.js";
+import type { CurrentUser } from "./useCurrentUser";
+import type { MediaState } from "./useMediaState";
 
-/**
- * Composable to get audio stream for a participant
- * Returns the MediaStream containing the audio track
- */
-export function useAudioStream(participantId) {
-	const stream = ref(null);
-	const meetingState = useMeetingState();
+export function useAudioStream(
+	participantId: string,
+	deps: {
+		mediaState: MediaState;
+		currentUser: CurrentUser;
+	},
+) {
+	const stream = ref<MediaStream | null>(null);
+	const { mediaState, currentUser } = deps;
 
 	const getStream = () => {
 		try {
-			if (participantId === meetingState.currentUser.value?.user_id) {
-				// Local user
-				const audioTrack = meetingState.localStream.value?.getAudioTracks()[0];
+			if (
+				participantId ===
+				(currentUser.currentUser.value as Record<string, unknown>)?.user_id
+			) {
+				const audioTrack = mediaState.localStream.value?.getAudioTracks()[0];
 				if (audioTrack) {
 					stream.value = new MediaStream([audioTrack]);
 				}
 			} else {
-				// Remote user - try to get from consumer manager first
 				const sfuManager = getSFUMeetingManager();
 				if (sfuManager?.consumerManager) {
 					const audioConsumer =
@@ -30,7 +34,6 @@ export function useAudioStream(participantId) {
 					}
 				}
 
-				// Fallback to audio element
 				if (sfuManager?.videoManager) {
 					const audioElement =
 						sfuManager.videoManager.audioElements.get(participantId);
@@ -46,7 +49,6 @@ export function useAudioStream(participantId) {
 
 	onMounted(() => {
 		getStream();
-		// Re-check periodically in case stream becomes available later
 		const interval = setInterval(getStream, 1000);
 		onUnmounted(() => clearInterval(interval));
 	});

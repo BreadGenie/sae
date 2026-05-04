@@ -87,7 +87,7 @@
 <script setup lang="ts">
 import { Badge, Button, Dropdown } from "frappe-ui";
 import { computed, inject, ref } from "vue";
-import { useAudioStream } from "../composables/useAudioLevels.js";
+import { useAudioStream } from "../composables/useAudioLevels";
 import type { Participant } from "../types";
 import AudioIndicator from "./AudioIndicator.vue";
 import KickParticipantDialog from "./KickParticipantDialog.vue";
@@ -118,7 +118,11 @@ const emit = defineEmits<{
 	promoteToCohost: [participantId: string];
 }>();
 
-const { stream } = useAudioStream(props.participant.user_id);
+const meetingCtx = inject("meetingState");
+const { stream } = useAudioStream(props.participant.user_id, {
+	mediaState: meetingCtx,
+	currentUser: meetingCtx,
+});
 
 const showKickDialog = ref(false);
 
