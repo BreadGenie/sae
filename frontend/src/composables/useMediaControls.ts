@@ -1,5 +1,5 @@
-import { toast } from "frappe-ui";
-import { onUnmounted, ref, watch } from "vue";
+import { confirmDialog, toast } from "frappe-ui";
+import { onUnmounted, type Ref, ref, watch } from "vue";
 import {
 	cameraEnabled as prefCameraEnabled,
 	micEnabled as prefMicEnabled,
@@ -144,20 +144,15 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 	const confirmScreenShareOverride = () =>
 		new Promise<boolean>((resolve) => {
-			toast.create({
+			confirmDialog({
 				title: "Start Screen Share Anyway?",
 				message:
 					"Someone is already sharing their screen. Starting yours may result in multiple active screen shares.",
-				actions: [
-					{
-						label: "Start Sharing",
-						onClick: () => resolve(true),
-					},
-					{
-						label: "Cancel",
-						onClick: () => resolve(false),
-					},
-				],
+				onConfirm: ({ hideDialog }: { hideDialog: () => void }) => {
+					hideDialog();
+					resolve(true);
+				},
+				onCancel: () => resolve(false),
 			});
 		});
 
@@ -273,7 +268,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	const getFreshMicTrack = async () => {
 		try {
 			const { stream: freshStream } = await acquireUserMedia(false, true, {
-				micDeviceId: selectedMicId.value || null,
+				micDeviceId: selectedMicId.value,
 			});
 			const freshTrack = freshStream.getAudioTracks()[0];
 
@@ -1059,7 +1054,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 				(currentUser.currentUser.value as Record<string, unknown>)?.user_id ===
 					participantId
 			) {
-				stream = mediaState.screenShareStream.value || null;
+				stream = mediaState.screenShareStream.value;
 			}
 
 			if (stream instanceof MediaStream) {
