@@ -847,6 +847,12 @@ onMounted(async () => {
 	reactionStore.resetReactionStore();
 	raiseHandStore.resetRaiseHandStore();
 	gridLayout.resetGridLayout();
+	currentUser.setCurrentUser({
+		user_id: "",
+		name: "",
+		full_name: "",
+		avatar: "",
+	});
 
 	window.addEventListener("keydown", keyboardShortcuts.handleKeyDown);
 	window.addEventListener("keyup", keyboardShortcuts.handleKeyUp);
