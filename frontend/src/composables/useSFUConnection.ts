@@ -500,6 +500,90 @@ export function useSFUConnection(deps: {
 		socket.off("meet:guest_join_rejected");
 	};
 
+	const handleMeetingJoinRequest = (data: Record<string, unknown>) => {
+		if (data.meeting === meetingId) {
+			if (!data.user) {
+				return;
+			}
+
+			const userData = {
+				userId: data.user as string,
+				name: (data.user_name || data.user) as string,
+				avatar: data.user_image as string,
+				requested_at: new Date().toISOString(),
+			};
+
+			lobbyStore.addLobbyUser(userData);
+
+			audioNotificationManager.playJoinRequestNotification();
+		}
+	};
+
+	const handleMeetingJoinApproved = async (data: Record<string, unknown>) => {
+		const currentUserId = (
+			currentUser.currentUser.value as Record<string, unknown>
+		)?.user_id;
+
+		if (data.meeting === meetingId && data.user === currentUserId) {
+			lobbyStore.isWaitingForApproval.value = false;
+
+			try {
+				const sfuResult = await frappeRequest({
+					url: "meet.api.meeting.get_sfu_connection_details",
+					params: {
+						meeting_id: meetingId,
+					},
+				});
+
+				if (sfuResult) {
+					await setupSFUConnection(
+						null,
+						(sfuResult as Record<string, unknown>).is_host as boolean,
+						(sfuResult as Record<string, unknown>).is_cohost as boolean,
+					);
+					connectionState.isInPreview.value = false;
+				} else {
+					console.error("Failed to get SFU connection:", sfuResult);
+					lobbyStore.isJoinRequestRejected.value = true;
+					toast.error("Failed to join meeting after approval");
+				}
+			} catch (error) {
+				console.error("Error after approval:", error);
+				connectionState.connectionError.value = (
+					error as Record<string, unknown>
+				)?.messages
+					? ((error as Record<string, unknown>).messages as string[]).join(", ")
+					: (error as Error).message || "Failed to join meeting after approval";
+				toast.error("Failed to join meeting after approval");
+			}
+		}
+	};
+
+	const handleMeetingJoinRejected = (data: Record<string, unknown>) => {
+		const currentUserId = (
+			currentUser.currentUser.value as Record<string, unknown>
+		)?.user_id;
+
+		if (data.meeting === meetingId && data.user === currentUserId) {
+			lobbyStore.isJoinRequestRejected.value = true;
+			lobbyStore.isWaitingForApproval.value = false;
+
+			toast.error("Your join request was denied by the meeting host");
+		}
+	};
+
+	const handleMeetingUserApproved = (data: Record<string, unknown>) => {
+		if (data.meeting === meetingId) {
+			lobbyStore.removeLobbyUser(data.user as string);
+		}
+	};
+
+	const handleMeetingUserRejected = (data: Record<string, unknown>) => {
+		if (data.meeting === meetingId) {
+			lobbyStore.removeLobbyUser(data.user as string);
+		}
+	};
+
 	const setupFrappeRealtimeEventListeners = () => {
 		if (realtimeListenersSetup.value) {
 			return;
@@ -510,97 +594,23 @@ export function useSFUConnection(deps: {
 			return;
 		}
 
-		socket.on("meeting_join_request", (data: Record<string, unknown>) => {
-			if (data.meeting === meetingId) {
-				if (!data.user) {
-					return;
-				}
-
-				const userData = {
-					userId: data.user as string,
-					name: (data.user_name || data.user) as string,
-					avatar: data.user_image as string,
-					requested_at: new Date().toISOString(),
-				};
-
-				lobbyStore.addLobbyUser(userData);
-
-				audioNotificationManager.playJoinRequestNotification();
-			}
-		});
-
-		socket.on(
-			"meeting_join_approved",
-			async (data: Record<string, unknown>) => {
-				const currentUserId = (
-					currentUser.currentUser.value as Record<string, unknown>
-				)?.user_id;
-
-				if (data.meeting === meetingId && data.user === currentUserId) {
-					lobbyStore.isWaitingForApproval.value = false;
-
-					try {
-						const sfuResult = await frappeRequest({
-							url: "meet.api.meeting.get_sfu_connection_details",
-							params: {
-								meeting_id: meetingId,
-							},
-						});
-
-						if (sfuResult) {
-							await setupSFUConnection(
-								null,
-								(sfuResult as Record<string, unknown>).is_host as boolean,
-								(sfuResult as Record<string, unknown>).is_cohost as boolean,
-							);
-							connectionState.isInPreview.value = false;
-						} else {
-							console.error("Failed to get SFU connection:", sfuResult);
-							lobbyStore.isJoinRequestRejected.value = true;
-							toast.error("Failed to join meeting after approval");
-						}
-					} catch (error) {
-						console.error("Error after approval:", error);
-						connectionState.connectionError.value = (
-							error as Record<string, unknown>
-						)?.messages
-							? ((error as Record<string, unknown>).messages as string[]).join(
-									", ",
-								)
-							: (error as Error).message ||
-								"Failed to join meeting after approval";
-						toast.error("Failed to join meeting after approval");
-					}
-				}
-			},
-		);
-
-		socket.on("meeting_join_rejected", (data: Record<string, unknown>) => {
-			const currentUserId = (
-				currentUser.currentUser.value as Record<string, unknown>
-			)?.user_id;
-
-			if (data.meeting === meetingId && data.user === currentUserId) {
-				lobbyStore.isJoinRequestRejected.value = true;
-				lobbyStore.isWaitingForApproval.value = false;
-
-				toast.error("Your join request was denied by the meeting host");
-			}
-		});
-
-		socket.on("meeting_user_approved", (data: Record<string, unknown>) => {
-			if (data.meeting === meetingId) {
-				lobbyStore.removeLobbyUser(data.user as string);
-			}
-		});
-
-		socket.on("meeting_user_rejected", (data: Record<string, unknown>) => {
-			if (data.meeting === meetingId) {
-				lobbyStore.removeLobbyUser(data.user as string);
-			}
-		});
+		socket.on("meeting_join_request", handleMeetingJoinRequest);
+		socket.on("meeting_join_approved", handleMeetingJoinApproved);
+		socket.on("meeting_join_rejected", handleMeetingJoinRejected);
+		socket.on("meeting_user_approved", handleMeetingUserApproved);
+		socket.on("meeting_user_rejected", handleMeetingUserRejected);
 
 		realtimeListenersSetup.value = true;
+	};
+
+	const removeFrappeRealtimeEventListeners = () => {
+		if (!socket) return;
+
+		socket.off("meeting_join_request", handleMeetingJoinRequest);
+		socket.off("meeting_join_approved", handleMeetingJoinApproved);
+		socket.off("meeting_join_rejected", handleMeetingJoinRejected);
+		socket.off("meeting_user_approved", handleMeetingUserApproved);
+		socket.off("meeting_user_rejected", handleMeetingUserRejected);
 	};
 
 	const handleGuestJoinResult = async (
@@ -740,6 +750,17 @@ export function useSFUConnection(deps: {
 			clearTimeout(stabilityCheckTimeout);
 			stabilityCheckTimeout = null;
 		}
+
+		stopGuestApprovalListener();
+		removeFrappeRealtimeEventListeners();
+
+		if (sfuManager.value) {
+			sfuManager.value.cleanup();
+		}
+		resetSFUMeetingManager();
+		sfuManager.value = null;
+
+		realtimeListenersSetup.value = false;
 	});
 
 	return {

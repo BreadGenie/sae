@@ -193,10 +193,7 @@ import { useLobby } from "../composables/useLobby";
 import { useLobbyStore } from "../composables/useLobbyStore";
 import { useMediaControls } from "../composables/useMediaControls";
 import { useMediaState } from "../composables/useMediaState";
-import {
-	MEETING_CONTEXT_KEY,
-	provideMeetingContext,
-} from "../composables/useMeetingContext";
+import { provideMeetingContext } from "../composables/useMeetingContext";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useNoiseCancellation } from "../composables/useNoiseCancellation";
 import { useParticipantStore } from "../composables/useParticipantStore";
@@ -279,7 +276,11 @@ const sfuConnection = useSFUConnection({
 	gridLayout,
 	meetingId: meetingId.value,
 	notifiedLobbyUsers,
-	onHostMutedYou: () => mediaControls.toggleMicrophone(),
+	onHostMutedYou: () => {
+		if (mediaState.isMicOn.value) {
+			mediaControls.toggleMicrophone();
+		}
+	},
 	onHostKickedYou: () => sfuConnection.endCall(),
 	onScreenShareStarted: (data: Record<string, unknown>) => {
 		const pid = (data as Record<string, unknown>).participantId as string;

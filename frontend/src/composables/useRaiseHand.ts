@@ -1,3 +1,4 @@
+import audioNotificationManager from "../utils/audioNotifications";
 import { getSFUClient } from "../utils/sfu-client.js";
 import type { CurrentUser } from "./useCurrentUser";
 import type { RaiseHandStore } from "./useRaiseHandStore";
@@ -25,6 +26,7 @@ export function useRaiseHand(deps: {
 					participantId,
 					(data.timestamp as string) || new Date().toISOString(),
 				);
+				audioNotificationManager.playRaiseHandNotification();
 			} else {
 				raiseHandStore.lowerHand(participantId);
 			}
