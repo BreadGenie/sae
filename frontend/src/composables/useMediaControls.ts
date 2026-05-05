@@ -60,15 +60,10 @@ interface NoiseCancellationAPI {
 		stream: MediaStream,
 	) => Promise<{ stream: MediaStream; cleanup: () => void }>;
 	isProcessing: Ref<boolean>;
-	error: Ref<Error | null>;
+	error: Ref<string | null>;
 }
 
-interface ToastAPI {
-	success: (message: string) => void;
-	error: (message: string) => void;
-	warning: (message: string) => void;
-	create: (options: Record<string, unknown>) => void;
-}
+type ToastAPI = Pick<typeof toast, "success" | "error" | "warning" | "create">;
 
 interface MediaPreferencesAPI {
 	micEnabled: Ref<boolean>;
@@ -727,11 +722,11 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 								stream.addTrack(newTrack);
 								mediaState.cameraPermissionGranted.value = true;
 								if (mediaState.localVideo.value) {
+									const localVideoEl = mediaState.localVideo
+										.value as HTMLVideoElement;
 									const videoTracks = stream.getVideoTracks();
 									if (videoTracks.length > 0) {
-										mediaState.localVideo.value.srcObject = new MediaStream(
-											videoTracks,
-										);
+										localVideoEl.srcObject = new MediaStream(videoTracks);
 									}
 								}
 							}
@@ -761,11 +756,11 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 									stream.addTrack(newTrack);
 									mediaState.cameraPermissionGranted.value = true;
 									if (mediaState.localVideo.value) {
+										const localVideoEl = mediaState.localVideo
+											.value as HTMLVideoElement;
 										const videoTracks = stream.getVideoTracks();
 										if (videoTracks.length > 0) {
-											mediaState.localVideo.value.srcObject = new MediaStream(
-												videoTracks,
-											);
+											localVideoEl.srcObject = new MediaStream(videoTracks);
 										}
 									}
 								}
@@ -909,16 +904,12 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 					}
 				}
 
-				let screenStream: MediaStream | null = null;
-				const getDisplay =
-					navigator.mediaDevices?.getDisplayMedia ||
-					(navigator as unknown as Record<string, unknown>).getDisplayMedia;
-				if (!getDisplay)
-					throw new Error("getDisplayMedia not supported in this browser");
-
-				screenStream = (await (
-					navigator.mediaDevices as Record<string, unknown>
-				).getDisplayMedia.call(navigator.mediaDevices || navigator, {
+				type ScreenShareOptions = DisplayMediaStreamOptions & {
+					displaySurface?: "monitor" | "window" | "browser";
+					selfBrowserSurface?: "include" | "exclude";
+					surfaceSwitching?: "include" | "exclude";
+				};
+				const screenShareOptions: ScreenShareOptions = {
 					video: {
 						width: { ideal: 1920, max: 1920 },
 						height: { ideal: 1080, max: 1080 },
@@ -927,7 +918,10 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 					displaySurface: "window",
 					selfBrowserSurface: "exclude",
 					surfaceSwitching: "include",
-				})) as MediaStream;
+				};
+
+				const screenStream =
+					await navigator.mediaDevices.getDisplayMedia(screenShareOptions);
 				if (!screenStream)
 					throw new Error("Failed to obtain screen share stream");
 
@@ -1011,22 +1005,23 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	function setLocalVideoRef(el: HTMLElement | null) {
 		localVideo.value = el;
 		if (el && mediaState.localStream.value) {
+			const videoEl = el as HTMLVideoElement;
 			const streamToUse =
 				mediaState.processedStream.value || mediaState.localStream.value;
 
 			const currentStreamId = streamToUse.id;
 			const trackedStreamId = el.dataset.sourceStreamId;
 
-			if (!el.srcObject || trackedStreamId !== currentStreamId) {
+			if (!videoEl.srcObject || trackedStreamId !== currentStreamId) {
 				const videoTracks = streamToUse.getVideoTracks();
 				if (videoTracks.length > 0) {
-					el.srcObject = new MediaStream(videoTracks);
+					videoEl.srcObject = new MediaStream(videoTracks);
 					el.dataset.sourceStreamId = currentStreamId;
 				} else {
-					el.srcObject = streamToUse;
+					videoEl.srcObject = streamToUse;
 					el.dataset.sourceStreamId = currentStreamId;
 				}
-				el.muted = true;
+				videoEl.muted = true;
 			}
 		}
 		mediaState.localVideo.value = el;
@@ -1048,7 +1043,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 			screenShareVideoElements.set(participantId, el);
 
 			const store = mediaState.screenShareStreams.value || {};
-			let stream = store[participantId] || null;
+			let stream: MediaStream | null = store[participantId] ?? null;
 			if (
 				!stream &&
 				(currentUser.currentUser.value as Record<string, unknown>)?.user_id ===
@@ -1059,7 +1054,9 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 			if (stream instanceof MediaStream) {
 				const currentStreamId = stream.id;
-				const existingStreamId = (el as HTMLVideoElement).srcObject?.id;
+				const srcObject = (el as HTMLVideoElement).srcObject;
+				const existingStreamId =
+					srcObject instanceof MediaStream ? srcObject.id : undefined;
 
 				if (
 					!(el as HTMLVideoElement).srcObject ||

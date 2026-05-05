@@ -1,11 +1,11 @@
-import { computed, type Ref, ref } from "vue";
+import { type ComputedRef, computed, type Ref, ref } from "vue";
 
 export interface RaiseHandStore {
 	raisedHands: Ref<Record<string, string>>;
 	setHands: (hands: Record<string, string>) => void;
 	raiseHand: (userId: string, timestamp: string) => void;
 	lowerHand: (userId: string) => void;
-	isHandRaised: (userId: string) => boolean;
+	isHandRaised: ComputedRef<(userId: string) => boolean>;
 	resetRaiseHandStore: () => void;
 }
 

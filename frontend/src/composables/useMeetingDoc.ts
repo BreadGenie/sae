@@ -9,6 +9,7 @@ interface MeetingDocument {
 	title?: string;
 	name?: string;
 	co_hosts?: { user: string }[];
+	banned_users?: { user: string }[];
 }
 
 interface DocumentResource {

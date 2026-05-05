@@ -120,7 +120,7 @@
 								v-if="activePanel === 'people'"
 								:open="true"
 								:currentUser="currentUser.currentUser.value"
-								:participants="participantStore.participants.value"
+								:participants="participantsForPeoplePanel"
 								:isMicOn="mediaState.isMicOn.value"
 								:isCameraOn="mediaState.isCameraOn.value"
 								:creatorUserId="meetingOwner"
@@ -210,6 +210,7 @@ import {
 } from "../data/mediaPreferences";
 import { session } from "../data/session";
 import { useSocket } from "../socket.js";
+import type { Participant } from "../types";
 import { openProblemReportEmail } from "../utils/diagnostics/problemReport";
 import { deviceManager } from "../utils/media/DeviceManager";
 import { getSFUClient } from "../utils/sfu-client";
@@ -490,6 +491,10 @@ const activePanel = computed(() => {
 	if (isPeopleOpen.value) return "people";
 	return null;
 });
+
+const participantsForPeoplePanel = computed<Record<string, Participant>>(
+	() => participantStore.participants.value as Record<string, Participant>,
+);
 
 const { windowWidth } = useResponsiveGrid();
 const isMobile = computed(() => windowWidth.value < 768);
@@ -815,7 +820,7 @@ const handleDeviceChanged = async (event: Record<string, unknown>) => {
 			mediaState.localStream.value = newStream;
 
 			if (mediaState.localVideo.value) {
-				mediaState.localVideo.value.srcObject = newStream;
+				(mediaState.localVideo.value as HTMLVideoElement).srcObject = newStream;
 			}
 
 			if (sfuConnection.sfuManager.value?.mediaHandler) {
