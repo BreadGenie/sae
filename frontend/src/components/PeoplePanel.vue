@@ -152,7 +152,7 @@ const lobbyUsers = computed(() => {
 	if (props.lobbyUsers !== undefined) {
 		return props.lobbyUsers;
 	}
-	return meetingCtx?.lobbyStore.lobbyUsers.value || [];
+	return meetingCtx?.lobbyStore.lobbyUsers || [];
 });
 
 const filteredLobbyUsers = computed(() => {

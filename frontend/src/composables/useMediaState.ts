@@ -1,4 +1,5 @@
-import { type Ref, ref } from "vue";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
 export interface ScreenShareConsumer {
 	participantId: string;
@@ -8,25 +9,23 @@ export interface ScreenShareConsumer {
 }
 
 export interface MediaState {
-	isMicOn: Ref<boolean>;
-	isCameraOn: Ref<boolean>;
-	isScreenSharing: Ref<boolean>;
-	localStream: Ref<MediaStream | null>;
-	processedStream: Ref<MediaStream | null>;
-	cameraPermissionGranted: Ref<boolean>;
-	microphonePermissionGranted: Ref<boolean>;
-	screenShareStream: Ref<MediaStream | null>;
-	localScreenShareStartedAt: Ref<number>;
-	activeScreenShareConsumers: Ref<ScreenShareConsumer[]>;
-	screenShareStreams: Ref<Record<string, MediaStream>>;
-	localVideo: Ref<HTMLElement | null>;
-	setMediaState: (mic: boolean, camera: boolean) => void;
-	resetMediaState: () => void;
+	isMicOn: boolean;
+	isCameraOn: boolean;
+	isScreenSharing: boolean;
+	localStream: MediaStream | null;
+	processedStream: MediaStream | null;
+	cameraPermissionGranted: boolean;
+	microphonePermissionGranted: boolean;
+	screenShareStream: MediaStream | null;
+	localScreenShareStartedAt: number;
+	activeScreenShareConsumers: ScreenShareConsumer[];
+	screenShareStreams: Record<string, MediaStream>;
+	localVideo: HTMLElement | null;
+	setMedia: (mic: boolean, camera: boolean) => void;
+	$reset: () => void;
 }
 
-const instance = createMediaState();
-
-function createMediaState(): MediaState {
+export const useMediaState = defineStore("media", () => {
 	const isMicOn = ref(false);
 	const isCameraOn = ref(false);
 	const isScreenSharing = ref(false);
@@ -40,12 +39,12 @@ function createMediaState(): MediaState {
 	const screenShareStreams = ref<Record<string, MediaStream>>({});
 	const localVideo = ref<HTMLElement | null>(null);
 
-	const setMediaState = (mic: boolean, camera: boolean) => {
+	function setMedia(mic: boolean, camera: boolean) {
 		isMicOn.value = mic;
 		isCameraOn.value = camera;
-	};
+	}
 
-	const resetMediaState = () => {
+	function $reset() {
 		isMicOn.value = false;
 		isCameraOn.value = false;
 		isScreenSharing.value = false;
@@ -58,7 +57,7 @@ function createMediaState(): MediaState {
 		activeScreenShareConsumers.value = [];
 		screenShareStreams.value = {};
 		localVideo.value = null;
-	};
+	}
 
 	return {
 		isMicOn,
@@ -73,11 +72,7 @@ function createMediaState(): MediaState {
 		activeScreenShareConsumers,
 		screenShareStreams,
 		localVideo,
-		setMediaState,
-		resetMediaState,
+		setMedia,
+		$reset,
 	};
-}
-
-export function useMediaState(): MediaState {
-	return instance;
-}
+});

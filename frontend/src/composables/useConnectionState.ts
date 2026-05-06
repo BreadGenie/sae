@@ -1,26 +1,23 @@
-import { type Ref, ref } from "vue";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
 export interface ConnectionState {
-	isConnecting: Ref<boolean>;
-	connectionError: Ref<string | null>;
-	isInPreview: Ref<boolean>;
-	isSetupComplete: Ref<boolean>;
-	codecStrategy: Ref<string>;
-	networkQuality: Ref<string>;
-	connectionIssues: Ref<string[]>;
-	guestId: Ref<string | null>;
-	guestAuthToken: Ref<string | null>;
-	guestSfuUrl: Ref<string | null>;
-	guestSfuPort: Ref<string | null>;
-	guestSessionToken: Ref<string | null>;
-	resetConnectionState: () => void;
+	isConnecting: boolean;
+	connectionError: string | null;
+	isInPreview: boolean;
+	isSetupComplete: boolean;
+	codecStrategy: string;
+	networkQuality: string;
+	connectionIssues: string[];
+	guestId: string | null;
+	guestAuthToken: string | null;
+	guestSfuUrl: string | null;
+	guestSfuPort: string | null;
+	guestSessionToken: string | null;
+	$reset: () => void;
 }
 
-let instance: ConnectionState | null = null;
-
-export function useConnectionState(): ConnectionState {
-	if (instance) return instance;
-
+export const useConnectionState = defineStore("connection", () => {
 	const isConnecting = ref(false);
 	const connectionError = ref<string | null>(null);
 	const isInPreview = ref(true);
@@ -28,14 +25,13 @@ export function useConnectionState(): ConnectionState {
 	const codecStrategy = ref("svc");
 	const networkQuality = ref("good");
 	const connectionIssues = ref<string[]>([]);
-
 	const guestId = ref<string | null>(null);
 	const guestAuthToken = ref<string | null>(null);
 	const guestSfuUrl = ref<string | null>(null);
 	const guestSfuPort = ref<string | null>(null);
 	const guestSessionToken = ref<string | null>(null);
 
-	const resetConnectionState = () => {
+	function $reset() {
 		connectionError.value = null;
 		isConnecting.value = false;
 		isInPreview.value = true;
@@ -48,9 +44,9 @@ export function useConnectionState(): ConnectionState {
 		guestSfuUrl.value = null;
 		guestSfuPort.value = null;
 		guestSessionToken.value = null;
-	};
+	}
 
-	instance = {
+	return {
 		isConnecting,
 		connectionError,
 		isInPreview,
@@ -63,8 +59,6 @@ export function useConnectionState(): ConnectionState {
 		guestSfuUrl,
 		guestSfuPort,
 		guestSessionToken,
-		resetConnectionState,
+		$reset,
 	};
-
-	return instance;
-}
+});

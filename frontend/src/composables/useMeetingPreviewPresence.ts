@@ -29,7 +29,7 @@ export function useMeetingPreviewPresence(meetingId: string) {
 			}
 		},
 		onError(err: FrappeRequestError) {
-			error.value = err.messages.length
+			error.value = err.messages?.length
 				? err.messages.join(", ")
 				: "Failed to fetch presence token";
 		},

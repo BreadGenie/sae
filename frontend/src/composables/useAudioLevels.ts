@@ -18,7 +18,7 @@ export function useAudioStream(
 	const getStream = () => {
 		try {
 			if (participantId === currentUser.currentUser.value?.user_id) {
-				const audioTrack = mediaState.localStream.value?.getAudioTracks()[0];
+				const audioTrack = mediaState.localStream?.getAudioTracks()[0];
 				if (audioTrack) {
 					stream.value = new MediaStream([audioTrack]);
 				}

@@ -33,10 +33,10 @@ export function useChat(deps: {
 			chatStore.addMessage(message);
 
 			if (
-				!chatStore.isChatOpen.value &&
+				!chatStore.isChatOpen &&
 				data.fromUser !== currentUser.currentUser.value?.user_id
 			) {
-				chatStore.hasUnreadMessages.value = true;
+				chatStore.hasUnreadMessages = true;
 
 				(
 					notificationQueue as { addNotification?: (n: unknown) => void }

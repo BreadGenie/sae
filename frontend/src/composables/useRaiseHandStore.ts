@@ -1,51 +1,46 @@
-import { type ComputedRef, computed, type Ref, ref } from "vue";
+import { defineStore } from "pinia";
+import { computed, ref } from "vue";
 
 export interface RaiseHandStore {
-	raisedHands: Ref<Record<string, string>>;
+	raisedHands: Record<string, string>;
 	setHands: (hands: Record<string, string>) => void;
 	raiseHand: (userId: string, timestamp: string) => void;
 	lowerHand: (userId: string) => void;
-	isHandRaised: ComputedRef<(userId: string) => boolean>;
-	resetRaiseHandStore: () => void;
+	isHandRaised: (userId: string) => boolean;
+	$reset: () => void;
 }
 
-let instance: RaiseHandStore | null = null;
-
-export function useRaiseHandStore(): RaiseHandStore {
-	if (instance) return instance;
-
+export const useRaiseHandStore = defineStore("raiseHand", () => {
 	const raisedHands = ref<Record<string, string>>({});
 
-	const setHands = (hands: Record<string, string>) => {
+	function setHands(hands: Record<string, string>) {
 		raisedHands.value = hands;
-	};
+	}
 
-	const raiseHand = (userId: string, timestamp: string) => {
+	function raiseHand(userId: string, timestamp: string) {
 		raisedHands.value = { ...raisedHands.value, [userId]: timestamp };
-	};
+	}
 
-	const lowerHand = (userId: string) => {
+	function lowerHand(userId: string) {
 		const updated = { ...raisedHands.value };
 		delete updated[userId];
 		raisedHands.value = updated;
-	};
+	}
 
 	const isHandRaised = computed(() => {
 		return (userId: string) => !!raisedHands.value?.[userId];
 	});
 
-	const resetRaiseHandStore = () => {
+	function $reset() {
 		raisedHands.value = {};
-	};
+	}
 
-	instance = {
+	return {
 		raisedHands,
 		setHands,
 		raiseHand,
 		lowerHand,
 		isHandRaised,
-		resetRaiseHandStore,
+		$reset,
 	};
-
-	return instance;
-}
+});

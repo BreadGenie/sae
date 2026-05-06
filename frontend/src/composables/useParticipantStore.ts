@@ -1,11 +1,12 @@
-import { type Ref, ref } from "vue";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
 export interface ParticipantStore {
-	participants: Ref<Record<string, unknown>>;
-	remoteVideos: Ref<Record<string, HTMLVideoElement>>;
-	activeSpeakerIds: Ref<string[]>;
-	stableSpeakerIds: Ref<string[]>;
-	speakerStartTimes: Ref<Record<string, number>>;
+	participants: Record<string, unknown>;
+	remoteVideos: Record<string, HTMLVideoElement>;
+	activeSpeakerIds: string[];
+	stableSpeakerIds: string[];
+	speakerStartTimes: Record<string, number>;
 	addParticipant: (participant: Record<string, unknown>) => void;
 	removeParticipant: (participantId: string) => void;
 	updateParticipant: (
@@ -13,29 +14,24 @@ export interface ParticipantStore {
 		updates: Record<string, unknown>,
 	) => void;
 	getParticipantName: (participantId: string) => string;
-	resetParticipantStore: () => void;
+	$reset: () => void;
 }
 
-let instance: ParticipantStore | null = null;
-
-export function useParticipantStore(): ParticipantStore {
-	if (instance) return instance;
-
+export const useParticipantStore = defineStore("participant", () => {
 	const participants = ref<Record<string, unknown>>({});
 	const remoteVideos = ref<Record<string, HTMLVideoElement>>({});
 	const activeSpeakerIds = ref<string[]>([]);
 	const stableSpeakerIds = ref<string[]>([]);
 	const speakerStartTimes = ref<Record<string, number>>({});
 
-	const addParticipant = (participant: Record<string, unknown>) => {
+	function addParticipant(participant: Record<string, unknown>) {
 		const userId = participant.user_id as string;
 		if (!userId) return;
 		participants.value[userId] = participant;
-	};
+	}
 
-	const removeParticipant = (participantId: string) => {
+	function removeParticipant(participantId: string) {
 		delete participants.value[participantId];
-
 		const videoEl = remoteVideos.value[participantId];
 		const srcObj = (videoEl as HTMLVideoElement)?.srcObject;
 		if (srcObj instanceof MediaStream) {
@@ -45,36 +41,36 @@ export function useParticipantStore(): ParticipantStore {
 			(videoEl as HTMLVideoElement).srcObject = null;
 		}
 		delete remoteVideos.value[participantId];
-	};
+	}
 
-	const updateParticipant = (
+	function updateParticipant(
 		participantId: string,
 		updates: Record<string, unknown>,
-	) => {
+	) {
 		const participant = participants.value[participantId] as
 			| Record<string, unknown>
 			| undefined;
 		if (participant) {
 			participants.value[participantId] = { ...participant, ...updates };
 		}
-	};
+	}
 
-	const getParticipantName = (participantId: string): string => {
+	function getParticipantName(participantId: string): string {
 		const participant = participants.value[participantId] as
 			| Record<string, unknown>
 			| undefined;
 		return (participant?.user_name as string) || participantId;
-	};
+	}
 
-	const resetParticipantStore = () => {
+	function $reset() {
 		participants.value = {};
 		remoteVideos.value = {};
 		activeSpeakerIds.value = [];
 		stableSpeakerIds.value = [];
 		speakerStartTimes.value = {};
-	};
+	}
 
-	instance = {
+	return {
 		participants,
 		remoteVideos,
 		activeSpeakerIds,
@@ -84,8 +80,6 @@ export function useParticipantStore(): ParticipantStore {
 		removeParticipant,
 		updateParticipant,
 		getParticipantName,
-		resetParticipantStore,
+		$reset,
 	};
-
-	return instance;
-}
+});

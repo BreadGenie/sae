@@ -41,8 +41,7 @@ export function useRaiseHand(deps: {
 			const currentUserId = currentUser.currentUser.value?.user_id as string;
 			if (!currentUserId) return;
 
-			const isCurrentlyRaised =
-				!!raiseHandStore.raisedHands.value?.[currentUserId];
+			const isCurrentlyRaised = !!raiseHandStore.raisedHands?.[currentUserId];
 			const newRaisedState = !isCurrentlyRaised;
 
 			if (newRaisedState) {

@@ -1,4 +1,5 @@
-import { type Ref, ref } from "vue";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
 export interface LobbyUser {
 	userId: string;
@@ -9,24 +10,20 @@ export interface LobbyUser {
 }
 
 export interface LobbyStore {
-	isWaitingForApproval: Ref<boolean>;
-	isJoinRequestRejected: Ref<boolean>;
-	lobbyUsers: Ref<LobbyUser[]>;
-	lobbyParticipantCount: Ref<number>;
-	isInLobby: Ref<boolean>;
-	waitingUsers: Ref<unknown[]>;
-	loadingUsers: Ref<unknown[]>;
+	isWaitingForApproval: boolean;
+	isJoinRequestRejected: boolean;
+	lobbyUsers: LobbyUser[];
+	lobbyParticipantCount: number;
+	isInLobby: boolean;
+	waitingUsers: unknown[];
+	loadingUsers: unknown[];
 	setLobbyUsers: (users: LobbyUser[]) => void;
 	addLobbyUser: (user: LobbyUser) => void;
 	removeLobbyUser: (userId: string) => void;
-	resetLobbyStore: () => void;
+	$reset: () => void;
 }
 
-let instance: LobbyStore | null = null;
-
-export function useLobbyStore(): LobbyStore {
-	if (instance) return instance;
-
+export const useLobbyStore = defineStore("lobby", () => {
 	const isWaitingForApproval = ref(false);
 	const isJoinRequestRejected = ref(false);
 	const lobbyUsers = ref<LobbyUser[]>([]);
@@ -35,25 +32,25 @@ export function useLobbyStore(): LobbyStore {
 	const waitingUsers = ref<unknown[]>([]);
 	const loadingUsers = ref<unknown[]>([]);
 
-	const setLobbyUsers = (users: LobbyUser[]) => {
+	function setLobbyUsers(users: LobbyUser[]) {
 		lobbyUsers.value = users;
-	};
+	}
 
-	const addLobbyUser = (user: LobbyUser) => {
+	function addLobbyUser(user: LobbyUser) {
 		const current = lobbyUsers.value || [];
 		const exists = current.some((u) => u.userId === user.userId);
 		if (!exists) {
 			lobbyUsers.value = [...current, user];
 		}
-	};
+	}
 
-	const removeLobbyUser = (userId: string) => {
+	function removeLobbyUser(userId: string) {
 		lobbyUsers.value = (lobbyUsers.value || []).filter(
 			(u) => u.userId !== userId,
 		);
-	};
+	}
 
-	const resetLobbyStore = () => {
+	function $reset() {
 		isWaitingForApproval.value = false;
 		isJoinRequestRejected.value = false;
 		lobbyUsers.value = [];
@@ -61,9 +58,9 @@ export function useLobbyStore(): LobbyStore {
 		isInLobby.value = false;
 		waitingUsers.value = [];
 		loadingUsers.value = [];
-	};
+	}
 
-	instance = {
+	return {
 		isWaitingForApproval,
 		isJoinRequestRejected,
 		lobbyUsers,
@@ -74,8 +71,6 @@ export function useLobbyStore(): LobbyStore {
 		setLobbyUsers,
 		addLobbyUser,
 		removeLobbyUser,
-		resetLobbyStore,
+		$reset,
 	};
-
-	return instance;
-}
+});

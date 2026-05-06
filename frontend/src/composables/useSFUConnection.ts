@@ -146,7 +146,7 @@ export function useSFUConnection(deps: {
 	}: {
 		participantId: string;
 	}) => {
-		const participant = participantStore.participants.value[participantId] as
+		const participant = participantStore.participants[participantId] as
 			| Record<string, unknown>
 			| undefined;
 		const participantName = participant?.user_name || participantId;
@@ -209,12 +209,12 @@ export function useSFUConnection(deps: {
 
 				const checkStability = () => {
 					const now = Date.now();
-					const currentSet = new Set(participantStore.activeSpeakerIds.value);
+					const currentSet = new Set(participantStore.activeSpeakerIds);
 					const startTimes = {
-						...participantStore.speakerStartTimes.value,
+						...participantStore.speakerStartTimes,
 					} as Record<string, number>;
 					const currentStable = new Set(
-						participantStore.stableSpeakerIds.value || [],
+						participantStore.stableSpeakerIds || [],
 					);
 
 					let hasPendingCandidates = false;
@@ -249,8 +249,8 @@ export function useSFUConnection(deps: {
 						}
 					}
 
-					participantStore.speakerStartTimes.value = startTimes;
-					participantStore.stableSpeakerIds.value = Array.from(currentStable);
+					participantStore.speakerStartTimes = startTimes;
+					participantStore.stableSpeakerIds = Array.from(currentStable);
 
 					if (hasPendingCandidates) {
 						if (stabilityCheckTimeout) clearTimeout(stabilityCheckTimeout);
@@ -264,7 +264,7 @@ export function useSFUConnection(deps: {
 
 				if (participantIds.length > 0) {
 					activeSpeakerTimeout.value = setTimeout(() => {
-						participantStore.activeSpeakerIds.value = [];
+						participantStore.activeSpeakerIds = [];
 						activeSpeakerTimeout.value = null;
 					}, 1000);
 				}
@@ -282,9 +282,9 @@ export function useSFUConnection(deps: {
 		isHost = false,
 		isCohost = false,
 	) => {
-		if (connectionState.isSetupComplete.value) {
-			connectionState.isInPreview.value = false;
-			connectionState.isConnecting.value = false;
+		if (connectionState.isSetupComplete) {
+			connectionState.isInPreview = false;
+			connectionState.isConnecting = false;
 			return;
 		}
 
@@ -301,15 +301,14 @@ export function useSFUConnection(deps: {
 				setupFrappeRealtimeEventListeners();
 			}
 
-			await manager.connect(connectionState.guestAuthToken.value);
-			connectionState.codecStrategy.value =
-				sfuClient.getCodecStrategy() || "svc";
+			await manager.connect(connectionState.guestAuthToken);
+			connectionState.codecStrategy = sfuClient.getCodecStrategy() || "svc";
 
 			let userData: Record<string, unknown>;
 			if (guestName) {
 				userData = {
 					name: guestName,
-					userId: connectionState.guestId.value || "",
+					userId: connectionState.guestId || "",
 					avatar: null,
 					is_guest: true,
 					isHost: false,
@@ -328,20 +327,20 @@ export function useSFUConnection(deps: {
 			}
 
 			await manager.joinRoom(userData, {
-				audio_enabled: mediaState.isMicOn.value,
-				video_enabled: mediaState.isCameraOn.value,
+				audio_enabled: mediaState.isMicOn,
+				video_enabled: mediaState.isCameraOn,
 			});
 
 			await manager.initializeDevice();
 			await manager.createReceiveTransport();
 
-			if (mediaState.localStream.value) {
+			if (mediaState.localStream) {
 				try {
-					const videoTracks = mediaState.processedStream.value
-						? mediaState.processedStream.value.getVideoTracks()
-						: mediaState.localStream.value.getVideoTracks();
+					const videoTracks = mediaState.processedStream
+						? mediaState.processedStream.getVideoTracks()
+						: mediaState.localStream.getVideoTracks();
 
-					const audioTracks = mediaState.localStream.value.getAudioTracks();
+					const audioTracks = mediaState.localStream.getAudioTracks();
 
 					const streamToPublish = new MediaStream([
 						...videoTracks,
@@ -349,8 +348,8 @@ export function useSFUConnection(deps: {
 					]);
 
 					await manager.publishMedia(streamToPublish, {
-						publishVideo: mediaState.isCameraOn.value,
-						publishAudio: mediaState.isMicOn.value,
+						publishVideo: mediaState.isCameraOn,
+						publishAudio: mediaState.isMicOn,
 					});
 				} catch (error) {
 					console.warn(
@@ -362,7 +361,7 @@ export function useSFUConnection(deps: {
 
 			await manager.setupExistingParticipants();
 
-			connectionState.isSetupComplete.value = true;
+			connectionState.isSetupComplete = true;
 
 			if (!guestName && (isHost || isCohost)) {
 				fetchExistingWaitingRoomUsers();
@@ -425,7 +424,7 @@ export function useSFUConnection(deps: {
 
 			stopGuestApprovalListener();
 
-			lobbyStore.isWaitingForApproval.value = false;
+			lobbyStore.isWaitingForApproval = false;
 
 			try {
 				const resolvedGuestName =
@@ -442,24 +441,23 @@ export function useSFUConnection(deps: {
 					(response as Record<string, unknown>)?.status === "joined" &&
 					(response as Record<string, unknown>).auth_token
 				) {
-					connectionState.guestAuthToken.value = (
-						response as Record<string, unknown>
-					).auth_token as string;
-					connectionState.guestSfuUrl.value =
+					connectionState.guestAuthToken = (response as Record<string, unknown>)
+						.auth_token as string;
+					connectionState.guestSfuUrl =
 						((response as Record<string, unknown>).sfu_url as string) || null;
-					connectionState.guestSfuPort.value =
+					connectionState.guestSfuPort =
 						((response as Record<string, unknown>).sfu_port as string) || null;
 
 					await setupSFUConnection(resolvedGuestName);
 
-					connectionState.isInPreview.value = false;
-					connectionState.isConnecting.value = false;
+					connectionState.isInPreview = false;
+					connectionState.isConnecting = false;
 				} else {
 					console.error(
 						"Failed to get connection details after approval:",
 						response,
 					);
-					connectionState.connectionError.value =
+					connectionState.connectionError =
 						"Failed to get authorization token after approval";
 				}
 			} catch (error) {
@@ -467,8 +465,7 @@ export function useSFUConnection(deps: {
 					"Error fetching connection details after approval:",
 					error,
 				);
-				connectionState.connectionError.value =
-					"Failed to connect after approval";
+				connectionState.connectionError = "Failed to connect after approval";
 			}
 		}
 
@@ -482,8 +479,8 @@ export function useSFUConnection(deps: {
 
 			stopGuestApprovalListener();
 
-			lobbyStore.isJoinRequestRejected.value = true;
-			lobbyStore.isWaitingForApproval.value = false;
+			lobbyStore.isJoinRequestRejected = true;
+			lobbyStore.isWaitingForApproval = false;
 
 			toast.error("Your join request was denied by the meeting host");
 		}
@@ -525,7 +522,7 @@ export function useSFUConnection(deps: {
 		const currentUserId = currentUser.currentUser.value?.user_id;
 
 		if (data.meeting === meetingId && data.user === currentUserId) {
-			lobbyStore.isWaitingForApproval.value = false;
+			lobbyStore.isWaitingForApproval = false;
 
 			try {
 				const sfuResult = await frappeRequest({
@@ -541,15 +538,15 @@ export function useSFUConnection(deps: {
 						(sfuResult as Record<string, unknown>).is_host as boolean,
 						(sfuResult as Record<string, unknown>).is_cohost as boolean,
 					);
-					connectionState.isInPreview.value = false;
+					connectionState.isInPreview = false;
 				} else {
 					console.error("Failed to get SFU connection:", sfuResult);
-					lobbyStore.isJoinRequestRejected.value = true;
+					lobbyStore.isJoinRequestRejected = true;
 					toast.error("Failed to join meeting after approval");
 				}
 			} catch (error) {
 				console.error("Error after approval:", error);
-				connectionState.connectionError.value = getErrorMessage(error);
+				connectionState.connectionError = getErrorMessage(error);
 				toast.error("Failed to join meeting after approval");
 			}
 		}
@@ -559,8 +556,8 @@ export function useSFUConnection(deps: {
 		const currentUserId = currentUser.currentUser.value?.user_id;
 
 		if (data.meeting === meetingId && data.user === currentUserId) {
-			lobbyStore.isJoinRequestRejected.value = true;
-			lobbyStore.isWaitingForApproval.value = false;
+			lobbyStore.isJoinRequestRejected = true;
+			lobbyStore.isWaitingForApproval = false;
 
 			toast.error("Your join request was denied by the meeting host");
 		}
@@ -612,45 +609,43 @@ export function useSFUConnection(deps: {
 		guestName: string,
 	) => {
 		if (!guestName || !joinResult?.guest_id) {
-			connectionState.connectionError.value =
+			connectionState.connectionError =
 				"Guest session not found. Please try joining again.";
 			return;
 		}
 
 		try {
-			connectionState.connectionError.value = null;
+			connectionState.connectionError = null;
 
 			sessionStorage.setItem("guest_id", joinResult.guest_id as string);
 			sessionStorage.setItem("guest_name", guestName);
 			sessionStorage.setItem("guest_meeting_id", meetingId);
 			sessionStorage.setItem("guest_status", joinResult.status as string);
 
-			connectionState.guestId.value = joinResult.guest_id as string;
-			connectionState.guestAuthToken.value =
+			connectionState.guestId = joinResult.guest_id as string;
+			connectionState.guestAuthToken =
 				(joinResult.auth_token as string) || null;
-			connectionState.guestSfuUrl.value =
-				(joinResult.sfu_url as string) || null;
-			connectionState.guestSfuPort.value =
-				(joinResult.sfu_port as string) || null;
+			connectionState.guestSfuUrl = (joinResult.sfu_url as string) || null;
+			connectionState.guestSfuPort = (joinResult.sfu_port as string) || null;
 
 			if (joinResult.status === "waiting_for_approval") {
-				lobbyStore.isWaitingForApproval.value = true;
-				connectionState.isInPreview.value = false;
-				connectionState.isConnecting.value = false;
-				connectionState.guestAuthToken.value = null;
+				lobbyStore.isWaitingForApproval = true;
+				connectionState.isInPreview = false;
+				connectionState.isConnecting = false;
+				connectionState.guestAuthToken = null;
 				setupGuestApprovalListener(guestName);
 				return;
 			}
 
-			connectionState.isConnecting.value = true;
+			connectionState.isConnecting = true;
 			await setupSFUConnection(guestName, false, false);
 			setupFrappeRealtimeEventListeners();
-			connectionState.isInPreview.value = false;
-			connectionState.isConnecting.value = false;
+			connectionState.isInPreview = false;
+			connectionState.isConnecting = false;
 		} catch (error) {
 			console.error("Failed to complete guest join:", error);
-			connectionState.connectionError.value = getErrorMessage(error);
-			connectionState.isConnecting.value = false;
+			connectionState.connectionError = getErrorMessage(error);
+			connectionState.isConnecting = false;
 		}
 	};
 
@@ -661,20 +656,20 @@ export function useSFUConnection(deps: {
 
 		try {
 			joiningInProgress.value = true;
-			connectionState.isConnecting.value = true;
-			connectionState.connectionError.value = null;
+			connectionState.isConnecting = true;
+			connectionState.connectionError = null;
 
-			connectionState.guestAuthToken.value = null;
-			connectionState.guestSfuUrl.value = null;
-			connectionState.guestSfuPort.value = null;
+			connectionState.guestAuthToken = null;
+			connectionState.guestSfuUrl = null;
+			connectionState.guestSfuPort = null;
 
 			const response = await joinMeetingAPI.fetch();
 			const joinResult = response as Record<string, unknown>;
 
 			if (joinResult.status === "waiting_for_approval") {
-				lobbyStore.isWaitingForApproval.value = true;
-				connectionState.isInPreview.value = false;
-				connectionState.isConnecting.value = false;
+				lobbyStore.isWaitingForApproval = true;
+				connectionState.isInPreview = false;
+				connectionState.isConnecting = false;
 				setupFrappeRealtimeEventListeners();
 				return;
 			}
@@ -686,8 +681,8 @@ export function useSFUConnection(deps: {
 			);
 
 			setupFrappeRealtimeEventListeners();
-			connectionState.isInPreview.value = false;
-			connectionState.isConnecting.value = false;
+			connectionState.isInPreview = false;
+			connectionState.isConnecting = false;
 
 			if (router.currentRoute.value.query.created === "true") {
 				router.replace({
@@ -698,8 +693,8 @@ export function useSFUConnection(deps: {
 			}
 		} catch (error) {
 			console.error("Failed to join meeting:", error);
-			connectionState.connectionError.value = getErrorMessage(error);
-			connectionState.isConnecting.value = false;
+			connectionState.connectionError = getErrorMessage(error);
+			connectionState.isConnecting = false;
 		} finally {
 			joiningInProgress.value = false;
 		}

@@ -20,7 +20,7 @@ interface MeetingContext {
 	reactionStore: ReactionStore;
 	lobbyStore: LobbyStore;
 	sfuManager: SFUMeetingManager | null;
-	processedStream: MediaState["processedStream"];
+	processedStream: MediaStream | null;
 	isInMeeting: ReturnType<() => import("vue").ComputedRef<boolean>>;
 	onBackgroundEffectsChanged: () => void;
 }

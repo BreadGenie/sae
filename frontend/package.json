@@ -20,6 +20,7 @@
 		"emoji-mart": "^5.6.0",
 		"frappe-ui": "^0.1.271",
 		"mediasoup-client": "^3.18.8",
+		"pinia": "^3.0.4",
 		"reka-ui": "^2.6.0",
 		"socket.io-client": "^4.7.2",
 		"vue": "^3.5.13",

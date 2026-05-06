@@ -1,4 +1,5 @@
-import { type Ref, ref } from "vue";
+import { defineStore } from "pinia";
+import { ref } from "vue";
 
 export interface ReactionEntry {
 	emoji: string;
@@ -7,28 +8,20 @@ export interface ReactionEntry {
 }
 
 export interface ReactionStore {
-	reactions: Ref<Record<string, ReactionEntry>>;
+	reactions: Record<string, ReactionEntry>;
 	showReactionForUser: (
 		userId: string,
 		emoji: string,
 		duration?: number,
 	) => void;
 	removeReaction: (userId: string) => void;
-	resetReactionStore: () => void;
+	$reset: () => void;
 }
 
-let instance: ReactionStore | null = null;
-
-export function useReactionStore(): ReactionStore {
-	if (instance) return instance;
-
+export const useReactionStore = defineStore("reaction", () => {
 	const reactions = ref<Record<string, ReactionEntry>>({});
 
-	const showReactionForUser = (
-		userId: string,
-		emoji: string,
-		duration = 5000,
-	) => {
+	function showReactionForUser(userId: string, emoji: string, duration = 5000) {
 		const now = Date.now();
 		const expiresAt = now + duration;
 
@@ -49,9 +42,9 @@ export function useReactionStore(): ReactionStore {
 			...reactions.value,
 			[userId]: { emoji, expiresAt, timeoutId },
 		};
-	};
+	}
 
-	const removeReaction = (userId: string) => {
+	function removeReaction(userId: string) {
 		const existing = reactions.value[userId];
 		if (existing?.timeoutId) {
 			clearTimeout(existing.timeoutId);
@@ -59,23 +52,21 @@ export function useReactionStore(): ReactionStore {
 		const updated = { ...reactions.value };
 		delete updated[userId];
 		reactions.value = updated;
-	};
+	}
 
-	const resetReactionStore = () => {
+	function $reset() {
 		for (const entry of Object.values(reactions.value)) {
 			if (entry?.timeoutId) {
 				clearTimeout(entry.timeoutId);
 			}
 		}
 		reactions.value = {};
-	};
+	}
 
-	instance = {
+	return {
 		reactions,
 		showReactionForUser,
 		removeReaction,
-		resetReactionStore,
+		$reset,
 	};
-
-	return instance;
-}
+});

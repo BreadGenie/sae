@@ -96,9 +96,9 @@ interface MeetingHandlersDeps {
 
 export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 	const resetToPreview = () => {
-		deps.connectionState.connectionError.value = null;
-		deps.connectionState.isConnecting.value = false;
-		deps.connectionState.isInPreview.value = true;
+		deps.connectionState.connectionError = null;
+		deps.connectionState.isConnecting = false;
+		deps.connectionState.isInPreview = true;
 	};
 
 	const joinMeetingFromPreview = async () => {
@@ -114,7 +114,7 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 	}) => {
 		const guestId =
 			(joinResult?.guest_id as string) ||
-			(deps.connectionState.guestId.value as string);
+			(deps.connectionState.guestId as string);
 		const resolvedGuestName = guestName || localStorage.getItem("guest_name");
 
 		if (guestId && resolvedGuestName) {
@@ -134,32 +134,32 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 	};
 
 	const leaveWaitingRoom = () => {
-		deps.lobbyStore.isWaitingForApproval.value = false;
-		deps.lobbyStore.isJoinRequestRejected.value = false;
+		deps.lobbyStore.isWaitingForApproval = false;
+		deps.lobbyStore.isJoinRequestRejected = false;
 		deps.router.push({ name: "Home" });
 	};
 
 	const leaveLobby = async () => {
-		deps.lobbyStore.isInLobby.value = false;
-		deps.lobbyStore.isWaitingForApproval.value = false;
-		deps.lobbyStore.lobbyParticipantCount.value = 0;
+		deps.lobbyStore.isInLobby = false;
+		deps.lobbyStore.isWaitingForApproval = false;
+		deps.lobbyStore.lobbyParticipantCount = 0;
 		deps.router.push({ name: "Home" });
 	};
 
 	const goHome = () => {
-		deps.lobbyStore.isJoinRequestRejected.value = false;
-		deps.lobbyStore.isInLobby.value = false;
+		deps.lobbyStore.isJoinRequestRejected = false;
+		deps.lobbyStore.isInLobby = false;
 		deps.router.push({ name: "Home" });
 	};
 
 	const tryJoinAgain = async () => {
-		deps.lobbyStore.isJoinRequestRejected.value = false;
+		deps.lobbyStore.isJoinRequestRejected = false;
 
 		const isGuestSession =
 			!deps.currentUser.currentUser.value?.user_id &&
-			!deps.connectionState.guestAuthToken.value;
+			!deps.connectionState.guestAuthToken;
 		if (isGuestSession) {
-			deps.connectionState.isInPreview.value = true;
+			deps.connectionState.isInPreview = true;
 			return;
 		}
 
@@ -167,9 +167,9 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 	};
 
 	const toggleChat = () => {
-		deps.chatStore.isChatOpen.value = !deps.chatStore.isChatOpen.value;
-		if (deps.chatStore.isChatOpen.value) {
-			deps.chatStore.hasUnreadMessages.value = false;
+		deps.chatStore.isChatOpen = !deps.chatStore.isChatOpen;
+		if (deps.chatStore.isChatOpen) {
+			deps.chatStore.hasUnreadMessages = false;
 		}
 	};
 
@@ -280,7 +280,7 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 	};
 
 	const handleNotificationClick = () => {
-		if (!deps.chatStore.isChatOpen.value) {
+		if (!deps.chatStore.isChatOpen) {
 			toggleChat();
 		}
 	};
@@ -303,8 +303,8 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 		);
 		await openProblemReportEmail({
 			meetingId: deps.meetingId,
-			networkQuality: deps.connectionState.networkQuality?.value,
-			localStream: deps.mediaState.localStream.value,
+			networkQuality: deps.connectionState.networkQuality,
+			localStream: deps.mediaState.localStream,
 			transportManager:
 				deps.sfuConnection.sfuManager.value?.transportManager || null,
 			sfuClient: deps.sfuConnection.sfuClient,
@@ -317,9 +317,9 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 			return;
 		}
 
-		if (deps.mediaState.isCameraOn.value || deps.mediaState.isMicOn.value) {
+		if (deps.mediaState.isCameraOn || deps.mediaState.isMicOn) {
 			try {
-				const oldStream = deps.mediaState.localStream.value;
+				const oldStream = deps.mediaState.localStream;
 				if (oldStream) {
 					for (const track of oldStream.getTracks()) {
 						track.stop();
@@ -339,14 +339,14 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 						: selectedMicId.value;
 
 				const { stream: newStream } = await deps.mediaControls.acquireUserMedia(
-					deps.mediaState.isCameraOn.value,
-					deps.mediaState.isMicOn.value,
+					deps.mediaState.isCameraOn,
+					deps.mediaState.isMicOn,
 					{ cameraDeviceId, micDeviceId },
 				);
-				deps.mediaState.localStream.value = newStream;
+				deps.mediaState.localStream = newStream;
 
-				if (deps.mediaState.localVideo.value) {
-					(deps.mediaState.localVideo.value as HTMLVideoElement).srcObject =
+				if (deps.mediaState.localVideo) {
+					(deps.mediaState.localVideo as HTMLVideoElement).srcObject =
 						newStream;
 				}
 

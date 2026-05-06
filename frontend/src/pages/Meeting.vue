@@ -23,16 +23,16 @@
 		<MeetingPreview
 			v-else-if="showPreview"
 			:meetingId="meetingId"
-			:isCameraOn="mediaState.isCameraOn.value"
-			:isMicOn="mediaState.isMicOn.value"
-			:cameraPermissionGranted="mediaState.cameraPermissionGranted.value"
-			:microphonePermissionGranted="mediaState.microphonePermissionGranted.value"
-			:isConnecting="connectionState.isConnecting.value"
+			:isCameraOn="mediaState.isCameraOn"
+			:isMicOn="mediaState.isMicOn"
+			:cameraPermissionGranted="mediaState.cameraPermissionGranted"
+			:microphonePermissionGranted="mediaState.microphonePermissionGranted"
+			:isConnecting="connectionState.isConnecting"
 			:userInitials="currentUser.userInitials.value"
 			:userAvatar="currentUser.userAvatar.value"
 			:currentUserName="currentUser.currentUser.value?.full_name || currentUser.currentUser.value?.name || 'You'"
-			:guestAuthToken="connectionState.guestAuthToken.value"
-			:isWaitingForApproval="lobbyStore.isWaitingForApproval.value"
+			:guestAuthToken="connectionState.guestAuthToken"
+			:isWaitingForApproval="lobbyStore.isWaitingForApproval"
 			:setLocalVideoRef="mediaControls.setLocalVideoRef"
 			@toggle-microphone="mediaControls.toggleMicrophone()"
 			@toggle-camera="mediaControls.toggleCamera()"
@@ -84,7 +84,7 @@
 							<ChatPanel
 								v-if="activePanel === 'chat'"
 								:open="true"
-								:messages="chatStore.chatMessages.value"
+								:messages="chatStore.chatMessages"
 								:user-id="
 									(currentUser.currentUser.value
 										?.user_id as string) || ''
@@ -106,11 +106,11 @@
 								:open="true"
 								:currentUser="currentUser.currentUser.value"
 								:participants="participantsForPeoplePanel"
-								:isMicOn="mediaState.isMicOn.value"
-								:isCameraOn="mediaState.isCameraOn.value"
+								:isMicOn="mediaState.isMicOn"
+								:isCameraOn="mediaState.isCameraOn"
 								:creatorUserId="meetingOwner"
 								:coHosts="meetingCoHosts"
-								:lobbyUsers="lobbyStore.lobbyUsers.value"
+								:lobbyUsers="lobbyStore.lobbyUsers"
 								@close="togglePeople"
 								@muteParticipant="handleMuteParticipant"
 								@kickParticipant="handleKickParticipant"
@@ -128,13 +128,13 @@
 				<div class="pointer-events-none absolute inset-x-0 bottom-0 z-[60]">
 					<!-- Meeting controls -->
 					<MeetingToolbar
-						:isChatOpen="chatStore.isChatOpen.value"
+						:isChatOpen="chatStore.isChatOpen"
 						:isPeopleOpen="isPeopleOpen"
-						:hasUnread="chatStore.hasUnreadMessages.value"
-						:lobbyUserCount="lobbyStore.lobbyUsers?.value?.length || 0"
-						:isMicOn="mediaState.isMicOn.value"
-						:isCameraOn="mediaState.isCameraOn.value"
-						:isScreenSharing="mediaState.isScreenSharing.value"
+						:hasUnread="chatStore.hasUnreadMessages"
+						:lobbyUserCount="lobbyStore.lobbyUsers?.length || 0"
+						:isMicOn="mediaState.isMicOn"
+						:isCameraOn="mediaState.isCameraOn"
+						:isScreenSharing="mediaState.isScreenSharing"
 						:isFullscreen="isFullscreen"
 						:isHandRaised="isHandRaised"
 						:isReactionPickerOpen="isReactionPickerOpen"
@@ -142,8 +142,8 @@
 						:meetingId="meetingId"
 						:meetingTitle="meetingTitle"
 						:currentUser="currentUser.currentUser.value"
-						:cameraPermissionGranted="mediaState.cameraPermissionGranted.value"
-						:microphonePermissionGranted="mediaState.microphonePermissionGranted.value"
+						:cameraPermissionGranted="mediaState.cameraPermissionGranted"
+						:microphonePermissionGranted="mediaState.microphonePermissionGranted"
 						@toggle-chat="toggleChat"
 						@toggle-people="togglePeople"
 						@toggle-reactions="toggleReactions($event)"
@@ -271,7 +271,7 @@ const noiseCancellation = useNoiseCancellation();
 
 // --- Lobby notification conversion ---
 const lobbyUsersForNotifications = computed(() => {
-	return lobbyStore.lobbyUsers.value
+	return lobbyStore.lobbyUsers
 		.filter((user) => !notifiedLobbyUsers.value.has(user.userId))
 		.map((user) => ({
 			user_id: user.userId,
@@ -284,8 +284,7 @@ const lobbyUsersForNotifications = computed(() => {
 const isGuestSession = computed(
 	() =>
 		!session.isLoggedIn &&
-		(!!connectionState.guestAuthToken.value ||
-			lobbyStore.isWaitingForApproval.value),
+		(!!connectionState.guestAuthToken || lobbyStore.isWaitingForApproval),
 );
 
 // --- SFU Connection ---
@@ -299,7 +298,7 @@ const sfuConnection = useSFUConnection({
 	meetingId: meetingId.value,
 	notifiedLobbyUsers,
 	onHostMutedYou: () => {
-		if (mediaState.isMicOn.value) {
+		if (mediaState.isMicOn) {
 			mediaControls.toggleMicrophone();
 		}
 	},
@@ -307,9 +306,9 @@ const sfuConnection = useSFUConnection({
 	onScreenShareStarted: (data: SFUScreenShareData) => {
 		const pid = data.participantId;
 		if (!pid) return;
-		const prev = mediaState.activeScreenShareConsumers.value || [];
+		const prev = mediaState.activeScreenShareConsumers || [];
 		const filtered = prev.filter((s) => s.participantId !== pid);
-		mediaState.activeScreenShareConsumers.value = [
+		mediaState.activeScreenShareConsumers = [
 			...filtered,
 			{
 				participantId: pid,
@@ -319,9 +318,9 @@ const sfuConnection = useSFUConnection({
 		];
 		if (data.stream instanceof MediaStream) {
 			try {
-				const store = mediaState.screenShareStreams?.value || {};
+				const store = mediaState.screenShareStreams || {};
 				store[pid] = data.stream;
-				mediaState.screenShareStreams.value = store;
+				mediaState.screenShareStreams = store;
 			} catch (err) {
 				console.warn("Failed to store screen share stream:", err);
 			}
@@ -329,11 +328,11 @@ const sfuConnection = useSFUConnection({
 	},
 	onScreenShareStopped: (data: SFUScreenShareData) => {
 		const pid = data.participantId;
-		const list = mediaState.activeScreenShareConsumers.value || [];
-		mediaState.activeScreenShareConsumers.value = list.filter(
+		const list = mediaState.activeScreenShareConsumers || [];
+		mediaState.activeScreenShareConsumers = list.filter(
 			(share) => share.participantId !== pid,
 		);
-		const store = mediaState.screenShareStreams?.value || {};
+		const store = mediaState.screenShareStreams || {};
 		if (pid && store[pid]) {
 			const stream = store[pid];
 			const tracks = stream.getTracks();
@@ -343,11 +342,11 @@ const sfuConnection = useSFUConnection({
 				}
 			}
 			delete store[pid];
-			mediaState.screenShareStreams.value = store;
+			mediaState.screenShareStreams = store;
 		}
 	},
 	onActiveSpeakerChanged: (participantIds: string[]) => {
-		participantStore.activeSpeakerIds.value = participantIds;
+		participantStore.activeSpeakerIds = participantIds;
 	},
 });
 
@@ -461,17 +460,13 @@ provide(
 );
 
 // --- Computed properties ---
-const isConnecting = computed(() => connectionState.isConnecting.value);
-const hasConnectionError = computed(
-	() => !!connectionState.connectionError.value,
-);
-const isInLobby = computed(() => lobbyStore.isInLobby?.value || false);
+const isConnecting = computed(() => connectionState.isConnecting);
+const hasConnectionError = computed(() => !!connectionState.connectionError);
+const isInLobby = computed(() => lobbyStore.isInLobby || false);
 const isWaitingForApproval = computed(
-	() => lobbyStore.isWaitingForApproval?.value || false,
+	() => lobbyStore.isWaitingForApproval || false,
 );
-const isRejected = computed(
-	() => lobbyStore.isJoinRequestRejected?.value || false,
-);
+const isRejected = computed(() => lobbyStore.isJoinRequestRejected || false);
 const showPreview = computed(() => {
 	const isUnauthenticatedGuest = !session.isLoggedIn && !isGuestSession.value;
 	if (isUnauthenticatedGuest) {
@@ -481,27 +476,27 @@ const showPreview = computed(() => {
 	if (isGuestSession.value) {
 		return false;
 	}
-	if (lobbyStore.isInLobby?.value) {
+	if (lobbyStore.isInLobby) {
 		return false;
 	}
-	if (lobbyStore.isWaitingForApproval.value) {
+	if (lobbyStore.isWaitingForApproval) {
 		return false;
 	}
-	const inPreview = connectionState.isInPreview.value;
-	const joinRequestRejected = lobbyStore.isJoinRequestRejected.value;
+	const inPreview = connectionState.isInPreview;
+	const joinRequestRejected = lobbyStore.isJoinRequestRejected;
 	return inPreview || joinRequestRejected;
 });
 
 const isPeopleOpen = ref(false);
 
 const activePanel = computed(() => {
-	if (chatStore.isChatOpen.value) return "chat";
+	if (chatStore.isChatOpen) return "chat";
 	if (isPeopleOpen.value) return "people";
 	return null;
 });
 
 const participantsForPeoplePanel = computed<Record<string, Participant>>(
-	() => participantStore.participants.value as Record<string, Participant>,
+	() => participantStore.participants as Record<string, Participant>,
 );
 
 const { windowWidth } = useResponsiveGrid();
@@ -515,9 +510,7 @@ const panelWidth = computed(() => {
 
 const isHandRaised = computed(() => {
 	const currentUserId = currentUser.currentUser.value?.user_id as string;
-	return currentUserId
-		? !!raiseHandStore.raisedHands.value?.[currentUserId]
-		: false;
+	return currentUserId ? !!raiseHandStore.raisedHands?.[currentUserId] : false;
 });
 
 // --- Refs ---
@@ -574,7 +567,7 @@ const {
 const togglePeople = () => {
 	isPeopleOpen.value = !isPeopleOpen.value;
 	if (isPeopleOpen.value) {
-		chatStore.isChatOpen.value = false;
+		chatStore.isChatOpen = false;
 	}
 };
 
@@ -609,13 +602,13 @@ const setSinkIdOnVideoElements = async (sinkId: string) => {
 // --- Lifecycle ---
 onMounted(async () => {
 	// Reset all stores
-	connectionState.resetConnectionState();
-	mediaState.resetMediaState();
-	participantStore.resetParticipantStore();
-	chatStore.resetChatStore();
-	lobbyStore.resetLobbyStore();
-	reactionStore.resetReactionStore();
-	raiseHandStore.resetRaiseHandStore();
+	connectionState.$reset();
+	mediaState.$reset();
+	participantStore.$reset();
+	chatStore.$reset();
+	lobbyStore.$reset();
+	reactionStore.$reset();
+	raiseHandStore.$reset();
 	gridLayout.resetGridLayout();
 	currentUser.setCurrentUser({
 		user_id: "",
@@ -664,7 +657,7 @@ onMounted(async () => {
 		if (selectedSpeakerId.value) {
 			await mediaControls.applySpeakerDevice();
 		}
-		connectionState.isInPreview.value = true;
+		connectionState.isInPreview = true;
 		return;
 	}
 
@@ -698,7 +691,7 @@ onUnmounted(() => {
 
 // Watch for localVideo element and localStream connection
 watch(
-	[() => mediaState.localVideo.value, () => mediaState.localStream.value],
+	[() => mediaState.localVideo, () => mediaState.localStream],
 	async ([videoElement, stream]) => {
 		if (videoElement && stream) {
 			try {
@@ -752,7 +745,7 @@ watch(selectedSpeakerId, async (newSpeakerId) => {
 
 // Watch lobby users for notification tracking
 watch(
-	() => lobbyStore.lobbyUsers?.value,
+	() => lobbyStore.lobbyUsers,
 	(newUsers, oldUsers) => {
 		if (isCurrentUserHost.value) {
 			const newUserIds = new Set((newUsers || []).map((u) => u.userId));

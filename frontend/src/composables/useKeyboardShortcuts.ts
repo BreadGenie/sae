@@ -31,7 +31,7 @@ export function useKeyboardShortcuts(deps: {
 			!event.repeat
 		) {
 			event.preventDefault();
-			if (!mediaState.isMicOn.value) {
+			if (!mediaState.isMicOn) {
 				unmutedByPushToTalk = true;
 				mediaControls.toggleMicrophone();
 			}
@@ -57,7 +57,7 @@ export function useKeyboardShortcuts(deps: {
 		if (pushToTalkEnabled.value && event.code === "Space" && !isInput) {
 			if (unmutedByPushToTalk) {
 				unmutedByPushToTalk = false;
-				if (mediaState.isMicOn.value) {
+				if (mediaState.isMicOn) {
 					mediaControls.toggleMicrophone();
 				}
 			}

@@ -119,14 +119,12 @@ const getRemoteVideoRef = (participantId) => {
 
 // ── Reactive state from meeting context ───────────────────────────────────────
 
-const participants = computed(
-	() => meetingCtx.participantStore.participants.value,
-);
+const participants = computed(() => meetingCtx.participantStore.participants);
 const currentUser = computed(() => meetingCtx.currentUser.currentUser.value);
-const isCameraOn = computed(() => meetingCtx.mediaState.isCameraOn.value);
-const isMicOn = computed(() => meetingCtx.mediaState.isMicOn.value);
+const isCameraOn = computed(() => meetingCtx.mediaState.isCameraOn);
+const isMicOn = computed(() => meetingCtx.mediaState.isMicOn);
 const activeSpeakerIds = computed(
-	() => meetingCtx.participantStore.activeSpeakerIds.value,
+	() => meetingCtx.participantStore.activeSpeakerIds,
 );
 const pinnedTile = computed(() => meetingCtx.gridLayout.pinnedTile.value);
 const displayScreenShares = computed(
@@ -286,7 +284,7 @@ const { isFlipAnimating, pinnedTileStyle } = usePinnedTileAnimation({
 //   which shows reactions, main screen area doesn't)
 
 const floatingReactions = computed(() => {
-	const reactions = meetingCtx.reactionStore.reactions.value;
+	const reactions = meetingCtx.reactionStore.reactions;
 	const currentUserId = currentUser.value?.user_id;
 
 	let sourceIds;
