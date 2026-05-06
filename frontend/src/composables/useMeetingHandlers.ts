@@ -90,6 +90,7 @@ interface MeetingHandlersDeps {
 	meetingDoc: MeetingDocLike;
 	meetingId: string;
 	isCurrentUserHost: Ref<boolean>;
+	isPeopleOpen: Ref<boolean>;
 	notifiedLobbyUsers: Ref<Set<string>>;
 	router: Router;
 }
@@ -170,6 +171,7 @@ export function useMeetingHandlers(deps: MeetingHandlersDeps) {
 		deps.chatStore.isChatOpen = !deps.chatStore.isChatOpen;
 		if (deps.chatStore.isChatOpen) {
 			deps.chatStore.hasUnreadMessages = false;
+			deps.isPeopleOpen.value = false;
 		}
 	};
 

@@ -537,6 +537,7 @@ const handlers = useMeetingHandlers({
 	meetingDoc: meetingDoc as unknown as MeetingDocLike,
 	meetingId: meetingId.value,
 	isCurrentUserHost,
+	isPeopleOpen,
 	notifiedLobbyUsers,
 	router,
 });
