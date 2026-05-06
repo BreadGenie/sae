@@ -2,7 +2,23 @@
  * Device Management Utilities
  */
 
+interface MediaDevice {
+	deviceId: string;
+	label: string;
+	groupId: string;
+}
+
+export type DeviceType = "camera" | "microphone" | "speaker";
+
 class DeviceManager {
+	cameras: MediaDevice[];
+	microphones: MediaDevice[];
+	speakers: MediaDevice[];
+	isEnumerating: boolean;
+	deviceChangeListeners: Array<() => void>;
+	hasVideoPermission: boolean;
+	hasAudioPermission: boolean;
+
 	constructor() {
 		this.cameras = [];
 		this.microphones = [];
@@ -17,7 +33,7 @@ class DeviceManager {
 	/**
 	 * Check if we already have permissions without requesting them
 	 */
-	async checkExistingPermissions() {
+	async checkExistingPermissions(): Promise<void> {
 		if (!navigator.permissions) return;
 
 		const cameraPermission = await navigator.permissions.query({
@@ -35,7 +51,10 @@ class DeviceManager {
 	 * Detect what type of devices changed by comparing current vs new device lists
 	 * Returns { video: boolean, audio: boolean } indicating what changed
 	 */
-	async detectDeviceChanges() {
+	async detectDeviceChanges(): Promise<{
+		videoChanged: boolean;
+		audioChanged: boolean;
+	}> {
 		const oldCameraCount = this.cameras.length;
 		const oldMicCount = this.microphones.length;
 		const oldSpeakerCount = this.speakers.length;
@@ -56,19 +75,21 @@ class DeviceManager {
 		};
 	}
 
-	async enumerateDevices(options = { video: false, audio: false }) {
+	async enumerateDevices(
+		options: { video?: boolean; audio?: boolean } = {},
+	): Promise<void> {
 		if (this.isEnumerating) return;
 
 		try {
 			this.isEnumerating = true;
 
-			let permissionStream = null;
+			let permissionStream: MediaStream | null = null;
 
 			// Only request permissions if explicitly requested
 			// Why? Cuz I don't want camera LED from turning on unnecessarily
 			if (options.video || options.audio) {
 				try {
-					const constraints = {};
+					const constraints: Record<string, boolean> = {};
 					if (options.video) constraints.video = true;
 					if (options.audio) constraints.audio = true;
 
@@ -125,19 +146,22 @@ class DeviceManager {
 		}
 	}
 
-	getCameras() {
+	getCameras(): MediaDevice[] {
 		return this.cameras;
 	}
 
-	getMicrophones() {
+	getMicrophones(): MediaDevice[] {
 		return this.microphones;
 	}
 
-	getSpeakers() {
+	getSpeakers(): MediaDevice[] {
 		return this.speakers;
 	}
 
-	findDeviceById(deviceId, deviceType) {
+	findDeviceById(
+		deviceId: string,
+		deviceType: DeviceType,
+	): MediaDevice | undefined {
 		const devices =
 			deviceType === "camera"
 				? this.cameras
@@ -147,7 +171,7 @@ class DeviceManager {
 		return devices.find((device) => device.deviceId === deviceId);
 	}
 
-	getDefaultDevice(deviceType) {
+	getDefaultDevice(deviceType: DeviceType): MediaDevice | null {
 		const devices =
 			deviceType === "camera"
 				? this.cameras
@@ -157,11 +181,11 @@ class DeviceManager {
 		return devices.length > 0 ? devices[0] : null;
 	}
 
-	isDeviceAvailable(deviceId, deviceType) {
+	isDeviceAvailable(deviceId: string, deviceType: DeviceType): boolean {
 		return this.findDeviceById(deviceId, deviceType) !== undefined;
 	}
 
-	setupDeviceChangeListener() {
+	setupDeviceChangeListener(): void {
 		if (navigator.mediaDevices?.addEventListener) {
 			navigator.mediaDevices.addEventListener("devicechange", async () => {
 				console.log("Device change detected, re-enumerating devices...");
@@ -201,11 +225,11 @@ class DeviceManager {
 		}
 	}
 
-	addDeviceChangeListener(listener) {
+	addDeviceChangeListener(listener: () => void): void {
 		this.deviceChangeListeners.push(listener);
 	}
 
-	removeDeviceChangeListener(listener) {
+	removeDeviceChangeListener(listener: () => void): void {
 		const index = this.deviceChangeListeners.indexOf(listener);
 		if (index > -1) {
 			this.deviceChangeListeners.splice(index, 1);

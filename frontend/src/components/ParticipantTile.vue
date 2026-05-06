@@ -151,121 +151,88 @@
 	</div>
 </template>
 
-<script setup>
-import { computed, inject, ref, watch } from "vue";
+<script setup lang="ts">
+import { type ComputedRef, computed, inject, type Ref, ref, watch } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels";
+import { useMeetingContext } from "../composables/useMeetingContext";
 import { useNetworkQuality } from "../composables/useNetworkQuality";
 import WifiAlertIcon from "../icons/WifiAlertIcon.vue";
+import type { Participant } from "../utils/media/ParticipantManager";
 import AudioIndicator from "./AudioIndicator.vue";
 import KickParticipantDialog from "./KickParticipantDialog.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 import NamePill from "./NamePill.vue";
 
-const meetingState = inject("meetingState");
-const isCurrentUserHost = inject("isCurrentUserHost", ref(false));
-const hostControls = inject("hostControls", null);
+type TileSize = "xs" | "sm" | "md";
+type TilePosition = "bottom-left" | "top-left" | "top-right" | "bottom-right";
 
-const props = defineProps({
-	participant: {
-		type: Object,
-		required: true,
-	},
-	isLocal: {
-		type: Boolean,
-		default: false,
-	},
-	isVideoEnabled: {
-		type: Boolean,
-		default: true,
-	},
-	isAudioEnabled: {
-		type: Boolean,
-		default: true,
-	},
-	isActiveSpeaker: {
-		type: Boolean,
-		default: false,
-	},
-	videoRef: {
-		type: Function,
-		required: true,
-	},
-	tileCount: {
-		type: Number,
-		default: 1,
-	},
-	labelSize: {
-		type: String,
-		default: "md",
-	},
-	labelPosition: {
-		type: String,
-		default: "bottom-left",
-	},
-	pinType: {
-		type: String,
-		default: "participant",
-	},
-	pinId: {
-		type: String,
-		default: null,
-	},
-	showPinButton: {
-		type: Boolean,
-		default: true,
-	},
-	showAvatar: {
-		type: Boolean,
-		default: true,
-	},
-	showReaction: {
-		type: Boolean,
-		default: true,
-	},
-	showRaisedHand: {
-		type: Boolean,
-		default: true,
-	},
-	showAudioState: {
-		type: Boolean,
-		default: true,
-	},
-	showNetworkState: {
-		type: Boolean,
-		default: true,
-	},
-	tileBackgroundClass: {
-		type: String,
-		default: "bg-gray-800",
-	},
-	avatarBackgroundClass: {
-		type: String,
-		default: "bg-gray-700",
-	},
-	videoObjectFitClass: {
-		type: String,
-		default: "object-cover",
-	},
-	videoBackgroundClass: {
-		type: String,
-		default: "",
-	},
-	displayName: {
-		type: String,
-		default: "",
-	},
+interface Props {
+	participant: Record<string, any>;
+	isLocal?: boolean;
+	isVideoEnabled?: boolean;
+	isAudioEnabled?: boolean;
+	isActiveSpeaker?: boolean;
+	videoRef: (el: unknown) => void;
+	tileCount?: number;
+	labelSize?: TileSize;
+	labelPosition?: TilePosition;
+	pinType?: "screenshare" | "participant";
+	pinId?: string | null;
+	showPinButton?: boolean;
+	showAvatar?: boolean;
+	showReaction?: boolean;
+	showRaisedHand?: boolean;
+	showAudioState?: boolean;
+	showNetworkState?: boolean;
+	tileBackgroundClass?: string;
+	avatarBackgroundClass?: string;
+	videoObjectFitClass?: string;
+	videoBackgroundClass?: string;
+	displayName?: string;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	isLocal: false,
+	isVideoEnabled: true,
+	isAudioEnabled: true,
+	isActiveSpeaker: false,
+	tileCount: 1,
+	labelSize: "md",
+	labelPosition: "bottom-left",
+	pinType: "participant",
+	pinId: null,
+	showPinButton: true,
+	showAvatar: true,
+	showReaction: true,
+	showRaisedHand: true,
+	showAudioState: true,
+	showNetworkState: true,
+	tileBackgroundClass: "bg-gray-800",
+	avatarBackgroundClass: "bg-gray-700",
+	videoObjectFitClass: "object-cover",
+	videoBackgroundClass: "",
+	displayName: "",
 });
+
+const meetingCtx = useMeetingContext();
+const isCurrentUserHost = inject<Ref<boolean> | ComputedRef<boolean>>(
+	"isCurrentUserHost",
+	ref(false),
+);
+const hostControls = inject<{
+	muteParticipant: (participantId: string) => void;
+	kickParticipant: (participantId: string, ban: boolean) => void;
+}>("hostControls", null);
 
 const showBlur = ref(props.participant.isLocalScreenShare);
 
 const showScreenShareCopy = computed(() => {
-	return !meetingState?.pinnedTile?.value || isPinned.value;
+	return !meetingCtx?.gridLayout.pinnedTile.value || isPinned.value;
 });
 
-const meetingCtx = inject("meetingState");
 const { stream } = useAudioStream(props.participant.user_id, {
-	mediaState: meetingCtx,
-	currentUser: meetingCtx,
+	mediaState: meetingCtx?.mediaState,
+	currentUser: meetingCtx?.currentUser,
 });
 
 const { networkQuality } = useNetworkQuality();
@@ -308,13 +275,17 @@ const networkQualityMessage = computed(() => {
 });
 
 const currentReaction = computed(() => {
-	if (!meetingState?.reactions?.value) return null;
-	return meetingState.reactions.value[props.participant.user_id] || null;
+	if (!meetingCtx?.reactionStore.reactions.value) return null;
+	return (
+		meetingCtx.reactionStore.reactions.value[props.participant.user_id] || null
+	);
 });
 
 const isHandRaised = computed(() => {
-	if (!meetingState?.raisedHands?.value) return false;
-	return !!meetingState.raisedHands.value[props.participant.user_id];
+	if (!meetingCtx?.raiseHandStore.raisedHands.value) return false;
+	return !!meetingCtx.raiseHandStore.raisedHands.value[
+		props.participant.user_id
+	];
 });
 
 const isAnimating = ref(false);
@@ -329,7 +300,7 @@ watch(isHandRaised, (newValue, oldValue) => {
 });
 
 const isPinned = computed(() => {
-	const pinned = meetingState?.pinnedTile?.value;
+	const pinned = meetingCtx?.gridLayout.pinnedTile.value;
 	const targetId = props.pinId || props.participant.user_id;
 	return pinned?.type === props.pinType && pinned?.id === targetId;
 });
@@ -339,18 +310,18 @@ const canShowPinButton = computed(() => {
 	return (
 		!props.isLocal &&
 		props.showPinButton &&
-		!!meetingState?.pinTile &&
+		!!meetingCtx?.gridLayout.pinTile &&
 		!!targetId
 	);
 });
 
 const togglePin = () => {
 	const targetId = props.pinId || props.participant.user_id;
-	if (!targetId) return;
+	if (!targetId || !meetingCtx) return;
 	if (isPinned.value) {
-		meetingState.unpinTile();
+		meetingCtx.gridLayout.unpinTile();
 	} else {
-		meetingState.pinTile(props.pinType, targetId);
+		meetingCtx.gridLayout.pinTile(props.pinType, targetId);
 	}
 };
 

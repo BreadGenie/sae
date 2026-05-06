@@ -1,19 +1,8 @@
-import type { UserData } from "../../types";
-
 export type Platform = "win" | "mac" | "linux" | "unknown";
 
 export interface FrappeRequestError extends Error {
 	messages: string[];
-}
-
-export interface Participant {
-	user_id: string;
-	user_name?: string;
-	avatar?: UserData["avatar"];
-	initials?: string;
-	audio_enabled?: UserData["audio_enabled"];
-	video_enabled?: UserData["video_enabled"];
-	is_guest?: UserData["is_guest"];
+	exc_type: string;
 }
 
 export interface ParticipantPreview {
@@ -31,7 +20,6 @@ export type {
 	PresenceJoinResponse,
 	PresenceParticipantsResponse,
 	PresenceTokenResponse,
-	UserData,
 } from "../../types";
 
 declare module "vue" {

@@ -23,6 +23,17 @@
 		<MeetingPreview
 			v-else-if="showPreview"
 			:meetingId="meetingId"
+			:isCameraOn="mediaState.isCameraOn.value"
+			:isMicOn="mediaState.isMicOn.value"
+			:cameraPermissionGranted="mediaState.cameraPermissionGranted.value"
+			:microphonePermissionGranted="mediaState.microphonePermissionGranted.value"
+			:isConnecting="connectionState.isConnecting.value"
+			:userInitials="currentUser.userInitials.value"
+			:userAvatar="currentUser.userAvatar.value"
+			:currentUserName="currentUser.currentUser.value?.full_name || currentUser.currentUser.value?.name || 'You'"
+			:guestAuthToken="connectionState.guestAuthToken.value"
+			:isWaitingForApproval="lobbyStore.isWaitingForApproval.value"
+			:setLocalVideoRef="mediaControls.setLocalVideoRef"
 			@toggle-microphone="mediaControls.toggleMicrophone()"
 			@toggle-camera="mediaControls.toggleCamera()"
 			@join-from-preview="joinMeetingFromPreview"
@@ -75,13 +86,13 @@
 								:open="true"
 								:messages="chatStore.chatMessages.value"
 								:user-id="
-									((currentUser.currentUser.value as Record<string, unknown>)
+									(currentUser.currentUser.value
 										?.user_id as string) || ''
 								"
 								:user-name="
-									((currentUser.currentUser.value as Record<string, unknown>)
+									(currentUser.currentUser.value
 										?.full_name as string) ||
-									((currentUser.currentUser.value as Record<string, unknown>)
+									(currentUser.currentUser.value
 										?.name as string) ||
 									'You'
 								"
@@ -207,18 +218,20 @@ import { useRaiseHandStore } from "../composables/useRaiseHandStore";
 import { useReactionStore } from "../composables/useReactionStore";
 import { useReactions } from "../composables/useReactions";
 import { useResponsiveGrid } from "../composables/useResponsiveGrid";
-import { useSFUConnection } from "../composables/useSFUConnection";
+import {
+	type SFUScreenShareData,
+	useSFUConnection,
+} from "../composables/useSFUConnection";
 import {
 	selectedCameraId,
 	selectedMicId,
 	selectedSpeakerId,
 } from "../data/mediaPreferences";
 import { session } from "../data/session";
-import { useSocket } from "../socket.js";
-import type { Participant } from "../types";
+import { useSocket } from "../socket";
 import { openProblemReportEmail } from "../utils/diagnostics/problemReport";
 import { deviceManager } from "../utils/media/DeviceManager";
-import { getSFUClient } from "../utils/sfu-client";
+import type { Participant } from "../utils/media/ParticipantManager";
 
 // Router
 const route = useRoute();
@@ -288,8 +301,8 @@ const sfuConnection = useSFUConnection({
 		}
 	},
 	onHostKickedYou: () => sfuConnection.endCall(),
-	onScreenShareStarted: (data: Record<string, unknown>) => {
-		const pid = (data as Record<string, unknown>).participantId as string;
+	onScreenShareStarted: (data: SFUScreenShareData) => {
+		const pid = data.participantId;
 		if (!pid) return;
 		const prev = mediaState.activeScreenShareConsumers.value || [];
 		const filtered = prev.filter((s) => s.participantId !== pid);
@@ -297,29 +310,22 @@ const sfuConnection = useSFUConnection({
 			...filtered,
 			{
 				participantId: pid,
-				consumerId:
-					((
-						(data as Record<string, unknown>).consumer as Record<
-							string,
-							unknown
-						>
-					)?.id as string) || "remote-screen",
-				startedAt:
-					((data as Record<string, unknown>).startedAt as number) || Date.now(),
+				consumerId: data.consumer?.id || "remote-screen",
+				startedAt: data.startedAt || Date.now(),
 			},
 		];
-		if ((data as Record<string, unknown>).stream instanceof MediaStream) {
+		if (data.stream instanceof MediaStream) {
 			try {
 				const store = mediaState.screenShareStreams?.value || {};
-				store[pid] = (data as Record<string, unknown>).stream as MediaStream;
+				store[pid] = data.stream;
 				mediaState.screenShareStreams.value = store;
 			} catch (err) {
 				console.warn("Failed to store screen share stream:", err);
 			}
 		}
 	},
-	onScreenShareStopped: (data: Record<string, unknown>) => {
-		const pid = (data as Record<string, unknown>).participantId as string;
+	onScreenShareStopped: (data: SFUScreenShareData) => {
+		const pid = data.participantId;
 		const list = mediaState.activeScreenShareConsumers.value || [];
 		mediaState.activeScreenShareConsumers.value = list.filter(
 			(share) => share.participantId !== pid,
@@ -327,7 +333,7 @@ const sfuConnection = useSFUConnection({
 		const store = mediaState.screenShareStreams?.value || {};
 		if (pid && store[pid]) {
 			const stream = store[pid];
-			const tracks = (stream as MediaStream)?.getTracks?.();
+			const tracks = stream.getTracks();
 			if (tracks) {
 				for (const t of tracks) {
 					t.stop();
@@ -348,6 +354,7 @@ const mediaControls = useMediaControls({
 	connectionState,
 	raiseHandStore,
 	currentUser,
+	sfuClient: sfuConnection.sfuClient,
 	sfuManager: sfuConnection.sfuManager,
 	deviceManager,
 	backgroundEffects,
@@ -377,18 +384,21 @@ const mediaControls = useMediaControls({
 const chat = useChat({
 	chatStore,
 	currentUser,
+	sfuClient: sfuConnection.sfuClient,
 });
 
 // --- Reactions ---
 const reactions = useReactions({
 	reactionStore,
 	currentUser,
+	sfuClient: sfuConnection.sfuClient,
 });
 
 // --- Raise Hand ---
 const raiseHand = useRaiseHand({
 	raiseHandStore,
 	currentUser,
+	sfuClient: sfuConnection.sfuClient,
 });
 
 // --- Lobby ---
@@ -413,30 +423,20 @@ provideMeetingContext({
 	currentUser,
 	chatStore,
 	gridLayout,
-	sfuManager: sfuConnection.sfuManager,
+	raiseHandStore,
+	reactionStore,
+	lobbyStore,
+	sfuManager: sfuConnection.sfuManager.value,
 	processedStream: mediaState.processedStream,
 	isInMeeting: computed(() => true),
 	onBackgroundEffectsChanged: mediaControls.applyBackgroundEffectsToLocalStream,
 });
 
-// Provide backward-compatible strings for legacy inject calls
+// Provide legacy injects for components not yet migrated to useMeetingContext
 provide("setLocalVideoRef", mediaControls.setLocalVideoRef);
 provide("setRemoteVideoRef", mediaControls.setRemoteVideoRef);
 provide("setScreenShareVideoRef", mediaControls.setScreenShareVideoRef);
 provide("getParticipantName", participantStore.getParticipantName);
-provide("meetingState", {
-	...connectionState,
-	...mediaState,
-	...participantStore,
-	...chatStore,
-	...lobbyStore,
-	...reactionStore,
-	...raiseHandStore,
-	...gridLayout,
-	currentUser: currentUser.currentUser,
-	userInitials: currentUser.userInitials,
-	userAvatar: currentUser.userAvatar,
-});
 provide("meetingId", meetingId.value);
 provide("sfuManager", sfuConnection.sfuManager);
 provide("socket", useSocket());
@@ -511,9 +511,7 @@ const panelWidth = computed(() => {
 });
 
 const isHandRaised = computed(() => {
-	const currentUserId = (
-		currentUser.currentUser.value as Record<string, unknown>
-	)?.user_id as string;
+	const currentUserId = currentUser.currentUser.value?.user_id as string;
 	return currentUserId
 		? !!raiseHandStore.raisedHands.value?.[currentUserId]
 		: false;
@@ -572,12 +570,6 @@ const leaveWaitingRoom = () => {
 };
 
 const leaveLobby = async () => {
-	const sfuClient = getSFUClient();
-	if (sfuClient?.isInLobby?.()) {
-		await sfuClient.leaveLobby();
-		sfuClient.disconnect();
-	}
-
 	lobbyStore.isInLobby.value = false;
 	lobbyStore.isWaitingForApproval.value = false;
 	lobbyStore.lobbyParticipantCount.value = 0;
@@ -690,7 +682,7 @@ const handlePromoteToCohost = async (participantId: string) => {
 			},
 		});
 
-		if ((response as Record<string, unknown>)?.meeting_id) {
+		if ((response as { meeting_id?: string })?.meeting_id) {
 			toast.success("User promoted to co-host");
 			await meetingDoc.reload();
 		}
@@ -790,6 +782,7 @@ const handleReportProblem = async () => {
 		networkQuality: connectionState.networkQuality?.value,
 		localStream: mediaState.localStream.value,
 		transportManager: sfuConnection.sfuManager.value?.transportManager || null,
+		sfuClient: sfuConnection.sfuClient,
 	});
 };
 
@@ -880,7 +873,7 @@ onMounted(async () => {
 				},
 			});
 
-			if (!(accessData as Record<string, unknown>).allow_guest) {
+			if (!(accessData as { allow_guest?: boolean }).allow_guest) {
 				router.push({
 					name: "Login",
 					query: { next: `/${meetingId.value}` },

@@ -20,7 +20,7 @@ import { initSocket } from "./socket";
 import "./index.css";
 import { loadMediaPreferences } from "./data/mediaPreferences";
 import { getPlatform } from "./utils/device";
-import { installConsoleBuffer } from "./utils/diagnostics/consoleBuffer.ts";
+import { installConsoleBuffer } from "./utils/diagnostics/consoleBuffer";
 
 const globalComponents = {
 	Button,
@@ -45,8 +45,8 @@ const socket = initSocket();
 app.config.globalProperties.$socket = socket;
 app.config.globalProperties.$platform = getPlatform();
 
-for (const key in globalComponents) {
-	app.component(key, globalComponents[key]);
+for (const [key, component] of Object.entries(globalComponents)) {
+	app.component(key, component);
 }
 
 loadMediaPreferences();

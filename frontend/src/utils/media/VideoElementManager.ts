@@ -5,21 +5,32 @@
  */
 import { selectedSpeakerId } from "../../data/mediaPreferences";
 
+interface DeferredAttachment {
+	stream: MediaStream;
+	isLocal: boolean;
+}
+
 export class VideoElementManager {
+	videoElements: Map<string, HTMLVideoElement>;
+	audioElements: Map<string, HTMLAudioElement>;
+	deferredAttachments: Map<string, DeferredAttachment>;
+
 	constructor() {
 		this.videoElements = new Map();
 		this.audioElements = new Map();
 		this.deferredAttachments = new Map();
 	}
 
-	registerVideoElement(participantId, element) {
+	registerVideoElement(participantId: string, element: HTMLElement): void {
 		if (!element || !participantId) return;
 
+		const videoEl = element as HTMLVideoElement;
 		const previousElement = this.videoElements.get(participantId);
-		const previousVideoStream = previousElement?.srcObject;
+		const previousVideoStream =
+			previousElement?.srcObject as MediaStream | null;
 
 		// Only update srcObject if element doesn't have one, or if we're re-registering with a different track
-		if (previousVideoStream && !element.srcObject) {
+		if (previousVideoStream && !videoEl.srcObject) {
 			console.log("Preserving stream during video element re-registration", {
 				participantId,
 				streamId: previousVideoStream.id,
@@ -29,29 +40,37 @@ export class VideoElementManager {
 			const videoTracks = previousVideoStream.getVideoTracks();
 			if (videoTracks.length > 0) {
 				const previousVideoTrack = videoTracks[0];
-				const existingVideoTrack = element.srcObject?.getVideoTracks?.()?.[0];
+				const existingVideoTrack = (
+					videoEl.srcObject as MediaStream
+				)?.getVideoTracks?.()?.[0];
 				const videoTrackChanged =
 					!existingVideoTrack ||
 					existingVideoTrack.id !== previousVideoTrack.id;
 
-				if (!element.srcObject || videoTrackChanged) {
-					element.srcObject = new MediaStream(videoTracks);
+				if (!videoEl.srcObject || videoTrackChanged) {
+					videoEl.srcObject = new MediaStream(videoTracks);
 				}
 			}
 			// we have a separate audio element for audio playback
-			element.muted = true;
+			videoEl.muted = true;
 		}
 
-		this.videoElements.set(participantId, element);
+		this.videoElements.set(participantId, videoEl);
 
 		if (this.deferredAttachments.has(participantId)) {
-			const { stream, isLocal } = this.deferredAttachments.get(participantId);
+			const { stream, isLocal } = this.deferredAttachments.get(
+				participantId,
+			) as DeferredAttachment;
 			this.attachStream(participantId, stream, isLocal);
 			this.deferredAttachments.delete(participantId);
 		}
 	}
 
-	async attachStream(participantId, stream, isLocal = false) {
+	async attachStream(
+		participantId: string,
+		stream: MediaStream,
+		isLocal = false,
+	): Promise<void> {
 		const videoElement = this.videoElements.get(participantId);
 		const audioTracks = stream.getAudioTracks();
 
@@ -72,8 +91,9 @@ export class VideoElementManager {
 
 			if (videoTracks.length > 0) {
 				const newVideoTrack = videoTracks[0];
-				const existingVideoTrack =
-					videoElement.srcObject?.getVideoTracks?.()?.[0];
+				const existingVideoTrack = (
+					videoElement.srcObject as MediaStream | null
+				)?.getVideoTracks?.()?.[0];
 				const videoTrackChanged =
 					!existingVideoTrack || existingVideoTrack.id !== newVideoTrack.id;
 
@@ -102,23 +122,32 @@ export class VideoElementManager {
 		}
 	}
 
-	attachAudioStream(participantId, audioTracks) {
+	attachAudioStream(
+		participantId: string,
+		audioTracks: MediaStreamTrack[],
+	): void {
 		let audioElement = this.audioElements.get(participantId);
 
 		if (!audioElement) {
 			audioElement = document.createElement("audio");
 			audioElement.autoplay = true;
-			audioElement.playsinline = true;
+			audioElement.setAttribute("playsinline", "");
 			audioElement.style.display = "none";
 			document.body.appendChild(audioElement);
 
 			if (selectedSpeakerId.value) {
-				audioElement.setSinkId(selectedSpeakerId.value).catch((err) => {
-					console.warn(
-						`Failed to set initial speaker for ${participantId}:`,
-						err,
-					);
-				});
+				(
+					audioElement as HTMLAudioElement & {
+						setSinkId?: (id: string) => Promise<void>;
+					}
+				)
+					.setSinkId?.(selectedSpeakerId.value)
+					.catch((err: Error) => {
+						console.warn(
+							`Failed to set initial speaker for ${participantId}:`,
+							err,
+						);
+					});
 			}
 
 			this.audioElements.set(participantId, audioElement);
@@ -126,7 +155,9 @@ export class VideoElementManager {
 		}
 
 		const newAudioTrack = audioTracks[0];
-		const existingAudioTrack = audioElement.srcObject?.getAudioTracks?.()?.[0];
+		const existingAudioTrack = (
+			audioElement.srcObject as MediaStream | null
+		)?.getAudioTracks?.()?.[0];
 		const audioTrackChanged =
 			!existingAudioTrack || existingAudioTrack.id !== newAudioTrack.id;
 
@@ -135,7 +166,7 @@ export class VideoElementManager {
 			audioElement.srcObject = audioStream;
 
 			// Try to play audio
-			audioElement.play().catch((err) => {
+			audioElement.play().catch((err: Error) => {
 				console.warn(
 					`Audio autoplay failed for ${participantId}:`,
 					err.message,
@@ -144,24 +175,33 @@ export class VideoElementManager {
 		}
 	}
 
-	async playVideo(element, participantId) {
+	async playVideo(
+		element: HTMLVideoElement,
+		participantId: string,
+	): Promise<boolean> {
 		try {
 			await element.play();
 			return true;
 		} catch (error) {
-			if (error.name === "NotAllowedError") {
+			if ((error as DOMException).name === "NotAllowedError") {
 				console.warn(
 					`Autoplay blocked for ${participantId}, will play on user interaction`,
 				);
 				this.addUserInteractionHandler(element, participantId);
 			} else {
-				console.warn(`Video play failed for ${participantId}:`, error.message);
+				console.warn(
+					`Video play failed for ${participantId}:`,
+					(error as Error).message,
+				);
 			}
 			return false;
 		}
 	}
 
-	addUserInteractionHandler(element, participantId) {
+	addUserInteractionHandler(
+		element: HTMLVideoElement,
+		participantId: string,
+	): void {
 		const playOnInteraction = async () => {
 			try {
 				await element.play();
@@ -171,7 +211,7 @@ export class VideoElementManager {
 			} catch (error) {
 				console.warn(
 					`Unable to play video for ${participantId}:`,
-					error.message,
+					(error as Error).message,
 				);
 			}
 		};
@@ -180,12 +220,12 @@ export class VideoElementManager {
 		document.addEventListener("touchstart", playOnInteraction, { once: true });
 	}
 
-	removeVideoElement(participantId) {
+	removeVideoElement(participantId: string): void {
 		const element = this.videoElements.get(participantId);
 		let hadStream = false;
 		if (element?.srcObject) {
 			hadStream = true;
-			for (const track of element.srcObject.getTracks()) {
+			for (const track of (element.srcObject as MediaStream).getTracks()) {
 				track.stop();
 			}
 			element.srcObject = null;
@@ -194,7 +234,9 @@ export class VideoElementManager {
 		const audioElement = this.audioElements.get(participantId);
 		if (audioElement) {
 			if (audioElement.srcObject) {
-				for (const track of audioElement.srcObject.getTracks()) {
+				for (const track of (
+					audioElement.srcObject as MediaStream
+				).getTracks()) {
 					track.stop();
 				}
 				audioElement.srcObject = null;
@@ -213,10 +255,10 @@ export class VideoElementManager {
 		});
 	}
 
-	cleanup() {
+	cleanup(): void {
 		for (const [_participantId, element] of this.videoElements.entries()) {
 			if (element?.srcObject) {
-				for (const track of element.srcObject.getTracks()) {
+				for (const track of (element.srcObject as MediaStream).getTracks()) {
 					track.stop();
 				}
 				element.srcObject = null;
@@ -225,7 +267,9 @@ export class VideoElementManager {
 
 		for (const [_participantId, audioElement] of this.audioElements.entries()) {
 			if (audioElement?.srcObject) {
-				for (const track of audioElement.srcObject.getTracks()) {
+				for (const track of (
+					audioElement.srcObject as MediaStream
+				).getTracks()) {
 					track.stop();
 				}
 				audioElement.srcObject = null;

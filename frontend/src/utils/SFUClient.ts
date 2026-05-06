@@ -2,13 +2,108 @@
 // For license information, please see license.txt
 
 import { frappeRequest } from "frappe-ui";
-import { io } from "socket.io-client";
-
 import { normalizeCodecStrategy } from "./media/codecStrategy";
+import type { SignalChannel } from "./media/SignalChannel";
 
-class SFUClient {
-	constructor() {
-		this.socket = null;
+interface ConnectionDetails {
+	authToken: string | null;
+	meetingId: string | null;
+	userId: string | null;
+	sfuUrl: string | null;
+	sfuPort: string | null;
+	tokenExpiresAt: number | null;
+	codecStrategy: string;
+	userData?: Record<string, unknown>;
+}
+
+interface ConnectionStatus {
+	connected: boolean;
+	meetingId: string | null;
+	userId: string | null;
+	socketId: string | null;
+}
+
+interface SFUResponse {
+	success: boolean;
+	error?: string;
+	[key: string]: unknown;
+}
+
+interface SFUConnectionDetailsResponse {
+	sfu_url: string;
+	sfu_port: string;
+	auth_token: string;
+	user_id: string;
+	meeting_id: string;
+	user_data: Record<string, unknown>;
+	expires_in: number;
+	codec_strategy: string;
+}
+
+interface SFUGuestConnectionDetailsResponse {
+	sfu_url: string;
+	sfu_port: string;
+	codec_strategy: string;
+}
+
+interface SFUTokenRefreshResponse {
+	auth_token: string;
+	expires_in: number;
+	codec_strategy: string;
+}
+
+interface SFURouterCapabilitiesResponse {
+	rtpCapabilities: unknown;
+	[key: string]: unknown;
+}
+
+interface SFUWebRtcTransportResponse {
+	id: string;
+	iceParameters: unknown;
+	iceCandidates: unknown;
+	dtlsParameters: unknown;
+	[key: string]: unknown;
+}
+
+interface SFUProducerResponse {
+	id: string;
+	[key: string]: unknown;
+}
+
+interface SFUConsumerResponse {
+	id: string;
+	producerId: string;
+	kind: string;
+	rtpParameters: unknown;
+	isScreen?: boolean;
+	appData?: {
+		type?: string;
+	};
+	[key: string]: unknown;
+}
+
+interface SFUProducersResponse {
+	producers: unknown[];
+	[key: string]: unknown;
+}
+
+interface SFUParticipantsResponse {
+	participants: unknown[];
+	[key: string]: unknown;
+}
+
+type SFUEventHandler = (...args: unknown[]) => void;
+
+export class SFUClient {
+	signalChannel: SignalChannel;
+	connected: boolean;
+	connectionDetails: ConnectionDetails;
+	eventHandlers: Map<string, SFUEventHandler>;
+	isRefreshingToken: boolean;
+	tokenRefreshTimer: ReturnType<typeof setTimeout> | null;
+
+	constructor(signalChannel: SignalChannel) {
+		this.signalChannel = signalChannel;
 		this.connected = false;
 		this.connectionDetails = {
 			authToken: null,
@@ -27,7 +122,10 @@ class SFUClient {
 
 	// ==================== CONNECTION MANAGEMENT ====================
 
-	async connect(meetingId, guestAuthToken = null) {
+	async connect(
+		meetingId: string,
+		guestAuthToken: string | null = null,
+	): Promise<boolean> {
 		if (this.connected) {
 			return true;
 		}
@@ -40,7 +138,15 @@ class SFUClient {
 			this.connectionDetails = connectionDetails;
 			this.scheduleTokenRefresh();
 
-			await this.establishSocketConnection();
+			const { origin, socketPath } = this.getSFUEndpoint();
+			await this.signalChannel.connect({
+				origin,
+				path: socketPath,
+				auth: { token: connectionDetails.authToken ?? "" },
+			});
+
+			this.connected = true;
+			this.registerEventHandlers();
 
 			return true;
 		} catch (error) {
@@ -49,9 +155,10 @@ class SFUClient {
 		}
 	}
 
-	async getConnectionDetails(meetingId, guestAuthToken = null) {
-		let response;
-
+	async getConnectionDetails(
+		meetingId: string,
+		guestAuthToken: string | null = null,
+	): Promise<ConnectionDetails> {
 		if (guestAuthToken) {
 			const guestId = sessionStorage.getItem("guest_id");
 			const guestName = sessionStorage.getItem("guest_name");
@@ -62,66 +169,60 @@ class SFUClient {
 			}
 
 			try {
-				response = await frappeRequest({
+				const response = (await frappeRequest({
 					url: "meet.api.meeting.get_guest_sfu_connection_details",
 					params: {
 						meeting_id: meetingId,
 						guest_token: guestAuthToken,
 					},
-				});
+				})) as SFUGuestConnectionDetailsResponse;
+
+				return {
+					authToken: guestAuthToken,
+					meetingId: meetingId,
+					userId: guestId,
+					sfuUrl: response.sfu_url,
+					sfuPort: response.sfu_port,
+					userData: {
+						name: guestName,
+						is_guest: true,
+					},
+					tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
+					codecStrategy: response.codec_strategy || "svc",
+				};
 			} catch (error) {
 				console.error("Failed to get guest SFU connection details:", error);
 				throw error;
 			}
-
-			return {
-				authToken: guestAuthToken,
-				meetingId: meetingId,
-				userId: guestId,
-				sfuUrl: response.sfu_url,
-				sfuPort: response.sfu_port,
-				userData: {
-					name: guestName,
-					is_guest: true,
-				},
-				tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-				codecStrategy: response.codec_strategy || "svc",
-			};
 		}
 
-		response = await frappeRequest({
+		const response = (await frappeRequest({
 			url: "meet.api.meeting.get_sfu_connection_details",
 			params: { meeting_id: meetingId },
-		});
+		})) as SFUConnectionDetailsResponse;
 
-		const {
-			sfu_url,
-			sfu_port,
-			auth_token,
-			user_id,
-			meeting_id,
-			user_data,
-			expires_in,
-			codec_strategy,
-		} = response;
-
-		const expiresInSeconds = typeof expires_in === "number" ? expires_in : 3600;
+		const expiresInSeconds =
+			typeof response.expires_in === "number" ? response.expires_in : 3600;
 		const tokenExpiresAt = Date.now() + expiresInSeconds * 1000;
 
 		return {
-			authToken: auth_token,
-			meetingId: meeting_id,
-			userId: user_id,
-			sfuUrl: sfu_url,
-			sfuPort: sfu_port,
-			userData: user_data,
+			authToken: response.auth_token,
+			meetingId: response.meeting_id,
+			userId: response.user_id,
+			sfuUrl: response.sfu_url,
+			sfuPort: response.sfu_port,
+			userData: response.user_data,
 			tokenExpiresAt,
-			codecStrategy: normalizeCodecStrategy(codec_strategy),
+			codecStrategy: normalizeCodecStrategy(response.codec_strategy),
 		};
 	}
 
-	getSFUEndpoint() {
+	getSFUEndpoint(): { origin: string; socketPath: string } {
 		const { sfuUrl, sfuPort } = this.connectionDetails;
+
+		if (!sfuUrl) {
+			throw new Error("SFU URL not configured");
+		}
 
 		const urlObj = new URL(sfuUrl);
 		const isSecured = urlObj.protocol === "https:";
@@ -138,89 +239,8 @@ class SFUClient {
 		return { origin, socketPath };
 	}
 
-	async establishSocketConnection() {
-		const { origin, socketPath } = this.getSFUEndpoint();
-		const { authToken } = this.connectionDetails;
-
-		this.socket = io(origin, {
-			path: socketPath,
-			auth: { token: authToken },
-			reconnection: true,
-			reconnectionAttempts: 5,
-			reconnectionDelay: 1000,
-			upgrade: true,
-			reconnectionDelayMax: 5000,
-			transports: ["websocket", "polling"],
-			timeout: 20000,
-			forceNew: true,
-			withCredentials: false,
-		});
-
-		this.registerEventHandlers();
-
-		return new Promise((resolve, reject) => {
-			this.socket.on("connect", () => {
-				this.connected = true;
-				resolve();
-			});
-
-			this.socket.on("connect_error", (error) => {
-				console.error("Socket connection failed:", {
-					message: error.message,
-					description: error.description,
-					context: error.context,
-					type: error.type,
-					endpoint: origin,
-					path: socketPath,
-				});
-				this.connected = false;
-				reject(new Error(`SFU connection failed: ${error.message || error}`));
-			});
-
-			this.socket.on("disconnect", () => {
-				this.connected = false;
-			});
-
-			this.socket.on("reconnect_attempt", async (_attemptNumber) => {
-				if (this.isTokenExpiringSoon()) {
-					try {
-						const newToken = await this.refreshToken({
-							skipServerUpdate: true,
-						});
-						this.socket.auth.token = newToken;
-						console.log("Updated socket auth token for reconnection");
-					} catch (error) {
-						console.error(
-							"Failed to refresh token during reconnection:",
-							error,
-						);
-					}
-				}
-			});
-
-			this.socket.on("reconnect", (attemptNumber) => {
-				console.log(`SFU reconnected after ${attemptNumber} attempts`);
-				this.connected = true;
-			});
-
-			this.socket.on("reconnect_error", (error) => {
-				console.error("SFU reconnection failed:", error);
-			});
-
-			setTimeout(() => {
-				if (!this.connected) {
-					console.error("SFU connection timeout after 10 seconds");
-					reject(new Error("SFU connection timeout"));
-				}
-			}, 10000);
-		});
-	}
-
-	disconnect() {
-		if (this.socket) {
-			this.socket.disconnect();
-			this.socket = null;
-		}
+	disconnect(): void {
+		this.signalChannel.disconnect();
 		this.clearTokenRefreshTimer();
 		this.connected = false;
 		this.connectionDetails = {
@@ -237,14 +257,14 @@ class SFUClient {
 
 	// ==================== TOKEN MANAGEMENT ====================
 
-	clearTokenRefreshTimer() {
+	clearTokenRefreshTimer(): void {
 		if (this.tokenRefreshTimer) {
 			clearTimeout(this.tokenRefreshTimer);
 			this.tokenRefreshTimer = null;
 		}
 	}
 
-	scheduleTokenRefresh(bufferMs = 5 * 60 * 1000) {
+	scheduleTokenRefresh(bufferMs = 5 * 60 * 1000): void {
 		// 5 minutes before expiry
 		this.clearTokenRefreshTimer();
 
@@ -257,7 +277,7 @@ class SFUClient {
 		const delay = tokenExpiresAt - Date.now() - bufferMs;
 
 		if (delay <= 0) {
-			this.refreshToken().catch((error) => {
+			this.refreshToken().catch((error: unknown) => {
 				console.error("Immediate token refresh failed:", error);
 			});
 			return;
@@ -266,25 +286,27 @@ class SFUClient {
 		this.tokenRefreshTimer = setTimeout(async () => {
 			try {
 				await this.refreshToken();
-			} catch (error) {
+			} catch (error: unknown) {
 				console.error("Scheduled token refresh failed:", error);
 			}
 		}, delay);
 	}
 
-	async refreshToken(options = {}) {
+	async refreshToken(
+		options: { skipServerUpdate?: boolean } = {},
+	): Promise<string> {
 		const { skipServerUpdate = false } = options;
 		if (this.isRefreshingToken) {
-			return;
+			return "";
 		}
 
 		try {
 			this.isRefreshingToken = true;
 
-			const response = await frappeRequest({
+			const response = (await frappeRequest({
 				url: "meet.api.meeting.refresh_sfu_token",
 				params: { meeting_id: this.connectionDetails.meetingId },
-			});
+			})) as SFUTokenRefreshResponse;
 
 			const expiresInSeconds =
 				typeof response.expires_in === "number" ? response.expires_in : 3600;
@@ -296,28 +318,16 @@ class SFUClient {
 				response.codec_strategy || this.connectionDetails.codecStrategy,
 			);
 
-			if (this.socket) {
-				this.socket.auth = this.socket.auth || {};
-				this.socket.auth.token = response.auth_token;
-
-				if (this.socket.io?.opts) {
-					this.socket.io.opts.auth = {
-						...(this.socket.io.opts.auth || {}),
-						token: response.auth_token,
-					};
-				}
-			}
+			this.signalChannel.updateAuth(response.auth_token);
 
 			if (!skipServerUpdate && this.connected) {
 				await this.sendRequest("auth:update_token", {
 					token: response.auth_token,
 				});
-			} else {
-				if (!this.connected) {
-					console.log(
-						"Skipping server token sync because socket is disconnected",
-					);
-				}
+			} else if (!this.connected) {
+				console.log(
+					"Skipping server token sync because socket is disconnected",
+				);
 			}
 
 			this.scheduleTokenRefresh();
@@ -331,7 +341,7 @@ class SFUClient {
 		}
 	}
 
-	isTokenExpiringSoon() {
+	isTokenExpiringSoon(): boolean {
 		const { tokenExpiresAt, authToken } = this.connectionDetails;
 
 		if (tokenExpiresAt) {
@@ -343,12 +353,14 @@ class SFUClient {
 		}
 
 		try {
-			const payload = JSON.parse(atob(authToken.split(".")[1]));
+			const payload = JSON.parse(atob(authToken.split(".")[1])) as {
+				exp: number;
+			};
 			const expiryTime = payload.exp * 1000;
 			const timeUntilExpiry = expiryTime - Date.now();
 
 			return timeUntilExpiry < 5 * 60 * 1000;
-		} catch (error) {
+		} catch (error: unknown) {
 			console.warn("Could not check token expiry:", error);
 			return false;
 		}
@@ -356,24 +368,42 @@ class SFUClient {
 
 	// ==================== EVENT HANDLING ====================
 
-	setupDefaultHandlers() {
-		const defaultHandlers = {
+	setupDefaultHandlers(): void {
+		const defaultHandlers: Record<string, SFUEventHandler> = {
 			connect: () => {
 				this.connected = true;
 			},
 			disconnect: () => {
 				this.connected = false;
 			},
-			connect_error: (error) => {
+			connect_error: (error: unknown) => {
 				console.error("SFU connection error:", error);
 				this.connected = false;
 			},
-			reconnect: (attemptNumber) => {
+			reconnect: (attemptNumber: unknown) => {
 				console.log(`SFU reconnected after ${attemptNumber} attempts`);
 				this.connected = true;
 			},
-			reconnect_error: (error) => {
+			reconnect_error: (error: unknown) => {
 				console.error("SFU reconnection failed:", error);
+			},
+			reconnect_attempt: async () => {
+				if (this.isTokenExpiringSoon()) {
+					try {
+						const newToken = await this.refreshToken({
+							skipServerUpdate: true,
+						});
+						if (newToken) {
+							this.signalChannel.updateAuth(newToken);
+						}
+						console.log("Updated socket auth token for reconnection");
+					} catch (error: unknown) {
+						console.error(
+							"Failed to refresh token during reconnection:",
+							error,
+						);
+					}
+				}
 			},
 			participant_joined: () => {},
 			participant_left: () => {},
@@ -399,51 +429,55 @@ class SFUClient {
 		}
 	}
 
-	registerEventHandlers() {
-		if (!this.socket) return;
-
+	registerEventHandlers(): void {
 		for (const [event, handler] of this.eventHandlers.entries()) {
-			this.socket.on(event, handler);
+			this.signalChannel.on(event, handler);
 		}
 	}
 
-	on(event, handler) {
+	on(event: string, handler: SFUEventHandler): void {
 		this.eventHandlers.set(event, handler);
-		if (this.socket) {
-			this.socket.on(event, handler);
-		}
+		this.signalChannel.on(event, handler);
 	}
 
-	off(event) {
+	off(event: string): void {
 		const handler = this.eventHandlers.get(event);
-		if (handler && this.socket) {
-			this.socket.off(event, handler);
+		if (handler) {
+			this.signalChannel.off(event, handler);
 		}
 		this.eventHandlers.delete(event);
 	}
 
 	// ==================== WEBRTC OPERATIONS ====================
 
-	async getRouterRtpCapabilities() {
-		const resp = await this.sendRequest("get_router_rtp_capabilities", {});
+	async getRouterRtpCapabilities(): Promise<unknown> {
+		const resp = (await this.sendRequest(
+			"get_router_rtp_capabilities",
+			{},
+		)) as SFURouterCapabilitiesResponse;
 		try {
 			const payload = resp?.rtpCapabilities || resp;
 			return JSON.parse(JSON.stringify(payload));
-		} catch (err) {
+		} catch (err: unknown) {
 			console.warn("Failed to deep-clone router RTP capabilities:", err);
 			return resp?.rtpCapabilities || resp;
 		}
 	}
 
-	async createWebRtcTransport(direction) {
-		const response = await this.sendRequest("create_webrtc_transport", {
+	async createWebRtcTransport(direction: string): Promise<{
+		id: string;
+		iceParameters: unknown;
+		iceCandidates: unknown;
+		dtlsParameters: unknown;
+	}> {
+		const response = (await this.sendRequest("create_webrtc_transport", {
 			direction,
-		});
+		})) as SFUWebRtcTransportResponse;
 		try {
 			const clean = JSON.parse(JSON.stringify(response));
 			const { id, iceParameters, iceCandidates, dtlsParameters } = clean;
 			return { id, iceParameters, iceCandidates, dtlsParameters };
-		} catch (err) {
+		} catch (err: unknown) {
 			console.warn(
 				"Failed to deep-clone transport response, returning raw response",
 				err,
@@ -453,7 +487,10 @@ class SFUClient {
 		}
 	}
 
-	async connectWebRtcTransport(transportId, dtlsParameters) {
+	async connectWebRtcTransport(
+		transportId: string,
+		dtlsParameters: unknown,
+	): Promise<void> {
 		console.log(`Connecting transport ${transportId} to SFU...`);
 		console.log("DTLS Parameters:", dtlsParameters);
 
@@ -465,48 +502,67 @@ class SFUClient {
 		console.log(`Transport ${transportId} connected successfully`);
 	}
 
-	async restartWebRtcTransportIce(transportId) {
-		const response = await this.sendRequest("restart_webrtc_transport_ice", {
+	async restartWebRtcTransportIce(transportId: string): Promise<unknown> {
+		const response = (await this.sendRequest("restart_webrtc_transport_ice", {
 			transportId,
-		});
+		})) as Record<string, unknown>;
 		return response.iceParameters;
 	}
 
-	async createProducer(transportId, rtpParameters, kind, appData = {}) {
-		return this.sendRequest("create_producer", {
+	async createProducer(
+		transportId: string,
+		rtpParameters: unknown,
+		kind: string,
+		appData: unknown = {},
+	): Promise<SFUProducerResponse> {
+		return (await this.sendRequest("create_producer", {
 			transportId,
 			rtpParameters,
 			kind,
 			appData,
-		});
+		})) as SFUProducerResponse;
 	}
 
-	async createConsumer(transportId, producerId, rtpCapabilities) {
+	async createConsumer(
+		transportId: string,
+		producerId: string,
+		rtpCapabilities: unknown,
+	): Promise<SFUConsumerResponse> {
 		console.log(`Creating consumer for producer ${producerId} @ ${Date.now()}`);
-		return this.sendRequest("create_consumer", {
+		return (await this.sendRequest("create_consumer", {
 			transportId,
 			producerId,
 			rtpCapabilities,
-		});
+		})) as SFUConsumerResponse;
 	}
 
-	async closeProducer(producerId) {
+	async closeProducer(producerId: string): Promise<unknown> {
 		return this.sendRequest("close_producer", { producerId });
 	}
 
-	async pauseProducer(producerId) {
+	async pauseProducer(producerId: string): Promise<unknown> {
 		return this.sendRequest("pause_producer", { producerId });
 	}
 
-	async resumeProducer(producerId) {
+	async resumeProducer(producerId: string): Promise<unknown> {
 		return this.sendRequest("resume_producer", { producerId });
 	}
 
-	async closeConsumer(consumerId) {
+	async closeConsumer(consumerId: string): Promise<unknown> {
 		return this.sendRequest("close_consumer", { consumerId });
 	}
 
-	async updateConsumerPreferences({ consumerId, visible, width, height }) {
+	async updateConsumerPreferences({
+		consumerId,
+		visible,
+		width,
+		height,
+	}: {
+		consumerId: string;
+		visible: boolean;
+		width: number;
+		height: number;
+	}): Promise<unknown> {
 		return this.sendRequest("consumer:update_preferences", {
 			consumerId,
 			visible: Boolean(visible),
@@ -517,23 +573,30 @@ class SFUClient {
 
 	// ==================== ROOM OPERATIONS ====================
 
-	async getExistingProducers(roomId = null) {
+	async getExistingProducers(roomId: string | null = null): Promise<unknown[]> {
 		const requestData = roomId ? { roomId } : {};
-		const response = await this.sendRequest(
+		const response = (await this.sendRequest(
 			"get_existing_producers",
 			requestData,
-		);
-		return response.producers;
+		)) as Record<string, unknown>;
+		return (response.producers as unknown[]) || [];
 	}
 
-	async getRoomParticipants() {
-		const response = await this.sendRequest("get_room_participants", {});
-		return response.participants;
+	async getRoomParticipants(): Promise<unknown[]> {
+		const response = (await this.sendRequest(
+			"get_room_participants",
+			{},
+		)) as SFUParticipantsResponse;
+		return response.participants || [];
 	}
 
 	// ==================== ROOM MANAGEMENT ====================
 
-	async joinRoom(roomId, userData, mediaState) {
+	async joinRoom(
+		roomId: string,
+		userData: unknown,
+		mediaState: unknown,
+	): Promise<unknown> {
 		return this.sendRequest("join_room", {
 			roomId,
 			userData,
@@ -543,36 +606,36 @@ class SFUClient {
 
 	// ==================== SIGNALING OPERATIONS ====================
 
-	sendWebRtcOffer(targetUser, signalData) {
+	sendWebRtcOffer(targetUser: unknown, signalData: unknown): void {
 		this.sendEvent("webrtc_offer", { targetUser, signalData });
 	}
 
-	sendWebRtcAnswer(targetUser, signalData) {
+	sendWebRtcAnswer(targetUser: unknown, signalData: unknown): void {
 		this.sendEvent("webrtc_answer", { targetUser, signalData });
 	}
 
-	sendIceCandidate(targetUser, signalData) {
+	sendIceCandidate(targetUser: unknown, signalData: unknown): void {
 		this.sendEvent("ice_candidate", { targetUser, signalData });
 	}
 
 	// ==================== MEDIA CONTROL ====================
 
-	sendMediaControl(action) {
+	sendMediaControl(action: unknown): void {
 		this.sendEvent("media_control", { action });
 	}
 
-	sendScreenShare(action, shareData = {}) {
+	sendScreenShare(action: unknown, shareData: unknown = {}): void {
 		this.sendEvent("screen_share", { action, shareData });
 	}
 
 	// ==================== CHAT OPERATIONS ====================
 
-	sendChatMessage(message, options = {}) {
+	sendChatMessage(message: string, options: { clientId?: unknown } = {}): void {
 		if (!this.connected) {
 			throw new Error("Not connected to SFU");
 		}
 
-		const payload = { message: String(message || "") };
+		const payload: Record<string, string> = { message: String(message || "") };
 		if (options.clientId) {
 			payload.clientId = String(options.clientId);
 		}
@@ -582,7 +645,7 @@ class SFUClient {
 
 	// ==================== REACTION OPERATIONS ====================
 
-	sendReaction(reactionType) {
+	sendReaction(reactionType: string): void {
 		if (!this.connected) {
 			throw new Error("Not connected to SFU");
 		}
@@ -590,32 +653,38 @@ class SFUClient {
 		this.sendEvent("reaction:send", { reaction: reactionType });
 	}
 
-	sendRaiseHand(raised) {
+	sendRaiseHand(raised: boolean): Promise<unknown> {
 		if (!this.connected) {
 			throw new Error("Not connected to SFU");
 		}
 
 		return new Promise((resolve, reject) => {
-			this.socket.emit("raise_hand", { raised }, (response) => {
-				if (response?.success) {
-					resolve(response);
-				} else {
-					reject(new Error(response?.error || "Failed to raise hand"));
-				}
-			});
+			this.signalChannel.emit(
+				"raise_hand",
+				{ raised },
+				(response: Record<string, unknown>) => {
+					if (response?.success) {
+						resolve(response);
+					} else {
+						reject(
+							new Error((response?.error as string) || "Failed to raise hand"),
+						);
+					}
+				},
+			);
 		});
 	}
 
 	// ==================== UTILITY METHODS ====================
 
-	async sendRequest(event, data) {
+	async sendRequest(event: string, data: unknown): Promise<unknown> {
 		return new Promise((resolve, reject) => {
 			if (!this.connected) {
 				reject(new Error("Not connected to SFU"));
 				return;
 			}
 
-			this.socket.emit(event, data, (response) => {
+			this.signalChannel.emit(event, data, (response: SFUResponse) => {
 				if (response.success) {
 					resolve(response);
 				} else {
@@ -627,44 +696,35 @@ class SFUClient {
 		});
 	}
 
-	sendEvent(event, data) {
+	sendEvent(event: string, data: unknown): void {
 		if (!this.connected) {
 			throw new Error("Not connected to SFU");
 		}
-		this.socket.emit(event, data);
+		this.signalChannel.emit(event, data);
 	}
 
-	isConnected() {
+	isConnected(): boolean {
 		return this.connected;
 	}
 
-	getMeetingId() {
+	getMeetingId(): string | null {
 		return this.connectionDetails.meetingId;
 	}
 
-	getUserId() {
+	getUserId(): string | null {
 		return this.connectionDetails.userId;
 	}
 
-	getCodecStrategy() {
+	getCodecStrategy(): string {
 		return this.connectionDetails.codecStrategy || "svc";
 	}
 
-	getConnectionStatus() {
+	getConnectionStatus(): ConnectionStatus {
 		return {
 			connected: this.connected,
 			meetingId: this.connectionDetails.meetingId,
 			userId: this.connectionDetails.userId,
-			socketId: this.socket?.id || null,
+			socketId: this.signalChannel.id(),
 		};
 	}
-}
-
-let sfuClient = null;
-
-export function getSFUClient() {
-	if (!sfuClient) {
-		sfuClient = new SFUClient();
-	}
-	return sfuClient;
 }

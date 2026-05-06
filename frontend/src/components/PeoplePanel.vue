@@ -78,16 +78,14 @@
 
 <script setup lang="ts">
 import { FormControl } from "frappe-ui";
-import { computed, inject, ref } from "vue";
-import type { Participant } from "../types";
-import { getInitials } from "../utils/text.ts";
+import { computed, ref } from "vue";
+import { useMeetingContext } from "../composables/useMeetingContext";
+import type { Participant } from "../utils/media/ParticipantManager";
+import { getInitials } from "../utils/text";
 import PeopleParticipantTile from "./PeopleParticipantTile.vue";
 import PeopleWaitingSection from "./PeopleWaitingSection.vue";
 
-const meetingState = inject("meetingState") as {
-	raisedHands?: { value: Record<string, string> };
-	lobbyUsers?: { value: Array<LobbyUser> };
-};
+const meetingCtx = useMeetingContext();
 
 interface LobbyUser {
 	userId: string;
@@ -154,7 +152,7 @@ const lobbyUsers = computed(() => {
 	if (props.lobbyUsers !== undefined) {
 		return props.lobbyUsers;
 	}
-	return meetingState?.lobbyUsers?.value || [];
+	return meetingCtx?.lobbyStore.lobbyUsers.value || [];
 });
 
 const filteredLobbyUsers = computed(() => {
@@ -170,7 +168,7 @@ const filteredLobbyUsers = computed(() => {
 });
 
 const participantsList = computed(() => {
-	const raisedHands = meetingState?.raisedHands?.value || {};
+	const raisedHands = meetingCtx?.raiseHandStore.raisedHands.value || {};
 
 	return Object.values(props.participants).sort((a, b) => {
 		// 1. Raised hands first

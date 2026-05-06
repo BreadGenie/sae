@@ -1,4 +1,5 @@
 import { frappeRequest, toast } from "frappe-ui";
+import { getErrorMessage } from "../utils/error";
 import type { LobbyStore } from "./useLobbyStore";
 
 interface LobbyAPI {
@@ -26,11 +27,7 @@ export function useLobby(deps: {
 			lobbyStore.removeLobbyUser(userId);
 		} catch (error) {
 			console.error("Failed to approve user:", error);
-			toast.error(
-				(error as Record<string, unknown>)?.messages
-					? ((error as Record<string, unknown>).messages as string[]).join(", ")
-					: (error as Error).message || "Failed to approve user",
-			);
+			toast.error(getErrorMessage(error));
 		}
 	};
 
@@ -46,11 +43,7 @@ export function useLobby(deps: {
 			lobbyStore.setLobbyUsers([]);
 		} catch (error) {
 			console.error("Failed to approve all users:", error);
-			toast.error(
-				(error as Record<string, unknown>)?.messages
-					? ((error as Record<string, unknown>).messages as string[]).join(", ")
-					: (error as Error).message || "Failed to approve all users",
-			);
+			toast.error(getErrorMessage(error));
 		}
 	};
 
@@ -67,11 +60,7 @@ export function useLobby(deps: {
 			lobbyStore.removeLobbyUser(userId);
 		} catch (error) {
 			console.error("Failed to reject user:", error);
-			toast.error(
-				(error as Record<string, unknown>)?.messages
-					? ((error as Record<string, unknown>).messages as string[]).join(", ")
-					: (error as Error).message || "Failed to reject user",
-			);
+			toast.error(getErrorMessage(error));
 		}
 	};
 

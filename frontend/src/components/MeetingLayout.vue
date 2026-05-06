@@ -83,6 +83,7 @@
 <script setup>
 import { computed, inject, ref, watch } from "vue";
 import { useLayout } from "../composables/useLayout";
+import { useMeetingContext } from "../composables/useMeetingContext";
 import { usePinnedTileAnimation } from "../composables/usePinnedTileAnimation";
 import { useScreenShareTiles } from "../composables/useScreenShareTiles";
 import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
@@ -93,7 +94,7 @@ import ParticipantTile from "./ParticipantTile.vue";
 
 const emit = defineEmits(["openPeoplePanel"]);
 
-const meetingState = inject("meetingState");
+const meetingCtx = useMeetingContext();
 const setLocalVideoRef = inject("setLocalVideoRef");
 const setRemoteVideoRef = inject("setRemoteVideoRef");
 const setScreenShareVideoRef = inject("setScreenShareVideoRef");
@@ -116,16 +117,20 @@ const getRemoteVideoRef = (participantId) => {
 	return videoRefHandlers.get(participantId);
 };
 
-// ── Reactive state from meetingState ──────────────────────────────────────────
+// ── Reactive state from meeting context ───────────────────────────────────────
 
-const participants = computed(() => meetingState.participants.value);
-const currentUser = computed(() => meetingState.currentUser.value);
-const isCameraOn = computed(() => meetingState.isCameraOn.value);
-const isMicOn = computed(() => meetingState.isMicOn.value);
-const activeSpeakerIds = computed(() => meetingState.activeSpeakerIds.value);
-const pinnedTile = computed(() => meetingState.pinnedTile.value);
+const participants = computed(
+	() => meetingCtx.participantStore.participants.value,
+);
+const currentUser = computed(() => meetingCtx.currentUser.currentUser.value);
+const isCameraOn = computed(() => meetingCtx.mediaState.isCameraOn.value);
+const isMicOn = computed(() => meetingCtx.mediaState.isMicOn.value);
+const activeSpeakerIds = computed(
+	() => meetingCtx.participantStore.activeSpeakerIds.value,
+);
+const pinnedTile = computed(() => meetingCtx.gridLayout.pinnedTile.value);
 const displayScreenShares = computed(
-	() => meetingState.displayScreenShares.value,
+	() => meetingCtx.gridLayout.displayScreenShares.value,
 );
 
 // ── Pinned area data ──────────────────────────────────────────────────────────
@@ -138,7 +143,7 @@ watch(
 	},
 	(participant) => {
 		if (pinnedTile.value?.type === "participant" && !participant) {
-			meetingState.unpinTile();
+			meetingCtx.gridLayout.unpinTile();
 		}
 	},
 );
@@ -155,7 +160,7 @@ const { screenShareTiles: allScreenShareTiles } = useScreenShareTiles({
 	displayScreenShares,
 	pinnedTile,
 	currentUser,
-	meetingState,
+	gridLayout: meetingCtx.gridLayout,
 	getParticipantName,
 });
 
@@ -257,7 +262,16 @@ const {
 	allParticipants,
 	visibleTileCount,
 	hiddenParticipantsTooltip,
-} = useLayout(participants, pinnedTile, meetingState, extraTileCount);
+} = useLayout(
+	participants,
+	pinnedTile,
+	{
+		raisedHands: meetingCtx.raiseHandStore.raisedHands,
+		activeSpeakerIds: meetingCtx.participantStore.activeSpeakerIds,
+		stableSpeakerIds: meetingCtx.participantStore.stableSpeakerIds,
+	},
+	extraTileCount,
+);
 
 const { isFlipAnimating, pinnedTileStyle } = usePinnedTileAnimation({
 	container,
@@ -272,7 +286,7 @@ const { isFlipAnimating, pinnedTileStyle } = usePinnedTileAnimation({
 //   which shows reactions, main screen area doesn't)
 
 const floatingReactions = computed(() => {
-	const reactions = meetingState.reactions?.value || {};
+	const reactions = meetingCtx.reactionStore.reactions.value;
 	const currentUserId = currentUser.value?.user_id;
 
 	let sourceIds;

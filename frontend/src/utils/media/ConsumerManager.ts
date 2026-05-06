@@ -3,40 +3,82 @@
  * Handles MediaSoup consumer lifecycle and stream management
  */
 
+import type { Consumer } from "mediasoup-client/types";
+
+export interface ConsumerEntry {
+	id: string;
+	participantId: string;
+	kind: string;
+	isScreen: boolean;
+	track?: MediaStreamTrack;
+	appData?: Record<string, unknown>;
+	createdAt: number;
+	consumer: Consumer;
+	close?: () => void;
+	pause?: () => void;
+	resume?: () => void;
+}
+
+interface ConsumerEventHandlers {
+	onConsumerAdded?: (entry: ConsumerEntry) => void;
+	onConsumerRemoved?: (consumerId: string, consumer: ConsumerEntry) => void;
+	onConsumerUpdated?: (
+		consumerId: string,
+		updatedConsumer: ConsumerEntry,
+		updates: Record<string, unknown>,
+	) => void;
+	onAllConsumersCleared?: (consumerIds: string[]) => void;
+}
+
+interface ConsumerStats {
+	total: number;
+	video: number;
+	audio: number;
+	screenShare: number;
+	byParticipant: Record<
+		string,
+		{ video: number; audio: number; screen: number }
+	>;
+}
+
 export class ConsumerManager {
+	consumers: Map<string, ConsumerEntry>;
+	eventHandlers: ConsumerEventHandlers;
+
 	constructor() {
 		this.consumers = new Map();
 		this.eventHandlers = {};
 	}
 
-	setEventHandlers(handlers) {
+	setEventHandlers(handlers: ConsumerEventHandlers): void {
 		this.eventHandlers = { ...this.eventHandlers, ...handlers };
 	}
 
-	addConsumer(consumer, participantIdOverride = null) {
+	addConsumer(
+		consumer: Consumer,
+		participantIdOverride: string | null = null,
+	): ConsumerEntry | false {
 		if (!consumer?.id) {
 			console.error("Invalid consumer provided");
 			return false;
 		}
 
-		const entry = {
+		const entry: ConsumerEntry = {
 			id: consumer.id,
 			participantId:
-				participantIdOverride ||
-				consumer.appData?.userId ||
-				consumer.participantId,
+				participantIdOverride || (consumer.appData?.userId as string) || "",
 			kind: consumer.kind,
 			isScreen: consumer.appData?.type === "screen" || false,
 			track: consumer.track,
 			appData: consumer.appData,
 			createdAt: Date.now(),
 			consumer,
-			close: consumer.close ? consumer.close.bind(consumer) : undefined,
-			pause: consumer.pause ? consumer.pause.bind(consumer) : undefined,
-			resume: consumer.resume ? consumer.resume.bind(consumer) : undefined,
+			close: consumer.close.bind(consumer),
+			pause: consumer.pause.bind(consumer),
+			resume: consumer.resume.bind(consumer),
 		};
 
-		this.consumers.set(consumer.id, entry);
+		this.consumers.set(consumer.id as string, entry);
 
 		if (this.eventHandlers.onConsumerAdded) {
 			this.eventHandlers.onConsumerAdded(entry);
@@ -45,7 +87,7 @@ export class ConsumerManager {
 		return entry;
 	}
 
-	removeConsumer(consumerId) {
+	removeConsumer(consumerId: string): ConsumerEntry | undefined {
 		const consumer = this.consumers.get(consumerId);
 		if (consumer) {
 			if (typeof consumer.close === "function") {
@@ -65,25 +107,25 @@ export class ConsumerManager {
 		return consumer;
 	}
 
-	getConsumer(consumerId) {
+	getConsumer(consumerId: string): ConsumerEntry | undefined {
 		return this.consumers.get(consumerId);
 	}
 
-	getAllConsumers() {
+	getAllConsumers(): ConsumerEntry[] {
 		return Array.from(this.consumers.values());
 	}
 
-	getConsumersByParticipant(participantId) {
+	getConsumersByParticipant(participantId: string): ConsumerEntry[] {
 		return this.getAllConsumers().filter(
 			(consumer) => consumer.participantId === participantId,
 		);
 	}
 
-	getConsumersByKind(kind) {
+	getConsumersByKind(kind: string): ConsumerEntry[] {
 		return this.getAllConsumers().filter((consumer) => consumer.kind === kind);
 	}
 
-	getVideoConsumer(participantId) {
+	getVideoConsumer(participantId: string): ConsumerEntry | undefined {
 		return this.getAllConsumers().find(
 			(consumer) =>
 				consumer.participantId === participantId &&
@@ -92,18 +134,18 @@ export class ConsumerManager {
 		);
 	}
 
-	getAudioConsumer(participantId) {
+	getAudioConsumer(participantId: string): ConsumerEntry | undefined {
 		return this.getAllConsumers().find(
 			(consumer) =>
 				consumer.participantId === participantId && consumer.kind === "audio",
 		);
 	}
 
-	getScreenShareConsumers() {
+	getScreenShareConsumers(): ConsumerEntry[] {
 		return this.getAllConsumers().filter((consumer) => consumer.isScreen);
 	}
 
-	async pauseConsumer(consumerId) {
+	async pauseConsumer(consumerId: string): Promise<boolean> {
 		const consumer = this.getConsumer(consumerId);
 		if (consumer && typeof consumer.pause === "function") {
 			try {
@@ -117,7 +159,7 @@ export class ConsumerManager {
 		return false;
 	}
 
-	async resumeConsumer(consumerId) {
+	async resumeConsumer(consumerId: string): Promise<boolean> {
 		const consumer = this.getConsumer(consumerId);
 		if (consumer && typeof consumer.resume === "function") {
 			try {
@@ -131,7 +173,10 @@ export class ConsumerManager {
 		return false;
 	}
 
-	async pauseParticipantConsumers(participantId, kind = null) {
+	async pauseParticipantConsumers(
+		participantId: string,
+		kind: string | null = null,
+	): Promise<boolean[]> {
 		const consumers = this.getConsumersByParticipant(participantId);
 		const filteredConsumers = kind
 			? consumers.filter((c) => c.kind === kind)
@@ -147,7 +192,10 @@ export class ConsumerManager {
 		return results;
 	}
 
-	async resumeParticipantConsumers(participantId, kind = null) {
+	async resumeParticipantConsumers(
+		participantId: string,
+		kind: string | null = null,
+	): Promise<boolean[]> {
 		const consumers = this.getConsumersByParticipant(participantId);
 		const filteredConsumers = kind
 			? consumers.filter((c) => c.kind === kind)
@@ -163,7 +211,10 @@ export class ConsumerManager {
 		return results;
 	}
 
-	updateConsumer(consumerId, updates) {
+	updateConsumer(
+		consumerId: string,
+		updates: Record<string, unknown>,
+	): ConsumerEntry | null {
 		const consumer = this.consumers.get(consumerId);
 		if (consumer) {
 			const updatedConsumer = { ...consumer, ...updates };
@@ -182,9 +233,9 @@ export class ConsumerManager {
 		return null;
 	}
 
-	cleanupParticipantConsumers(participantId) {
+	cleanupParticipantConsumers(participantId: string): ConsumerEntry[] {
 		const consumers = this.getConsumersByParticipant(participantId);
-		const removedConsumers = [];
+		const removedConsumers: ConsumerEntry[] = [];
 
 		for (const consumer of consumers) {
 			const removed = this.removeConsumer(consumer.id);
@@ -196,7 +247,7 @@ export class ConsumerManager {
 		return removedConsumers;
 	}
 
-	getConsumerStats() {
+	getConsumerStats(): ConsumerStats {
 		const all = this.getAllConsumers();
 		return {
 			total: all.length,
@@ -207,8 +258,14 @@ export class ConsumerManager {
 		};
 	}
 
-	getConsumersByParticipantStats() {
-		const stats = {};
+	getConsumersByParticipantStats(): Record<
+		string,
+		{ video: number; audio: number; screen: number }
+	> {
+		const stats: Record<
+			string,
+			{ video: number; audio: number; screen: number }
+		> = {};
 		for (const consumer of this.getAllConsumers()) {
 			if (!stats[consumer.participantId]) {
 				stats[consumer.participantId] = { video: 0, audio: 0, screen: 0 };
@@ -216,13 +273,13 @@ export class ConsumerManager {
 			if (consumer.isScreen) {
 				stats[consumer.participantId].screen++;
 			} else {
-				stats[consumer.participantId][consumer.kind]++;
+				stats[consumer.participantId][consumer.kind as "video" | "audio"]++;
 			}
 		}
 		return stats;
 	}
 
-	clear() {
+	clear(): void {
 		const consumerIds = Array.from(this.consumers.keys());
 
 		// Close all consumers

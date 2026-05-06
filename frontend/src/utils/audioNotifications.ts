@@ -3,7 +3,7 @@
  * Generates notification tones using Web Audio API
  */
 
-import { notificationChimesEnabled } from "../data/notificationPreferences.js";
+import { notificationChimesEnabled } from "../data/notificationPreferences";
 import notificationContextManager from "./notificationContext";
 
 type FrequencyPoint = [number, number]; // [frequency, timeOffset]

@@ -13,15 +13,14 @@
       "entry": "playwright.config.ts",
       "project": [
         "fixtures/**/*.ts",
-        "global-setup.ts",
         "helpers/**/*.ts",
         "specs/**/*.ts",
         "!playwright.config.ts"
       ]
     },
     "frontend": {
-      "entry": "src/main.js",
-      "project": ["src/**/*.{js,vue,ts}", "!src/main.js"],
+      "entry": "src/main.ts",
+      "project": ["src/**/*.{ts,vue}", "!src/main.ts"],
       "ignore": ["src/composables/rnnoise.d.ts"],
       "ignoreUnresolved": ["~icons/lucide/*"]
     },

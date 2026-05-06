@@ -1,5 +1,5 @@
-import { onMounted, onUnmounted, ref } from "vue";
-import { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
+import { inject, onMounted, onUnmounted, type Ref, ref } from "vue";
+import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
 import type { CurrentUser } from "./useCurrentUser";
 import type { MediaState } from "./useMediaState";
 
@@ -12,19 +12,17 @@ export function useAudioStream(
 ) {
 	const stream = ref<MediaStream | null>(null);
 	const { mediaState, currentUser } = deps;
+	const sfuManagerRef = inject<Ref<SFUMeetingManager | null>>("sfuManager");
+	const sfuManager = sfuManagerRef?.value;
 
 	const getStream = () => {
 		try {
-			if (
-				participantId ===
-				(currentUser.currentUser.value as Record<string, unknown>)?.user_id
-			) {
+			if (participantId === currentUser.currentUser.value?.user_id) {
 				const audioTrack = mediaState.localStream.value?.getAudioTracks()[0];
 				if (audioTrack) {
 					stream.value = new MediaStream([audioTrack]);
 				}
 			} else {
-				const sfuManager = getSFUMeetingManager();
 				if (sfuManager?.consumerManager) {
 					const audioConsumer =
 						sfuManager.consumerManager.getAudioConsumer(participantId);
@@ -38,7 +36,7 @@ export function useAudioStream(
 					const audioElement =
 						sfuManager.videoManager.audioElements.get(participantId);
 					if (audioElement?.srcObject) {
-						stream.value = audioElement.srcObject;
+						stream.value = audioElement.srcObject as MediaStream;
 					}
 				}
 			}

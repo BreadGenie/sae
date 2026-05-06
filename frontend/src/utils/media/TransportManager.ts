@@ -3,15 +3,16 @@
  * Handles mediasoup-client Device and Transport management
  */
 
-import { getSFUClient } from "../sfu-client.js";
-import { resolveCodecStrategy } from "./codecStrategy.ts";
+import type { Consumer, Producer } from "mediasoup-client/types";
+import type { SFUClient } from "../SFUClient";
+import { resolveCodecStrategy } from "./codecStrategy";
 import {
 	audioCodecOptions,
 	screenEncodings,
 	svcEncodingTemplate,
 	videoCodecOptions,
 	videoEncodings,
-} from "./encodings.js";
+} from "./encodings";
 
 type Direction = "send" | "recv";
 
@@ -43,21 +44,6 @@ type EventHandlers = {
 	onTransportConnectionStateChange?: TransportStateHandler;
 };
 
-type ProducerLike = {
-	id: string;
-};
-
-type ConsumerLike = {
-	id: string;
-};
-
-type WebRtcTransportParams = {
-	id: string;
-	iceParameters: unknown;
-	iceCandidates: unknown;
-	dtlsParameters: unknown;
-};
-
 type ConsumerParams = {
 	id: string;
 	producerId: string;
@@ -86,13 +72,13 @@ type TransportLike = {
 	) => void;
 	close: () => void;
 	restartIce: (args: { iceParameters: unknown }) => Promise<void>;
-	produce?: (options: Record<string, unknown>) => Promise<ProducerLike>;
-	consume?: (args: Record<string, unknown>) => Promise<ConsumerLike>;
+	produce?: (options: Record<string, unknown>) => Promise<Producer>;
+	consume?: (args: Record<string, unknown>) => Promise<Consumer>;
 	getStats: () => Promise<Map<string, TransportStatReport>>;
 };
 
 type DeviceLike = {
-	loaded?: boolean;
+	loaded: boolean;
 	rtpCapabilities?: {
 		codecs?: Array<{ mimeType: string }>;
 	};
@@ -102,35 +88,28 @@ type DeviceLike = {
 	createRecvTransport: (args: Record<string, unknown>) => TransportLike;
 };
 
-type SFUClientLike = {
-	getCodecStrategy?: () => string;
-	getRouterRtpCapabilities: () => Promise<unknown>;
-	createWebRtcTransport: (
-		direction: Direction,
-	) => Promise<WebRtcTransportParams>;
-	connectWebRtcTransport: (
-		transportId: string,
-		dtlsParameters: unknown,
-	) => Promise<void>;
-	createProducer: (
-		transportId: string,
-		rtpParameters: unknown,
-		kind: string,
-		appData: unknown,
-	) => Promise<{ id: string }>;
-	createConsumer: (
-		transportId: string,
-		producerId: string,
-		rtpCapabilities: unknown,
-	) => Promise<ConsumerParams>;
-	restartWebRtcTransportIce: (transportId: string) => Promise<unknown>;
-};
+async function applyScreenShareSenderPreferences(producer: {
+	rtpSender?: RTCRtpSender;
+}) {
+	const sender = producer.rtpSender;
+	if (!sender?.getParameters || !sender?.setParameters) {
+		return;
+	}
+
+	const parameters = sender.getParameters();
+	if (parameters.degradationPreference === "maintain-resolution") {
+		return;
+	}
+
+	parameters.degradationPreference = "maintain-resolution";
+	await sender.setParameters(parameters);
+}
 
 export class TransportManager {
 	sendTransport: TransportLike | null;
 	recvTransport: TransportLike | null;
 	device: DeviceLike | null;
-	sfuClient: SFUClientLike | null;
+	sfuClient: SFUClient | null;
 	routerRtpCapabilities: RouterCapabilities;
 	activeVideoStrategy: string;
 	eventHandlers: EventHandlers;
@@ -195,11 +174,11 @@ export class TransportManager {
 		};
 	}
 
-	initialize(sfuClient?: SFUClientLike) {
-		this.sfuClient = sfuClient || (getSFUClient() as SFUClientLike);
+	initialize(sfuClient: SFUClient) {
+		this.sfuClient = sfuClient;
 	}
 
-	private getClient(): SFUClientLike {
+	private getClient(): SFUClient {
 		if (!this.sfuClient) throw new Error("SFU client is not initialized");
 		return this.sfuClient;
 	}
@@ -279,12 +258,12 @@ export class TransportManager {
 			if (!parameters || typeof callback !== "function") return;
 
 			try {
-				const response = await client.createProducer(
+				const response = (await client.createProducer(
 					sendTransportId,
 					parameters.rtpParameters,
 					parameters.kind,
 					parameters.appData,
-				);
+				)) as { id: string };
 				callback({ id: response.id });
 			} catch (error) {
 				errback(error);
@@ -429,22 +408,10 @@ export class TransportManager {
 		const producer = await this.sendTransport.produce(produceOptions);
 
 		if (safeAppData.type === "screen") {
-			const sender = (producer as { rtpSender?: RTCRtpSender }).rtpSender;
-			if (sender?.getParameters && sender?.setParameters) {
-				try {
-					const parameters = sender.getParameters() || {};
-					if (parameters.degradationPreference !== "maintain-resolution") {
-						await sender.setParameters({
-							...parameters,
-							degradationPreference: "maintain-resolution",
-						});
-					}
-				} catch (error) {
-					console.warn(
-						"Failed to apply screen share sender preferences",
-						error,
-					);
-				}
+			try {
+				await applyScreenShareSenderPreferences(producer);
+			} catch (error) {
+				console.warn("Failed to apply screen share sender preferences", error);
 			}
 		}
 
@@ -465,11 +432,11 @@ export class TransportManager {
 		if (!recvTransport.consume)
 			throw new Error("Receive transport is not ready to consume");
 
-		const rawConsumerParams = await client.createConsumer(
+		const rawConsumerParams = (await client.createConsumer(
 			recvTransport.id,
 			producerId,
 			device.rtpCapabilities,
-		);
+		)) as ConsumerParams;
 
 		const isScreen = !!(
 			metadata.isScreen ||
@@ -477,7 +444,7 @@ export class TransportManager {
 			rawConsumerParams?.appData?.type === "screen"
 		);
 
-		let consumer: ConsumerLike | null = null;
+		let consumer: Consumer | null = null;
 		let firstError: unknown = null;
 		try {
 			const consumeArgs = {

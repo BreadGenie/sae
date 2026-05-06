@@ -2,13 +2,34 @@
 // layer 0: low quality (200 kbps)
 // layer 1: medium quality (400 kbps)
 // layer 2: high quality (1000 kbps)
-export const videoEncodings = [
+
+interface VideoEncodingLayer {
+	maxBitrate: number;
+	scaleResolutionDownBy?: number;
+}
+
+interface SVCEncodingLayer {
+	scalabilityMode: string;
+	maxBitrate: number;
+}
+
+interface CodecOptions {
+	videoGoogleStartBitrate?: number;
+	opusStereo?: number;
+	opusDtx?: number;
+	opusFec?: number;
+	opusMaxAverageBitrate?: number;
+}
+
+export const videoEncodings: VideoEncodingLayer[] = [
 	{ maxBitrate: 200000, scaleResolutionDownBy: 2 },
 	{ maxBitrate: 400000, scaleResolutionDownBy: 1 },
 	{ maxBitrate: 1000000 },
 ];
 
-export const svcEncodingTemplate = (scalabilityMode = "L3T1") => [
+export const svcEncodingTemplate = (
+	scalabilityMode = "L3T1",
+): SVCEncodingLayer[] => [
 	{
 		scalabilityMode,
 		maxBitrate: scalabilityMode?.startsWith("L3")
@@ -22,13 +43,13 @@ export const svcEncodingTemplate = (scalabilityMode = "L3T1") => [
 // no adaptive streaming for screensharing
 // as we don't reduce resolution for screenshare
 // and fps is handled by the hint in the browser in case of congestion control
-export const screenEncodings = [{ maxBitrate: 2000000 }];
+export const screenEncodings: VideoEncodingLayer[] = [{ maxBitrate: 2000000 }];
 
-export const videoCodecOptions = {
+export const videoCodecOptions: CodecOptions = {
 	videoGoogleStartBitrate: 2000,
 };
 
-export const audioCodecOptions = {
+export const audioCodecOptions: CodecOptions = {
 	// ref: https://mediasoup.org/documentation/v3/mediasoup-client/api/#ProducerCodecOptions
 	opusStereo: 0, // disable stereo to save bandwidth, as most meetings are voice-only
 	opusDtx: 1, // enable DTX to save bandwidth during silence periods

@@ -110,7 +110,7 @@
 import { toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useBackgroundEffects } from "../../composables/useBackgroundEffects";
-import { useMeetingContext } from "../../composables/useMeetingContext.js";
+import { useMeetingContext } from "../../composables/useMeetingContext";
 import {
 	addCustomBackgroundImage,
 	allBackgroundOptions,

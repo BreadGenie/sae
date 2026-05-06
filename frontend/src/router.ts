@@ -1,8 +1,9 @@
+import type { RouteRecordRaw } from "vue-router";
 import { createRouter, createWebHistory } from "vue-router";
 import { userResource } from "@/data/user";
 import { session } from "./data/session";
 
-const routes = [
+const routes: RouteRecordRaw[] = [
 	{
 		path: "/",
 		name: "Home",
@@ -27,6 +28,8 @@ const routes = [
 	},
 ];
 
+declare const __FRONTEND_ROUTE__: string;
+
 const router = createRouter({
 	history: createWebHistory(`${__FRONTEND_ROUTE__}/`),
 	routes,
@@ -34,13 +37,13 @@ const router = createRouter({
 
 router.beforeEach(async (to, _from, next) => {
 	let isLoggedIn = session.isLoggedIn;
-	let user = null;
+	let user: Record<string, unknown> | null = null;
 	if (isLoggedIn || to.meta?.requiresAdmin) {
 		try {
 			if (!userResource.fetched) {
 				await userResource.fetch();
 			}
-			user = userResource.data;
+			user = userResource.data as Record<string, unknown>;
 		} catch (_error) {
 			isLoggedIn = false;
 		}
@@ -50,7 +53,7 @@ router.beforeEach(async (to, _from, next) => {
 		if (!isLoggedIn) {
 			return next({ name: "Login", query: { next: to.fullPath } });
 		}
-		const isAdmin = user?.roles?.some((r) =>
+		const isAdmin = (user?.roles as string[])?.some((r) =>
 			["System Manager", "Administrator"].includes(r),
 		);
 		if (!isAdmin) {
@@ -68,9 +71,9 @@ router.beforeEach(async (to, _from, next) => {
 	}
 
 	if (!isLoggedIn) {
-		let query = {};
+		const query: Record<string, string> = {};
 		if (to.name !== "Home") {
-			query = { next: to.fullPath };
+			query.next = to.fullPath;
 		}
 		return next({ name: "Login", query });
 	}

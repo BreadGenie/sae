@@ -86,15 +86,12 @@
 
 <script setup lang="ts">
 import { Badge, Button, Dropdown } from "frappe-ui";
-import { computed, inject, ref } from "vue";
+import { computed, ref } from "vue";
 import { useAudioStream } from "../composables/useAudioLevels";
-import type { Participant } from "../types";
+import { useMeetingContext } from "../composables/useMeetingContext";
+import type { Participant } from "../utils/media/ParticipantManager";
 import AudioIndicator from "./AudioIndicator.vue";
 import KickParticipantDialog from "./KickParticipantDialog.vue";
-
-const meetingState = inject("meetingState") as {
-	raisedHands?: { value: Record<string, string> };
-};
 
 interface Props {
 	participant: Participant;
@@ -118,10 +115,10 @@ const emit = defineEmits<{
 	promoteToCohost: [participantId: string];
 }>();
 
-const meetingCtx = inject("meetingState");
+const meetingCtx = useMeetingContext();
 const { stream } = useAudioStream(props.participant.user_id, {
-	mediaState: meetingCtx,
-	currentUser: meetingCtx,
+	mediaState: meetingCtx?.mediaState,
+	currentUser: meetingCtx?.currentUser,
 });
 
 const showKickDialog = ref(false);
@@ -131,8 +128,10 @@ const showHostControls = computed(() => {
 });
 
 const isHandRaised = computed(() => {
-	if (!meetingState?.raisedHands?.value) return false;
-	return !!meetingState.raisedHands.value[props.participant.user_id];
+	if (!meetingCtx?.raiseHandStore?.raisedHands.value) return false;
+	return !!meetingCtx.raiseHandStore.raisedHands.value[
+		props.participant.user_id
+	];
 });
 
 const handleKickConfirm = (ban: boolean) => {

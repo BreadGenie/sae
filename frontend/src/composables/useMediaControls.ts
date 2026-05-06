@@ -13,10 +13,11 @@ import {
 	setSelectedMicId,
 	setSelectedSpeakerId,
 } from "../data/mediaPreferences";
-import type { deviceManager } from "../utils/media/DeviceManager.js";
+import { getErrorMessage } from "../utils/error";
+import type { DeviceType, deviceManager } from "../utils/media/DeviceManager";
 import notificationContextManager from "../utils/notificationContext";
-import { getSFUClient } from "../utils/sfu-client.js";
-import type { getSFUMeetingManager } from "../utils/sfu-meeting-manager.js";
+import type { SFUClient } from "../utils/SFUClient";
+import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
 import type { ConnectionState } from "./useConnectionState";
 import type { CurrentUser } from "./useCurrentUser";
 import type { MediaState } from "./useMediaState";
@@ -85,7 +86,8 @@ interface MediaControlsDeps {
 	connectionState: ConnectionState;
 	raiseHandStore: RaiseHandStore;
 	currentUser: CurrentUser;
-	sfuManager: Ref<ReturnType<typeof getSFUMeetingManager> | null>;
+	sfuClient: SFUClient;
+	sfuManager: Ref<SFUMeetingManager | null>;
 	deviceManager: typeof deviceManager;
 	backgroundEffects: BackgroundEffectsAPI;
 	noiseCancellation: NoiseCancellationAPI;
@@ -111,12 +113,43 @@ interface MediaControlsAPI {
 	processedStream: Ref<MediaStream | null>;
 }
 
+interface ProducerLike {
+	id: string;
+	track?: MediaStreamTrack | null;
+	paused?: boolean;
+	replaceTrack?: (args: { track: MediaStreamTrack }) => Promise<unknown>;
+	resume?: () => void;
+	pause?: () => void;
+	close?: () => void;
+}
+
+interface MediaHandlerLike {
+	localStream: MediaStream | null;
+	audioProducer: ProducerLike | null;
+	videoProducer: ProducerLike | null;
+	screenProducer: ProducerLike | null;
+	setProducers: (producers: {
+		audioProducer?: ProducerLike;
+		videoProducer?: ProducerLike;
+		screenProducer?: ProducerLike;
+	}) => void;
+	stopScreenShare: () => void;
+	cleanup: () => void;
+}
+
+function getMediaHandler(
+	manager: SFUMeetingManager | null,
+): MediaHandlerLike | null {
+	return (manager?.mediaHandler as MediaHandlerLike | undefined) || null;
+}
+
 export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	const {
 		mediaState,
 		connectionState,
 		raiseHandStore,
 		currentUser,
+		sfuClient,
 		sfuManager,
 		deviceManager,
 		backgroundEffects,
@@ -156,8 +189,9 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 		reason = "background-effect",
 	) => {
 		const manager = sfuManager.value;
-		const mediaHandler = manager?.mediaHandler;
-		if (!mediaHandler?.videoProducer || mediaState.isScreenSharing.value) {
+		const mediaHandler = getMediaHandler(manager);
+		const videoProducer = mediaHandler?.videoProducer;
+		if (!videoProducer || mediaState.isScreenSharing.value) {
 			return;
 		}
 
@@ -181,7 +215,9 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 		}
 
 		try {
-			await mediaHandler.videoProducer.replaceTrack({ track });
+			if (typeof videoProducer.replaceTrack === "function") {
+				await videoProducer.replaceTrack({ track });
+			}
 			track.enabled = true;
 			console.log(`Replaced video track (${reason})`);
 
@@ -327,7 +363,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 	const getValidDeviceId = async (
 		storedDeviceId: string | null,
-		deviceType: string,
+		deviceType: DeviceType,
 	) => {
 		if (!storedDeviceId) return null;
 
@@ -525,7 +561,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	const toggleMicrophone = async () => {
 		try {
 			const enable = !mediaState.isMicOn.value;
-			const mh = sfuManager.value?.mediaHandler;
+			const mh = getMediaHandler(sfuManager.value);
 			let stream = mediaState.localStream.value;
 
 			if (enable) {
@@ -607,26 +643,26 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 				const track = await getProcessedAudioTrack(stream);
 				if (mh?.audioProducer) {
-					const currentTrack = mh.audioProducer.track;
+					const audioProducer = mh.audioProducer;
+					const currentTrack = audioProducer.track;
 					if (currentTrack && currentTrack.readyState === "ended") {
-						await mh.audioProducer.replaceTrack({
-							track: track as MediaStreamTrack,
-						});
+						if (track && typeof audioProducer.replaceTrack === "function") {
+							await audioProducer.replaceTrack({ track });
+						}
 					} else if (track) {
 						track.enabled = true;
 					}
-					mh.audioProducer.resume?.();
+					audioProducer.resume?.();
 
-					const sfuClient = getSFUClient();
 					if (sfuClient.isConnected()) {
-						sfuClient.resumeProducer(mh.audioProducer.id).catch(() => {});
+						sfuClient.resumeProducer(audioProducer.id).catch(() => {});
 					}
 				} else if (track && sfuManager.value?.transportManager) {
 					const producer =
 						await sfuManager.value.transportManager.createProducer(track, {
 							type: "microphone",
 						});
-					mh?.setProducers({ audioProducer: producer });
+					mh?.setProducers({ audioProducer: producer as ProducerLike });
 				}
 			} else {
 				if (stream) {
@@ -643,11 +679,11 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 				}
 
 				if (mh?.audioProducer) {
-					mh.audioProducer.pause?.();
+					const audioProducer = mh.audioProducer;
+					audioProducer.pause?.();
 
-					const sfuClient = getSFUClient();
 					if (sfuClient.isConnected()) {
-						sfuClient.pauseProducer(mh.audioProducer.id);
+						sfuClient.pauseProducer(audioProducer.id);
 					}
 				}
 			}
@@ -655,19 +691,20 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 			mediaState.isMicOn.value = enable;
 			setMicEnabled(enable);
 
+			const currentUserId = sfuClient.getUserId();
 			if (
 				enable &&
-				raiseHandStore.raisedHands.value?.[getSFUClient().getUserId()]
+				currentUserId &&
+				raiseHandStore.raisedHands.value?.[currentUserId]
 			) {
 				try {
-					await getSFUClient().sendRaiseHand(false);
-					raiseHandStore.lowerHand(getSFUClient().getUserId());
+					await sfuClient.sendRaiseHand(false);
+					raiseHandStore.lowerHand(currentUserId);
 				} catch (error) {
 					console.error("Failed to lower hand on unmute:", error);
 				}
 			}
 
-			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
 				try {
 					sfuClient.sendMediaControl(enable ? "unmute" : "mute");
@@ -684,7 +721,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	const toggleCamera = async () => {
 		try {
 			const enable = !mediaState.isCameraOn.value;
-			const mh = sfuManager.value?.mediaHandler;
+			const mh = getMediaHandler(sfuManager.value);
 			let stream = mediaState.localStream.value;
 
 			if (enable) {
@@ -792,11 +829,17 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 				const track = stream.getVideoTracks()[0];
 				if (mh?.videoProducer) {
+					const videoProducer = mh.videoProducer;
 					const trackToReplace = mediaState.processedStream.value
 						? mediaState.processedStream.value.getVideoTracks()[0]
 						: track;
 					try {
-						await mh.videoProducer.replaceTrack({ track: trackToReplace });
+						if (
+							trackToReplace &&
+							typeof videoProducer.replaceTrack === "function"
+						) {
+							await videoProducer.replaceTrack({ track: trackToReplace });
+						}
 					} catch (error) {
 						console.warn("Failed to replace video track:", error);
 					}
@@ -810,7 +853,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 							trackToPublish,
 							{ type: "camera" },
 						);
-					mh?.setProducers({ videoProducer: producer });
+					mh?.setProducers({ videoProducer: producer as ProducerLike });
 				}
 			} else {
 				if (stream) {
@@ -831,11 +874,11 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 				}
 
 				if (mh?.videoProducer) {
-					mh.videoProducer.close?.();
+					const videoProducer = mh.videoProducer;
+					videoProducer.close?.();
 
-					const sfuClient = getSFUClient();
 					if (sfuClient.isConnected()) {
-						sfuClient.closeProducer(mh.videoProducer.id).catch(() => {});
+						sfuClient.closeProducer(videoProducer.id).catch(() => {});
 					}
 
 					mh.videoProducer = null;
@@ -845,7 +888,6 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 			mediaState.isCameraOn.value = enable;
 			setCameraEnabled(enable);
 
-			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
 				try {
 					sfuClient.sendMediaControl(enable ? "video_on" : "video_off");
@@ -862,16 +904,17 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	const toggleScreenShare = async () => {
 		try {
 			if (mediaState.isScreenSharing.value) {
-				if (sfuManager.value?.mediaHandler) {
-					const sp = sfuManager.value.mediaHandler.screenProducer;
+				const mediaHandler = getMediaHandler(sfuManager.value);
+				if (mediaHandler) {
+					const sp = mediaHandler.screenProducer;
 					if (sp?.id) {
 						sp.close?.();
-						const sfuClient = getSFUClient();
+
 						if (sfuClient.isConnected()) {
 							sfuClient.closeProducer(sp.id);
 						}
 					}
-					sfuManager.value.mediaHandler.stopScreenShare();
+					mediaHandler.stopScreenShare();
 				}
 
 				const tracks = mediaState.screenShareStream.value?.getTracks?.();
@@ -881,16 +924,14 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 					}
 				}
 				mediaState.isScreenSharing.value = false;
-				const selfId = (
-					currentUser.currentUser.value as Record<string, unknown>
-				)?.user_id as string;
+				const selfId = currentUser.currentUser.value?.user_id as string;
 				if (selfId && mediaState.screenShareStreams.value) {
 					if (mediaState.screenShareStreams.value[selfId]) {
 						delete mediaState.screenShareStreams.value[selfId];
 					}
 				}
 				mediaState.screenShareStream.value = null;
-				const sfuClient = getSFUClient();
+
 				if (sfuClient.isConnected()) {
 					sfuClient.sendScreenShare("stop_share");
 				}
@@ -940,14 +981,14 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 							screenTrack,
 							{ type: "screen" },
 						);
-					if (sfuManager.value?.mediaHandler) {
-						sfuManager.value.mediaHandler.setProducers({
+					const mh = getMediaHandler(sfuManager.value);
+					if (mh) {
+						mh.setProducers({
 							screenProducer: producer,
 						});
 					}
 
 					// Ensure audio producer is available
-					const mh = sfuManager.value?.mediaHandler;
 					if (mh?.audioProducer?.paused) {
 						mh.audioProducer.resume?.();
 					} else if (!mh?.audioProducer) {
@@ -960,7 +1001,9 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 										micTrack,
 										{ type: "microphone" },
 									);
-								mh?.setProducers({ audioProducer: newProducer });
+								mh?.setProducers({
+									audioProducer: newProducer as ProducerLike,
+								});
 							} catch (err) {
 								console.warn(
 									"Failed to create audio producer after starting screen share",
@@ -985,7 +1028,6 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 					}
 				});
 
-				const sfuClient = getSFUClient();
 				if (sfuClient.isConnected()) {
 					sfuClient.sendScreenShare("start_share", {
 						startedAt: mediaState.localScreenShareStartedAt.value,
@@ -1044,11 +1086,7 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 			const store = mediaState.screenShareStreams.value || {};
 			let stream: MediaStream | null = store[participantId] ?? null;
-			if (
-				!stream &&
-				(currentUser.currentUser.value as Record<string, unknown>)?.user_id ===
-					participantId
-			) {
+			if (!stream && currentUser.currentUser.value?.user_id === participantId) {
 				stream = mediaState.screenShareStream.value;
 			}
 
@@ -1071,7 +1109,8 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 
 	// Watch noise cancellation toggle
 	watch(prefNoiseCancellationEnabled, async (enabled) => {
-		if (!mediaState.isMicOn.value || !sfuManager.value?.mediaHandler) {
+		const mh = getMediaHandler(sfuManager.value);
+		if (!mediaState.isMicOn.value || !mh) {
 			return;
 		}
 
@@ -1100,9 +1139,10 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 				}
 			}
 
-			const mh = sfuManager.value.mediaHandler;
 			if (mh?.audioProducer && trackToPublish.readyState === "live") {
-				await mh.audioProducer.replaceTrack({ track: trackToPublish });
+				if (typeof mh.audioProducer.replaceTrack === "function") {
+					await mh.audioProducer.replaceTrack({ track: trackToPublish });
+				}
 			}
 		} catch (error) {
 			console.error("[Noise Cancellation] Failed to toggle:", error);

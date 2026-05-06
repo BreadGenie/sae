@@ -27,7 +27,7 @@
 							data-testid="preview-video-shell"
 						>
 							<video
-										:ref="(el) => setLocalVideoRef?.(el)"
+										:ref="(el) => props.setLocalVideoRef?.(el)"
 								class="w-full h-full object-cover transform scale-x-[-1]"
 								autoplay
 								muted
@@ -144,6 +144,17 @@ import MeetingAvatar from "./MeetingAvatar.vue";
 
 const props = defineProps({
 	meetingId: { type: String, required: true },
+	isCameraOn: { type: Boolean, default: false },
+	isMicOn: { type: Boolean, default: false },
+	cameraPermissionGranted: { type: Boolean, default: false },
+	microphonePermissionGranted: { type: Boolean, default: false },
+	isConnecting: { type: Boolean, default: false },
+	userInitials: { type: String, default: "" },
+	userAvatar: { type: String, default: "" },
+	currentUserName: { type: String, default: "You" },
+	guestAuthToken: { type: String, default: null },
+	isWaitingForApproval: { type: Boolean, default: false },
+	setLocalVideoRef: { type: Function, default: null },
 });
 
 const guestName = ref("");
@@ -166,39 +177,12 @@ const joinGuestAPI = createResource({
 	},
 });
 
-const meetingState = inject("meetingState");
-const setLocalVideoRef = inject("setLocalVideoRef");
 const meetingTitle = inject("meetingTitle");
 
-const isGuest = computed(
-	() => !session.isLoggedIn && !meetingState.guestAuthToken.value,
-);
+const isGuest = computed(() => !session.isLoggedIn && !props.guestAuthToken);
 
 const { participants, error: presenceError } = useMeetingPreviewPresence(
 	props.meetingId,
-);
-
-const isCameraOn = computed(() => meetingState.isCameraOn.value);
-const isMicOn = computed(() => meetingState.isMicOn.value);
-const currentUser = computed(() => meetingState.currentUser.value);
-const userInitials = computed(() => {
-	if (isGuest.value && guestName.value.trim()) {
-		return guestName.value.trim().charAt(0).toUpperCase();
-	}
-	return meetingState.userInitials.value;
-});
-const userAvatar = computed(() => {
-	if (isGuest.value) {
-		return null;
-	}
-	return meetingState.userAvatar.value;
-});
-const isConnecting = computed(() => meetingState.isConnecting.value);
-const cameraPermissionGranted = computed(
-	() => meetingState.cameraPermissionGranted.value,
-);
-const microphonePermissionGranted = computed(
-	() => meetingState.microphonePermissionGranted.value,
 );
 
 const emit = defineEmits([
@@ -219,7 +203,7 @@ watch(guestNameInputRef, (inputRef) => {
 });
 
 const handleJoin = async () => {
-	if (joinGuestAPI.loading || isConnecting.value) {
+	if (joinGuestAPI.loading || props.isConnecting.value) {
 		return;
 	}
 
@@ -233,18 +217,6 @@ const handleJoin = async () => {
 
 			localStorage.setItem("guest_name", guestName.value.trim());
 
-			meetingState.guestId.value = result.guest_id;
-			meetingState.guestSfuUrl.value = result.sfu_url || null;
-			meetingState.guestSfuPort.value = result.sfu_port || null;
-
-			if (result.status === "waiting_for_approval") {
-				meetingState.isWaitingForApproval.value = true;
-				meetingState.guestAuthToken.value = null;
-			} else {
-				meetingState.guestAuthToken.value = result.auth_token || null;
-				meetingState.isWaitingForApproval.value = false;
-			}
-
 			emit("guest-join-complete", {
 				guestName: guestName.value.trim(),
 				joinResult: result,
@@ -257,11 +229,4 @@ const handleJoin = async () => {
 		emit("join-from-preview");
 	}
 };
-
-const currentUserName = computed(() => {
-	if (isGuest.value && guestName.value.trim()) {
-		return guestName.value.trim();
-	}
-	return currentUser.value?.full_name || currentUser.value?.name || "You";
-});
 </script>

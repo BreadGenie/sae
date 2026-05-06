@@ -1,9 +1,15 @@
-import { io } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 import { socketio_port } from "../../../../sites/common_site_config.json";
 
-let socket = null;
+declare global {
+	interface Window {
+		site_name?: string;
+	}
+}
 
-export function initSocket() {
+let socket: Socket | null = null;
+
+export function initSocket(): Socket {
 	const host = window.location.hostname;
 	const siteName = window.site_name || "sae.local";
 	const port = window.location.port ? `:${socketio_port}` : "";
@@ -19,6 +25,6 @@ export function initSocket() {
 	return socket;
 }
 
-export function useSocket() {
+export function useSocket(): Socket | null {
 	return socket;
 }

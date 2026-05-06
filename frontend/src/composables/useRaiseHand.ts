@@ -1,5 +1,5 @@
 import audioNotificationManager from "../utils/audioNotifications";
-import { getSFUClient } from "../utils/sfu-client.js";
+import type { SFUClient } from "../utils/SFUClient";
 import type { CurrentUser } from "./useCurrentUser";
 import type { RaiseHandStore } from "./useRaiseHandStore";
 
@@ -11,12 +11,11 @@ interface RaiseHandAPI {
 export function useRaiseHand(deps: {
 	raiseHandStore: RaiseHandStore;
 	currentUser: CurrentUser;
+	sfuClient: SFUClient;
 }): RaiseHandAPI {
-	const { raiseHandStore, currentUser } = deps;
+	const { raiseHandStore, currentUser, sfuClient } = deps;
 
 	const setupRaiseHandEvents = () => {
-		const sfuClient = getSFUClient();
-
 		sfuClient.on("hand_raised", (data: Record<string, unknown>) => {
 			const participantId = data.participantId as string;
 			const raised = data.raised as boolean;
@@ -39,9 +38,7 @@ export function useRaiseHand(deps: {
 
 	const toggleRaiseHand = async () => {
 		try {
-			const currentUserId = (
-				currentUser.currentUser.value as Record<string, unknown>
-			)?.user_id as string;
+			const currentUserId = currentUser.currentUser.value?.user_id as string;
 			if (!currentUserId) return;
 
 			const isCurrentlyRaised =
@@ -54,7 +51,6 @@ export function useRaiseHand(deps: {
 				raiseHandStore.lowerHand(currentUserId);
 			}
 
-			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
 				try {
 					await sfuClient.sendRaiseHand(newRaisedState);

@@ -24,7 +24,7 @@ import { type Ref, ref, watch } from "vue";
 import {
 	notificationChimesEnabled,
 	setNotificationChimesEnabled,
-} from "../../data/notificationPreferences.js";
+} from "../../data/notificationPreferences";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
 const notificationChimesEnabledLocal: Ref<boolean> = ref(

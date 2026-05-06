@@ -89,6 +89,13 @@ repos:
               yarn\.lock
           )$
 
+      - id: typecheck-frontend
+        name: TypeCheck (Frontend)
+        entry: bash -lc 'cd frontend && yarn typecheck 2>&1 | grep -v node_modules'
+        language: system
+        pass_filenames: false
+        files: "frontend/.*\\.(ts|vue)$"
+
       - id: knip-sfu-server
         name: Knip (SFU Server)
         entry: yarn knip:sfu-server

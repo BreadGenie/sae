@@ -1,6 +1,6 @@
 import { toast } from "frappe-ui";
 import audioNotificationManager from "../utils/audioNotifications";
-import { getSFUClient } from "../utils/sfu-client.js";
+import type { SFUClient } from "../utils/SFUClient";
 import type { ChatMessage, ChatStore } from "./useChatStore";
 import type { CurrentUser } from "./useCurrentUser";
 
@@ -12,17 +12,13 @@ interface ChatAPI {
 export function useChat(deps: {
 	chatStore: ChatStore;
 	currentUser: CurrentUser;
+	sfuClient: SFUClient;
 }): ChatAPI {
-	const { chatStore, currentUser } = deps;
+	const { chatStore, currentUser, sfuClient } = deps;
 
 	const setupChatEvents = (notificationQueue: unknown) => {
-		const sfuClient = getSFUClient();
-
 		sfuClient.on("chat:message", (data: Record<string, unknown>) => {
-			if (
-				data.fromUser ===
-				(currentUser.currentUser.value as Record<string, unknown>)?.user_id
-			) {
+			if (data.fromUser === currentUser.currentUser.value?.user_id) {
 				return;
 			}
 
@@ -38,25 +34,18 @@ export function useChat(deps: {
 
 			if (
 				!chatStore.isChatOpen.value &&
-				data.fromUser !==
-					(currentUser.currentUser.value as Record<string, unknown>)?.user_id
+				data.fromUser !== currentUser.currentUser.value?.user_id
 			) {
 				chatStore.hasUnreadMessages.value = true;
 
-				if ((notificationQueue as Record<string, unknown>)?.addNotification) {
-					(
-						notificationQueue as Record<
-							string,
-							unknown & { addNotification: (n: unknown) => void }
-						>
-					).addNotification({
-						message: data.message,
-						fromUser: data.fromUser,
-						fromName: data.fromName || data.fromUser,
-						timestamp: message.timestamp,
-					});
-				}
-
+				(
+					notificationQueue as { addNotification?: (n: unknown) => void }
+				)?.addNotification?.({
+					message: data.message,
+					fromUser: data.fromUser,
+					fromName: data.fromName || data.fromUser,
+					timestamp: message.timestamp,
+				});
 				audioNotificationManager.playChatNotification();
 			}
 		});
@@ -66,25 +55,19 @@ export function useChat(deps: {
 		try {
 			const message: ChatMessage = {
 				id: Date.now() + Math.random(),
-				user_id: (currentUser.currentUser.value as Record<string, unknown>)
-					?.user_id as string,
+				user_id: currentUser.currentUser.value?.user_id as string,
 				user_name:
-					((currentUser.currentUser.value as Record<string, unknown>)
-						?.full_name as string) ||
-					((currentUser.currentUser.value as Record<string, unknown>)
-						?.name as string) ||
-					((currentUser.currentUser.value as Record<string, unknown>)
-						?.user_id as string),
+					(currentUser.currentUser.value?.full_name as string) ||
+					(currentUser.currentUser.value?.name as string) ||
+					(currentUser.currentUser.value?.user_id as string),
 				message: text,
 				timestamp: new Date().toISOString(),
 			};
 			chatStore.addMessage(message);
 
-			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
 				sfuClient.sendChatMessage(text, {
-					clientId: (currentUser.currentUser.value as Record<string, unknown>)
-						?.user_id,
+					clientId: currentUser.currentUser.value?.user_id,
 				});
 			}
 		} catch (error) {

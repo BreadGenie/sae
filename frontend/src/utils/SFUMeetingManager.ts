@@ -1,15 +1,30 @@
 /**
  * SFU Meeting Manager
- * Orchestrates all meeting-related functionality (glue of all modules)
+ * Handles SFU connection, event management, and coordination between different media-related managers
  */
 
-import { ConsumerManager } from "./media/ConsumerManager.js";
-import { ParticipantManager } from "./media/ParticipantManager.js";
-import { TransportManager } from "./media/TransportManager.ts";
-import { VideoElementManager } from "./media/VideoElementManager.js";
-import { getSFUClient } from "./sfu-client.js";
+import type { Producer } from "mediasoup-client/types";
+import type { ConsumerEntry } from "./media/ConsumerManager";
+import { ConsumerManager } from "./media/ConsumerManager";
+import {
+	type ParticipantData,
+	ParticipantManager,
+} from "./media/ParticipantManager";
+import { TransportManager } from "./media/TransportManager";
+import { VideoElementManager } from "./media/VideoElementManager";
+import type { SFUClient } from "./SFUClient";
 
-function createMediaHandler() {
+interface MediaHandler {
+	localStream: MediaStream | null;
+	audioProducer: Producer | null;
+	videoProducer: Producer | null;
+	screenProducer: Producer | null;
+	setProducers(producers?: Partial<MediaHandler>): void;
+	stopScreenShare(): void;
+	cleanup(): void;
+}
+
+function createMediaHandler(): MediaHandler {
 	return {
 		localStream: null,
 		audioProducer: null,
@@ -22,14 +37,14 @@ function createMediaHandler() {
 			this.screenProducer = null;
 		},
 		cleanup() {
-			for (const producer of [
+			for (const p of [
 				this.audioProducer,
 				this.videoProducer,
 				this.screenProducer,
 			]) {
 				try {
-					producer?.close?.();
-				} catch (error) {
+					p?.close();
+				} catch (error: unknown) {
 					console.warn("Failed to close producer during cleanup:", error);
 				}
 			}
@@ -42,8 +57,78 @@ function createMediaHandler() {
 	};
 }
 
-class SFUMeetingManager {
-	constructor() {
+interface SFUEventHandlers {
+	onParticipantJoined?: (participant: unknown) => void;
+	onParticipantLeft?: (data: {
+		participantId: string;
+		participant?: unknown;
+	}) => void;
+	onParticipantUpdated?: (
+		participantId: string,
+		participant: unknown,
+		updates: unknown,
+	) => void;
+	onScreenShareStarted?: (data: unknown) => void;
+	onScreenShareStopped?: (data: unknown) => void;
+	onActiveSpeakerChanged?: (participantIds: string[]) => void;
+	onHostMutedYou?: () => void;
+	onHostKickedYou?: (data: unknown) => void;
+}
+
+interface SFUProducerEvent {
+	producerId: string;
+	participantId: string;
+	isScreen?: boolean;
+}
+
+interface SFUProducerClosedEvent {
+	participantId?: string;
+	producerId?: string;
+	isScreen?: boolean;
+}
+
+interface SFUMediaControlEvent {
+	participantId: string;
+	action?: string | { type: string; enabled: boolean };
+}
+
+interface SFUHostControlEvent {
+	action: string;
+	targetParticipantId: string;
+	hostId?: string;
+}
+
+interface SFUMeetingManagerOptions {
+	meetingId: string;
+	currentUser: unknown;
+	eventHandlers?: SFUEventHandlers;
+}
+
+export class SFUMeetingManager {
+	sfuClient: SFUClient;
+	meetingId: string | null;
+	currentUser: { value: unknown };
+	isConnected: boolean;
+	isSetupComplete: boolean;
+	initialSyncInProgress: boolean;
+	bufferedProducerEvents: SFUProducerEvent[];
+	processedConsumers: Set<string>;
+	isScreenShareActive: boolean;
+
+	videoManager: VideoElementManager;
+	participantManager: ParticipantManager;
+	consumerManager: ConsumerManager;
+	transportManager: TransportManager;
+	mediaHandler: MediaHandler;
+
+	eventHandlers: SFUEventHandlers;
+	recoveryInProgress: boolean;
+	lastRecoveryAt: number;
+
+	eventTarget: EventTarget;
+
+	constructor(sfuClient: SFUClient) {
+		this.sfuClient = sfuClient;
 		this.meetingId = null;
 		this.currentUser = { value: null };
 		this.isConnected = false;
@@ -59,7 +144,6 @@ class SFUMeetingManager {
 		this.transportManager = new TransportManager();
 		this.mediaHandler = createMediaHandler();
 
-		this.sfuClient = null;
 		this.eventHandlers = {};
 		this.recoveryInProgress = false;
 		this.lastRecoveryAt = 0;
@@ -67,7 +151,7 @@ class SFUMeetingManager {
 		this.eventTarget = new EventTarget();
 	}
 
-	initialize(options) {
+	initialize(options: SFUMeetingManagerOptions): void {
 		this.meetingId = options.meetingId;
 		this.currentUser = this.ensureRef(options.currentUser);
 		this.eventHandlers = options.eventHandlers || {};
@@ -75,22 +159,29 @@ class SFUMeetingManager {
 		this.setupManagerEventHandlers();
 	}
 
-	setupManagerEventHandlers() {
+	setupManagerEventHandlers(): void {
 		// Participant manager events
 		this.participantManager.setEventHandlers({
-			onParticipantAdded: (participant) => {
+			onParticipantAdded: (participant: Record<string, unknown>) => {
 				if (this.eventHandlers.onParticipantJoined) {
 					this.eventHandlers.onParticipantJoined(participant);
 				}
 			},
-			onParticipantRemoved: (participantId, participant) => {
+			onParticipantRemoved: (
+				participantId: string,
+				participant: Record<string, unknown>,
+			) => {
 				this.videoManager.removeVideoElement(participantId);
 				this.consumerManager.cleanupParticipantConsumers(participantId);
 				if (this.eventHandlers.onParticipantLeft) {
 					this.eventHandlers.onParticipantLeft({ participantId, participant });
 				}
 			},
-			onParticipantUpdated: (participantId, participant, updates) => {
+			onParticipantUpdated: (
+				participantId: string,
+				participant: Record<string, unknown>,
+				updates: Record<string, unknown>,
+			) => {
 				if (this.eventHandlers.onParticipantUpdated) {
 					this.eventHandlers.onParticipantUpdated(
 						participantId,
@@ -103,17 +194,11 @@ class SFUMeetingManager {
 
 		// Consumer manager events
 		this.consumerManager.setEventHandlers({
-			onConsumerAdded: (consumer) => {
+			onConsumerAdded: (consumer: ConsumerEntry) => {
 				this.handleNewConsumer(consumer);
 			},
-			onConsumerRemoved: (consumerId, consumer) => {
-				this.processedConsumers?.delete?.(consumerId);
-
-				// If this was a screen-share consumer, notify UI to clear screen-share state
-				if (
-					consumer &&
-					(consumer.isScreen || consumer?.appData?.type === "screen")
-				) {
+			onConsumerRemoved: (consumerId: string, consumer: ConsumerEntry) => {
+				if (consumer?.isScreen || consumer?.appData?.type === "screen") {
 					this.isScreenShareActive = false;
 					if (this.eventHandlers.onScreenShareStopped) {
 						this.eventHandlers.onScreenShareStopped({
@@ -126,20 +211,25 @@ class SFUMeetingManager {
 		});
 
 		this.transportManager.setEventHandlers({
-			onTransportConnectionStateChange: ({ direction, state }) => {
+			onTransportConnectionStateChange: ({
+				direction,
+				state,
+			}: {
+				direction: string;
+				state: string;
+			}) => {
 				this.handleTransportConnectionStateChange(direction, state);
 			},
 		});
 	}
 
-	async connect(authToken = null) {
+	async connect(authToken: string | null = null): Promise<boolean> {
 		if (this.isConnected) {
 			return true;
 		}
 
 		try {
-			this.sfuClient = getSFUClient();
-			await this.sfuClient.connect(this.meetingId, authToken);
+			await this.sfuClient.connect(this.meetingId ?? "", authToken);
 			this.isConnected = true;
 
 			// Initialize transport manager with SFU client
@@ -155,9 +245,9 @@ class SFUMeetingManager {
 		}
 	}
 
-	async joinRoom(userData, mediaState) {
+	async joinRoom(userData: unknown, mediaState: unknown): Promise<boolean> {
 		try {
-			await this.sfuClient.joinRoom(this.meetingId, userData, mediaState);
+			await this.sfuClient.joinRoom(this.meetingId ?? "", userData, mediaState);
 			console.log("Successfully joined room:", this.meetingId);
 
 			return true;
@@ -167,7 +257,7 @@ class SFUMeetingManager {
 		}
 	}
 
-	async initializeDevice() {
+	async initializeDevice(): Promise<boolean> {
 		try {
 			await this.transportManager.initializeDevice();
 			return true;
@@ -177,7 +267,7 @@ class SFUMeetingManager {
 		}
 	}
 
-	async createReceiveTransport() {
+	async createReceiveTransport(): Promise<boolean> {
 		try {
 			await this.transportManager.createReceiveTransport();
 			return true;
@@ -187,9 +277,12 @@ class SFUMeetingManager {
 		}
 	}
 
-	async publishMedia(localStream, options = {}) {
+	async publishMedia(
+		localStream: MediaStream,
+		options: { publishVideo?: boolean; publishAudio?: boolean } = {},
+	): Promise<Record<string, unknown>> {
 		const { publishVideo = true, publishAudio = true } = options;
-		const results = {};
+		const results: Record<string, unknown> = {};
 
 		try {
 			this.mediaHandler.localStream = localStream;
@@ -207,10 +300,10 @@ class SFUMeetingManager {
 						results.videoProducer = videoProducer;
 						this.mediaHandler.setProducers({ videoProducer });
 						console.log("Video published successfully");
-					} catch (error) {
+					} catch (error: unknown) {
 						console.warn(
 							"Failed to publish video, continuing without video:",
-							error.message,
+							(error as Error).message,
 						);
 					}
 				}
@@ -227,10 +320,10 @@ class SFUMeetingManager {
 						results.audioProducer = audioProducer;
 						this.mediaHandler.setProducers({ audioProducer });
 						console.log("Audio published successfully");
-					} catch (error) {
+					} catch (error: unknown) {
 						console.warn(
 							"Failed to publish audio, continuing without audio:",
-							error.message,
+							(error as Error).message,
 						);
 					}
 				}
@@ -243,7 +336,7 @@ class SFUMeetingManager {
 		}
 	}
 
-	async setupExistingParticipants() {
+	async setupExistingParticipants(): Promise<void> {
 		try {
 			this.initialSyncInProgress = true;
 
@@ -253,14 +346,16 @@ class SFUMeetingManager {
 			const currentUserId = this.getCurrentUserId();
 
 			const normalized = (participants || [])
-				.map((p) => {
-					const pid = p.user_id || p.id;
-					const info = p.info || {};
+				.map((p: Record<string, unknown>) => {
+					const info = (p.info || {}) as Record<string, unknown>;
 					return {
-						participantId: pid,
-						user_id: pid,
-						user_name: info.name || info.user_name || pid,
-						avatar: info.avatar || null,
+						participantId: (p.user_id ?? p.id) as string,
+						user_id: (p.user_id ?? p.id) as string,
+						user_name: (info.name ??
+							info.user_name ??
+							p.user_id ??
+							"") as string,
+						avatar: (info.avatar ?? null) as string | null,
 						audio_enabled:
 							typeof info.audio_enabled === "boolean"
 								? info.audio_enabled
@@ -269,7 +364,7 @@ class SFUMeetingManager {
 							typeof info.video_enabled === "boolean"
 								? info.video_enabled
 								: false,
-						is_guest: info.is_guest || false,
+						is_guest: (info.is_guest as boolean) || false,
 					};
 				})
 				.filter((p) => p.user_id !== currentUserId);
@@ -288,37 +383,41 @@ class SFUMeetingManager {
 		}
 	}
 
-	async requestExistingProducers() {
+	async requestExistingProducers(): Promise<unknown[] | null> {
 		try {
 			const existingProducers = await this.sfuClient.getExistingProducers();
 
 			if (existingProducers?.length) {
 				console.log(
 					`Found ${existingProducers.length} existing producers:`,
-					existingProducers.map((p) => ({
-						id: p.id,
-						participantId: p.participantId || p.user_id || p.userId,
-						kind: p.kind,
-						isScreen: !!p.isScreen,
-					})),
+					existingProducers.map((p: unknown) => {
+						const producer = p as Record<string, unknown>;
+						return {
+							id: producer.id,
+							participantId:
+								producer.participantId || producer.user_id || producer.userId,
+							kind: producer.kind,
+							isScreen: !!producer.isScreen,
+						};
+					}),
 				);
 
 				for (const producerInfo of existingProducers) {
-					const participantId =
-						producerInfo.participantId ||
-						producerInfo.user_id ||
-						producerInfo.userId;
+					const info = producerInfo as Record<string, unknown>;
+					const participantId = (info.participantId ??
+						info.user_id ??
+						info.userId) as string;
 
 					console.log("Subscribing to existing producer:", {
-						producerId: producerInfo.id,
+						producerId: info.id,
 						participantId,
-						kind: producerInfo.kind,
-						isScreen: !!producerInfo.isScreen,
+						kind: info.kind,
+						isScreen: !!info.isScreen,
 					});
 					await this.subscribeToRemoteProducer({
-						producerId: producerInfo.id,
+						producerId: info.id as string,
 						participantId,
-						isScreen: producerInfo.isScreen,
+						isScreen: !!info.isScreen,
 					});
 				}
 			} else {
@@ -332,7 +431,11 @@ class SFUMeetingManager {
 		}
 	}
 
-	async subscribeToProducer(producerId, participantId, metadata = {}) {
+	async subscribeToProducer(
+		producerId: string,
+		participantId: string,
+		metadata: Record<string, unknown> = {},
+	): Promise<unknown> {
 		try {
 			const consumer = await this.transportManager.createConsumer(
 				producerId,
@@ -364,7 +467,15 @@ class SFUMeetingManager {
 		}
 	}
 
-	async subscribeToRemoteProducer({ producerId, participantId, isScreen }) {
+	async subscribeToRemoteProducer({
+		producerId,
+		participantId,
+		isScreen,
+	}: {
+		producerId: string;
+		participantId: string;
+		isScreen: boolean;
+	}): Promise<unknown | null> {
 		if (!producerId || !participantId) {
 			return null;
 		}
@@ -378,17 +489,17 @@ class SFUMeetingManager {
 		});
 	}
 
-	async handleNewConsumer(consumer) {
+	async handleNewConsumer(consumer: ConsumerEntry): Promise<void> {
 		const { participantId, kind, isScreen } = consumer;
 
-		if (this.processedConsumers?.has?.(consumer?.id)) {
+		if (this.processedConsumers?.has?.(consumer?.id as string)) {
 			return;
 		}
 
 		if (!this.processedConsumers) {
 			this.processedConsumers = new Set();
 		}
-		this.processedConsumers.add(consumer?.id);
+		this.processedConsumers.add(consumer?.id as string);
 
 		if (!participantId) {
 			return;
@@ -399,7 +510,7 @@ class SFUMeetingManager {
 			return;
 		}
 
-		if (!this.participantManager.hasParticipant(participantId)) {
+		if (!this.participantManager.hasParticipant(participantId as string)) {
 			this.participantManager.addParticipant({
 				user_id: participantId,
 				user_name: participantId, // Will be updated when participant data arrives
@@ -412,16 +523,20 @@ class SFUMeetingManager {
 		}
 
 		if (kind === "video") {
-			await this.attachVideoConsumer(participantId, consumer);
+			await this.attachVideoConsumer(participantId as string, consumer);
 		} else if (kind === "audio") {
-			await this.attachAudioConsumer(participantId, consumer);
+			await this.attachAudioConsumer(participantId as string, consumer);
 		}
 	}
 
-	async attachVideoConsumer(participantId, consumer) {
+	async attachVideoConsumer(
+		participantId: string,
+		consumer: ConsumerEntry,
+	): Promise<void> {
 		try {
 			// only attach the video track as audio is managed separately
-			const stream = new MediaStream([consumer.track]);
+			const track = consumer.track as MediaStreamTrack;
+			const stream = new MediaStream([track]);
 
 			await this.videoManager.attachStream(participantId, stream, false);
 
@@ -439,10 +554,14 @@ class SFUMeetingManager {
 		}
 	}
 
-	async attachAudioConsumer(participantId, consumer) {
+	async attachAudioConsumer(
+		participantId: string,
+		consumer: ConsumerEntry,
+	): Promise<void> {
 		try {
 			// Only attach the audio track as video is managed separately
-			const stream = new MediaStream([consumer.track]);
+			const track = consumer.track as MediaStreamTrack;
+			const stream = new MediaStream([track]);
 
 			await this.videoManager.attachStream(participantId, stream, false);
 		} catch (error) {
@@ -453,8 +572,9 @@ class SFUMeetingManager {
 		}
 	}
 
-	async handleScreenShareConsumer(consumer) {
-		const { participantId, track } = consumer;
+	async handleScreenShareConsumer(consumer: ConsumerEntry): Promise<void> {
+		const participantId = consumer.participantId;
+		const track = consumer.track as MediaStreamTrack;
 
 		const allConsumers = this.consumerManager.getAllConsumers();
 		const allCameraConsumers = allConsumers.filter(
@@ -476,7 +596,7 @@ class SFUMeetingManager {
 			}
 
 			const screenStream = new MediaStream([track]);
-			if (consumer?.appData && !consumer.appData.type) {
+			if (consumer.appData && !consumer.appData.type) {
 				consumer.appData.type = "screen";
 			} else if (consumer && !consumer.appData) {
 				consumer.appData = { type: "screen" };
@@ -494,7 +614,7 @@ class SFUMeetingManager {
 		}
 	}
 
-	async flushBufferedProducers() {
+	async flushBufferedProducers(): Promise<void> {
 		if (!this.bufferedProducerEvents.length) {
 			console.log("No buffered producer events to flush");
 			return;
@@ -513,10 +633,11 @@ class SFUMeetingManager {
 
 				// Check if we already have a consumer for this producer
 				const existingConsumers =
-					this.consumerManager.getConsumersByParticipant(event.participantId);
+					this.consumerManager.getConsumersByParticipant(
+						event.participantId as string,
+					);
 				const alreadySubscribed = existingConsumers.some((c) => {
-					const consumerProducerId = c.consumer?.producerId || c.producerId;
-					return consumerProducerId === event.producerId;
+					return c.consumer.producerId === event.producerId;
 				});
 
 				if (alreadySubscribed) {
@@ -524,9 +645,9 @@ class SFUMeetingManager {
 				}
 
 				await this.subscribeToRemoteProducer({
-					producerId: event.producerId,
-					participantId: event.participantId,
-					isScreen: event.isScreen,
+					producerId: event.producerId as string,
+					participantId: event.participantId as string,
+					isScreen: !!event.isScreen,
 				});
 			} catch (error) {
 				console.warn("Failed to process buffered producer:", error);
@@ -534,60 +655,60 @@ class SFUMeetingManager {
 		}
 	}
 
-	setupSFUEventHandlers() {
+	setupSFUEventHandlers(): void {
 		this.sfuClient.on("reconnect", () => {
 			this.recoverTransportIce("socket_reconnect");
 		});
 
-		this.sfuClient.on("participant_joined", (data) => {
+		this.sfuClient.on("participant_joined", (data: ParticipantData) => {
 			const currentUserId = this.getCurrentUserId();
-			const joinedUserId = data.participantId || data.user_id;
+			const joinedUserId = data.participantId || data.user_id || "";
 
 			if (joinedUserId && joinedUserId !== currentUserId) {
 				this.participantManager.addParticipant(data);
 			}
 		});
 
-		this.sfuClient.on("participant_left", (data) => {
-			this.participantManager.removeParticipant(data.participantId);
+		this.sfuClient.on("participant_left", (data: ParticipantData) => {
+			const d = data as ParticipantData;
+			this.participantManager.removeParticipant(d.participantId || "");
 		});
 
-		this.sfuClient.on("producer_created", async (data) => {
-			if (data.participantId === this.getCurrentUserId()) return;
+		this.sfuClient.on("producer_created", async (data: unknown) => {
+			const d = data as SFUProducerEvent;
+			if (d.participantId === this.getCurrentUserId()) return;
 
 			// If we're syncing or the device isn't ready yet, buffer this event
 			if (
 				this.initialSyncInProgress ||
 				!this.transportManager?.isDeviceLoaded?.()
 			) {
-				this.bufferedProducerEvents.push(data);
+				this.bufferedProducerEvents.push(d);
 				return;
 			}
 
 			await this.subscribeToRemoteProducer({
-				producerId: data.producerId,
-				participantId: data.participantId,
-				isScreen: data.isScreen,
+				producerId: d.producerId,
+				participantId: d.participantId,
+				isScreen: !!d.isScreen,
 			});
 		});
 
-		this.sfuClient.on("producer_closed", (data) => {
-			const pid = data?.participantId;
-			const closedProducerId = data?.producerId;
-			const closedIsScreen = data?.isScreen;
+		this.sfuClient.on("producer_closed", (data: unknown) => {
+			const d = data as SFUProducerClosedEvent;
+			const pid = d.participantId;
+			const closedProducerId = d.producerId;
+			const closedIsScreen = d.isScreen;
 			if (pid) {
 				const allForPid = this.consumerManager.getConsumersByParticipant(pid);
 				for (const c of allForPid) {
 					const producedMatch =
-						closedProducerId &&
-						(c.consumer?.producerId === closedProducerId ||
-							c.producerId === closedProducerId ||
-							(c.appData && c.appData.producerId === closedProducerId));
+						(closedProducerId && c.consumer.producerId === closedProducerId) ||
+						c.appData?.producerId === closedProducerId;
 					const isScreenLike =
 						c.isScreen ||
 						c.appData?.type === "screen" ||
-						c.consumer?.appData?.type === "screen";
-					// Only remove screen consumers if the closed producer was also screen
+						c.consumer.appData?.type === "screen";
 					const shouldRemove =
 						producedMatch || (isScreenLike && closedIsScreen);
 					if (shouldRemove) {
@@ -597,22 +718,22 @@ class SFUMeetingManager {
 				}
 			}
 
-			if (this.eventHandlers && data?.isScreen) {
-				this.eventHandlers.onScreenShareStopped({
-					participantId: data?.participantId,
+			if (this.eventHandlers && d?.isScreen) {
+				this.eventHandlers.onScreenShareStopped?.({
+					participantId: d.participantId,
 				});
 			}
 		});
 
 		// When server explicitly notifies a consumer was closed, ensure local removal
-		this.sfuClient.on("consumer_closed", (data) => {
+		this.sfuClient.on("consumer_closed", (data: unknown) => {
 			try {
-				const consumerId = data?.consumerId;
+				const d = data as { consumerId?: string; participantId?: string };
+				const consumerId = d.consumerId;
 				if (!consumerId) return;
 				const removed = this.consumerManager.removeConsumer(consumerId);
 				if (!removed) {
-					// If not found by id, attempt to find by participant mapping if provided
-					const pid = data?.participantId;
+					const pid = d.participantId;
 					if (pid) {
 						const allForPid =
 							this.consumerManager.getConsumersByParticipant(pid);
@@ -620,33 +741,32 @@ class SFUMeetingManager {
 							const maybeScreen =
 								c.isScreen ||
 								c.appData?.type === "screen" ||
-								c.consumer?.appData?.type === "screen";
+								(c.consumer as { appData?: { type?: string } })?.appData
+									?.type === "screen";
 							if (maybeScreen) {
 								this.consumerManager.removeConsumer(c.id);
 							}
 						}
 					}
 				}
-			} catch (e) {
-				console.warn("Error handling consumer_closed", e.message);
+			} catch (e: unknown) {
+				console.warn("Error handling consumer_closed", (e as Error).message);
 			}
 		});
 
-		this.sfuClient.on("media_control_update", (data) => {
-			// Server sends { participantId, action } where action can be
-			// - a string: 'mute'|'unmute'|'video_off'|'video_on'
-			// - or an object: { type: 'audio'|'video', enabled: boolean }
-			const updates = {};
-			const action = data?.action;
-			if (action && typeof action === "object") {
-				if (action.type === "audio" && typeof action.enabled === "boolean") {
-					updates.audioEnabled = !!action.enabled;
+		this.sfuClient.on("media_control_update", (data: unknown) => {
+			const d = data as SFUMediaControlEvent;
+			const updates: Record<string, boolean> = {};
+			if (d.action && typeof d.action === "object") {
+				const a = d.action;
+				if (a.type === "audio" && typeof a.enabled === "boolean") {
+					updates.audioEnabled = !!a.enabled;
 				}
-				if (action.type === "video" && typeof action.enabled === "boolean") {
-					updates.videoEnabled = !!action.enabled;
+				if (a.type === "video" && typeof a.enabled === "boolean") {
+					updates.videoEnabled = !!a.enabled;
 				}
-			} else if (typeof action === "string") {
-				switch (action) {
+			} else if (typeof d.action === "string") {
+				switch (d.action) {
 					case "mute":
 						updates.audioEnabled = false;
 						break;
@@ -665,65 +785,54 @@ class SFUMeetingManager {
 			}
 
 			if (Object.keys(updates).length) {
-				this.participantManager.updateMediaState(data.participantId, updates);
+				this.participantManager.updateMediaState(d.participantId, updates);
 			}
 		});
 
-		this.sfuClient.on("network_quality_update", (data) => {
-			if (data?.participantId && data?.quality) {
-				this.participantManager.updateParticipant(data.participantId, {
-					networkQuality: data.quality,
+		this.sfuClient.on("network_quality_update", (data: unknown) => {
+			const d = data as { participantId?: string; quality?: string };
+			if (d.participantId && d.quality) {
+				this.participantManager.updateParticipant(d.participantId, {
+					networkQuality: d.quality,
 				});
 			}
 		});
 
-		this.sfuClient.on("host_control_update", (data) => {
-			const { action, targetParticipantId, hostId } = data;
-
+		this.sfuClient.on("host_control_update", (data: unknown) => {
+			const d = data as SFUHostControlEvent;
 			const myParticipantId = this.getCurrentUserId();
+			const isForMe = d.targetParticipantId === myParticipantId;
 
-			console.log("SFU event: host_control_update", {
-				action,
-				targetParticipantId,
-				hostId,
-				myParticipantId,
-			});
-
-			// isForMe 👉👈?
-			const isForMe = targetParticipantId === myParticipantId;
-
-			switch (action) {
+			switch (d.action) {
 				case "mute_participant":
 					if (isForMe) {
-						if (this.eventHandlers.onHostMutedYou) {
-							this.eventHandlers.onHostMutedYou();
-						}
+						this.eventHandlers.onHostMutedYou?.();
 					} else {
-						this.participantManager.updateMediaState(targetParticipantId, {
+						this.participantManager.updateMediaState(d.targetParticipantId, {
 							audioEnabled: false,
 						});
 					}
 					break;
 				case "kick_participant":
 					if (isForMe) {
-						if (this.eventHandlers.onHostKickedYou) {
-							this.eventHandlers.onHostKickedYou({ hostId });
-						}
+						this.eventHandlers.onHostKickedYou?.({ hostId: d.hostId });
 					}
 					break;
 				default:
-					console.warn("Unknown host control action:", action);
+					console.warn("Unknown host control action:", d.action);
 			}
 		});
 
-		this.sfuClient.on("screen_share_started", (data) => {
+		this.sfuClient.on("screen_share_started", (data: unknown) => {
+			const d = data as { participantId?: string; stream?: MediaStream };
 			console.log("SFU event: screen_share_started (from signaling)", {
-				participantId: data.participantId,
-				hasDirectStream: !!data.stream,
+				participantId: d.participantId,
+				hasDirectStream: !!d.stream,
 			});
 		});
 
-		this.sfuClient.on("screen_share_stopped", (data) => {
+		this.sfuClient.on("screen_share_stopped", (data: unknown) => {
+			const d = data as { participantId?: string };
 			console.log("Screen share stopped - resetting sidebar mode flag");
 			this.isScreenShareActive = false;
 
@@ -731,7 +840,7 @@ class SFUMeetingManager {
 				this.eventHandlers.onScreenShareStopped(data);
 			}
 
-			const pid = data?.participantId;
+			const pid = d.participantId;
 			if (pid) {
 				const screenConsumers = this.consumerManager
 					.getScreenShareConsumers()
@@ -750,7 +859,8 @@ class SFUMeetingManager {
 					const maybeScreen =
 						c.isScreen ||
 						c.appData?.type === "screen" ||
-						c.consumer?.appData?.type === "screen";
+						(c.consumer as { appData?: { type?: string } })?.appData?.type ===
+							"screen";
 					if (maybeScreen) {
 						console.log("(safety) Removing screen-like consumer on stop:", {
 							consumerId: c.id,
@@ -763,20 +873,21 @@ class SFUMeetingManager {
 			}
 		});
 
-		this.sfuClient.on("active_speaker", (data) => {
+		this.sfuClient.on("active_speaker", (data: unknown) => {
+			const d = data as { participantIds: string[] };
 			if (this.eventHandlers.onActiveSpeakerChanged) {
-				this.eventHandlers.onActiveSpeakerChanged(data.participantIds);
+				this.eventHandlers.onActiveSpeakerChanged(d.participantIds);
 			}
 		});
 	}
 
-	handleTransportConnectionStateChange(direction, state) {
+	handleTransportConnectionStateChange(direction: string, state: string): void {
 		if (state === "failed" || state === "closed") {
 			this.recoverTransportIce(`transport_${direction}_${state}`);
 		}
 	}
 
-	async recoverTransportIce(reason) {
+	async recoverTransportIce(reason: string): Promise<boolean> {
 		if (this.recoveryInProgress) {
 			return false;
 		}
@@ -814,15 +925,22 @@ class SFUMeetingManager {
 		}
 	}
 
-	registerVideoElement(participantId, element) {
+	registerVideoElement(participantId: string, element: HTMLElement): void {
 		this.videoManager.registerVideoElement(participantId, element);
 	}
 
-	getVideoConsumerEntry(participantId) {
+	getVideoConsumerEntry(participantId: string): unknown {
 		return this.consumerManager.getVideoConsumer(participantId);
 	}
 
-	async updateConsumerStreamPreferences(consumerId, preferences) {
+	async updateConsumerStreamPreferences(
+		consumerId: string,
+		preferences: {
+			visible: boolean;
+			width: number;
+			height: number;
+		},
+	): Promise<unknown | null> {
 		if (!this.sfuClient?.isConnected()) {
 			return null;
 		}
@@ -838,13 +956,13 @@ class SFUMeetingManager {
 			console.warn(
 				"Failed to update consumer preferences",
 				consumerId,
-				error?.message || error,
+				(error as Error)?.message || error,
 			);
 			return null;
 		}
 	}
 
-	async disconnect() {
+	async disconnect(): Promise<void> {
 		try {
 			this.recoveryInProgress = false;
 
@@ -864,7 +982,7 @@ class SFUMeetingManager {
 	/**
 	 * Clean up all resources
 	 */
-	cleanup() {
+	cleanup(): void {
 		this.mediaHandler.cleanup();
 		this.videoManager.cleanup();
 		this.participantManager.clear();
@@ -885,31 +1003,19 @@ class SFUMeetingManager {
 	/**
 	 * Utility to ensure ref-like object
 	 */
-	ensureRef(obj) {
-		if (obj && typeof obj === "object" && "value" in obj) {
-			return obj;
+	ensureRef(obj: unknown): { value: unknown } {
+		if (obj && typeof obj === "object" && "value" in (obj as object)) {
+			return obj as { value: unknown };
 		}
 		return { value: obj };
 	}
 
-	getCurrentUserId() {
-		const currentUser = this.currentUser?.value || this.currentUser;
-		return currentUser?.user_id || currentUser?.userId || null;
-	}
-}
-
-let sfuManagerInstance = null;
-
-export function getSFUMeetingManager() {
-	if (!sfuManagerInstance) {
-		sfuManagerInstance = new SFUMeetingManager();
-	}
-	return sfuManagerInstance;
-}
-
-export function resetSFUMeetingManager() {
-	if (sfuManagerInstance) {
-		sfuManagerInstance.cleanup();
-		sfuManagerInstance = null;
+	getCurrentUserId(): string | null {
+		const cu = this.currentUser?.value || this.currentUser;
+		return (
+			((cu as Record<string, unknown>)?.user_id as string) ||
+			((cu as Record<string, unknown>)?.userId as string) ||
+			null
+		);
 	}
 }

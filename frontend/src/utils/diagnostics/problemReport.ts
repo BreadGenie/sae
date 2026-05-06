@@ -1,5 +1,5 @@
-import { getSFUClient } from "../sfu-client.js";
-import { getConsoleLogLines, getConsoleLogSummary } from "./consoleBuffer.ts";
+import type { SFUClient } from "../SFUClient";
+import { getConsoleLogLines, getConsoleLogSummary } from "./consoleBuffer";
 
 type TransportStats = {
 	sendTransport: { id: string | null; state: string };
@@ -23,6 +23,7 @@ type BuildProblemReportMailtoOptions = {
 	networkQuality?: string;
 	localStream?: MediaStream | null;
 	transportManager?: TransportManagerLike | null;
+	sfuClient?: SFUClient | null;
 	consoleLogLimit?: number;
 	maxBodyChars?: number;
 };
@@ -56,11 +57,11 @@ async function buildProblemReportMailto(
 		networkQuality,
 		localStream = null,
 		transportManager = null,
+		sfuClient = null,
 		consoleLogLimit = 40,
 		maxBodyChars = 7000,
 	} = options;
 
-	const sfuClient = getSFUClient();
 	const connectionStatus = sfuClient?.getConnectionStatus?.() || {
 		connected: false,
 		socketId: null,

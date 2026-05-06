@@ -1,5 +1,6 @@
 import { computed, type Ref, watch } from "vue";
 import { getInitials } from "../utils/text";
+import type { GridLayout } from "./useGridLayout";
 import type { PinnedTile } from "./useLayout";
 
 interface ScreenShare {
@@ -26,16 +27,11 @@ interface ScreenShareTile {
 	participant: ScreenShareTileParticipant;
 }
 
-interface MeetingStateLike {
-	pinTile: (type: "screenshare", id: string) => void;
-	unpinTile: () => void;
-}
-
 interface UseScreenShareTilesOptions {
 	displayScreenShares: Ref<ScreenShare[]>;
 	pinnedTile: Ref<PinnedTile | null>;
 	currentUser: Ref<CurrentUser | null | undefined>;
-	meetingState: MeetingStateLike;
+	gridLayout: GridLayout;
 	getParticipantName: (participantId: string) => string;
 }
 
@@ -43,7 +39,7 @@ export function useScreenShareTiles({
 	displayScreenShares,
 	pinnedTile,
 	currentUser,
-	meetingState,
+	gridLayout,
 	getParticipantName,
 }: UseScreenShareTilesOptions) {
 	const screenShareSignature = computed(() =>
@@ -58,7 +54,7 @@ export function useScreenShareTiles({
 
 			if (!signature) {
 				if (pinnedTile.value?.type === "screenshare") {
-					meetingState.unpinTile();
+					gridLayout.unpinTile();
 				}
 				return;
 			}
@@ -71,7 +67,7 @@ export function useScreenShareTiles({
 				pinnedTile.value.id !== primaryShareId;
 
 			if (primaryShareId && shouldAutoPin) {
-				meetingState.pinTile("screenshare", primaryShareId);
+				gridLayout.pinTile("screenshare", primaryShareId);
 			}
 		},
 		{ immediate: true },

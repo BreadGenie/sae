@@ -1,11 +1,11 @@
 import { type ComputedRef, computed, type Ref } from "vue";
-import type { Participant } from "../types";
+import type { Participant } from "../utils/media/ParticipantManager";
 import { useResponsiveGrid } from "./useResponsiveGrid";
 
-interface MeetingState {
-	raisedHands?: Ref<Record<string, string>>;
-	activeSpeakerIds?: Ref<string[]>;
-	stableSpeakerIds?: Ref<string[]>;
+interface LayoutDeps {
+	raisedHands: Ref<Record<string, string>>;
+	activeSpeakerIds: Ref<string[]>;
+	stableSpeakerIds: Ref<string[]>;
 }
 
 export interface PinnedTile {
@@ -70,7 +70,7 @@ interface UseLayoutReturn {
 export function useLayout(
 	participants: Ref<Record<string, Participant>>,
 	pinnedTile: Ref<PinnedTile | null>,
-	meetingState: MeetingState,
+	layoutDeps: LayoutDeps,
 	extraTiles: Ref<number>,
 ): UseLayoutReturn {
 	const { maxColumns, sidebarMaxColumns, windowWidth, BREAKPOINTS } =
@@ -339,11 +339,11 @@ export function useLayout(
 			pinnedParticipantId,
 		);
 
-		const stableSpeakers = meetingState.stableSpeakerIds?.value || [];
-		const activeSpeakers = meetingState.activeSpeakerIds?.value || [];
+		const stableSpeakers = layoutDeps.stableSpeakerIds.value || [];
+		const activeSpeakers = layoutDeps.activeSpeakerIds.value || [];
 		const activeSpeakerSet = new Set<string>(activeSpeakers);
 		const stableSpeakerSet = new Set<string>(stableSpeakers);
-		const raisedHands = meetingState?.raisedHands?.value || {};
+		const raisedHands = layoutDeps.raisedHands.value || {};
 
 		const priorityMap = buildPriorityMap(
 			remotes,

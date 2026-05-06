@@ -1,4 +1,4 @@
-import { getSFUClient } from "../utils/sfu-client.js";
+import type { SFUClient } from "../utils/SFUClient";
 import type { CurrentUser } from "./useCurrentUser";
 import type { ReactionStore } from "./useReactionStore";
 
@@ -15,12 +15,11 @@ interface ReactionsAPI {
 export function useReactions(deps: {
 	reactionStore: ReactionStore;
 	currentUser: CurrentUser;
+	sfuClient: SFUClient;
 }): ReactionsAPI {
-	const { reactionStore, currentUser } = deps;
+	const { reactionStore, currentUser, sfuClient } = deps;
 
 	const setupReactionEvents = () => {
-		const sfuClient = getSFUClient();
-
 		sfuClient.on("reaction:message", (data: Record<string, unknown>) => {
 			const userId = data.fromUser as string;
 			const emoji = (data.message || data.reaction) as string;
@@ -34,18 +33,13 @@ export function useReactions(deps: {
 
 	const onSendReaction = (reactionType: string) => {
 		try {
-			const userId = (currentUser.currentUser.value as Record<string, unknown>)
-				?.user_id as string;
+			const userId = currentUser.currentUser.value?.user_id as string;
 			if (userId) {
 				reactionStore.showReactionForUser(userId, reactionType, 5000);
 			}
 
-			const sfuClient = getSFUClient();
 			if (sfuClient.isConnected()) {
-				sfuClient.sendReaction(reactionType, {
-					clientId: (currentUser.currentUser.value as Record<string, unknown>)
-						?.user_id,
-				});
+				sfuClient.sendReaction(reactionType);
 			}
 		} catch (error) {
 			console.error("Failed to send reaction message:", error);

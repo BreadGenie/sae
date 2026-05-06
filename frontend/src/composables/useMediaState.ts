@@ -24,19 +24,9 @@ export interface MediaState {
 	resetMediaState: () => void;
 }
 
-let instance: MediaState | null = null;
+const instance = createMediaState();
 
-export function useMediaState(): MediaState {
-	if (instance) {
-		if (!instance.cameraPermissionGranted) {
-			instance.cameraPermissionGranted = ref(false);
-		}
-		if (!instance.microphonePermissionGranted) {
-			instance.microphonePermissionGranted = ref(false);
-		}
-		return instance;
-	}
-
+function createMediaState(): MediaState {
 	const isMicOn = ref(false);
 	const isCameraOn = ref(false);
 	const isScreenSharing = ref(false);
@@ -70,7 +60,7 @@ export function useMediaState(): MediaState {
 		localVideo.value = null;
 	};
 
-	instance = {
+	return {
 		isMicOn,
 		isCameraOn,
 		isScreenSharing,
@@ -86,6 +76,8 @@ export function useMediaState(): MediaState {
 		setMediaState,
 		resetMediaState,
 	};
+}
 
+export function useMediaState(): MediaState {
 	return instance;
 }
