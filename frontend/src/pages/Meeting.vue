@@ -211,6 +211,10 @@ import { useMediaControls } from "../composables/useMediaControls";
 import { useMediaState } from "../composables/useMediaState";
 import { provideMeetingContext } from "../composables/useMeetingContext";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
+import {
+	type MeetingDocLike,
+	useMeetingHandlers,
+} from "../composables/useMeetingHandlers";
 import { useNoiseCancellation } from "../composables/useNoiseCancellation";
 import { useParticipantStore } from "../composables/useParticipantStore";
 import { useRaiseHand } from "../composables/useRaiseHand";
@@ -229,7 +233,6 @@ import {
 } from "../data/mediaPreferences";
 import { session } from "../data/session";
 import { useSocket } from "../socket";
-import { openProblemReportEmail } from "../utils/diagnostics/problemReport";
 import { deviceManager } from "../utils/media/DeviceManager";
 import type { Participant } from "../utils/media/ParticipantManager";
 
@@ -524,89 +527,50 @@ const chatNotificationQueue = ref<InstanceType<
 const isReactionPickerOpen = ref(false);
 const isFullscreen = ref(false);
 
-// --- Methods ---
-const resetToPreview = () => {
-	connectionState.connectionError.value = null;
-	connectionState.isConnecting.value = false;
-	connectionState.isInPreview.value = true;
-};
+// --- Extracted handlers ---
+const handlers = useMeetingHandlers({
+	connectionState,
+	mediaState,
+	participantStore,
+	chatStore,
+	lobbyStore,
+	reactionStore,
+	raiseHandStore,
+	gridLayout,
+	currentUser,
+	sfuConnection,
+	mediaControls,
+	lobby,
+	meetingDoc: meetingDoc as unknown as MeetingDocLike,
+	meetingId: meetingId.value,
+	isCurrentUserHost,
+	notifiedLobbyUsers,
+	router,
+});
 
-const joinMeetingFromPreview = async () => {
-	await sfuConnection.joinMeetingRoom();
-};
+const {
+	resetToPreview,
+	joinMeetingFromPreview,
+	handleGuestJoinComplete,
+	leaveWaitingRoom,
+	leaveLobby,
+	goHome,
+	tryJoinAgain,
+	toggleChat,
+	handleMuteParticipant,
+	handleKickParticipant,
+	handleLowerHand,
+	handlePromoteToCohost,
+	handleApproveLobbyUser,
+	handleApproveAllLobbyUsers,
+	handleRejectLobbyUser,
+	handleNotificationClick,
+	toggleFullscreen,
+	handleReportProblem,
+	handleDeviceChanged,
+} = handlers;
 
-const handleGuestJoinComplete = async ({
-	guestName,
-	joinResult,
-}: {
-	guestName: string;
-	joinResult: Record<string, unknown>;
-}) => {
-	const guestId =
-		(joinResult?.guest_id as string) ||
-		(connectionState.guestId.value as string);
-	const resolvedGuestName = guestName || localStorage.getItem("guest_name");
-
-	if (guestId && resolvedGuestName) {
-		currentUser.setCurrentUser({
-			user_id: guestId,
-			name: resolvedGuestName,
-			full_name: resolvedGuestName,
-			avatar: null,
-			is_guest: true,
-		});
-	}
-
-	await sfuConnection.handleGuestJoinResult(
-		joinResult,
-		resolvedGuestName || "",
-	);
-};
-
-const leaveWaitingRoom = () => {
-	lobbyStore.isWaitingForApproval.value = false;
-	lobbyStore.isJoinRequestRejected.value = false;
-	router.push({ name: "Home" });
-};
-
-const leaveLobby = async () => {
-	lobbyStore.isInLobby.value = false;
-	lobbyStore.isWaitingForApproval.value = false;
-	lobbyStore.lobbyParticipantCount.value = 0;
-
-	router.push({ name: "Home" });
-};
-
-const goHome = () => {
-	lobbyStore.isJoinRequestRejected.value = false;
-	lobbyStore.isInLobby.value = false;
-	router.push({ name: "Home" });
-};
-
-const tryJoinAgain = async () => {
-	lobbyStore.isJoinRequestRejected.value = false;
-
-	if (isGuestSession.value) {
-		connectionState.isInPreview.value = true;
-		return;
-	}
-
-	await sfuConnection.joinMeetingRoom();
-};
-
-const toggleReactions = (payload: string) => {
-	reactions.onSendReaction(payload);
-	isReactionPickerOpen.value = false;
-};
-
-const toggleChat = () => {
-	chatStore.isChatOpen.value = !chatStore.isChatOpen.value;
-	if (chatStore.isChatOpen.value) {
-		chatStore.hasUnreadMessages.value = false;
-		isPeopleOpen.value = false;
-	}
-};
-
+// --- Local UI state ---
 const togglePeople = () => {
 	isPeopleOpen.value = !isPeopleOpen.value;
 	if (isPeopleOpen.value) {
@@ -614,230 +578,32 @@ const togglePeople = () => {
 	}
 };
 
-const handleMuteParticipant = async (participantId: string) => {
-	try {
-		if (sfuConnection.sfuManager.value?.sfuClient) {
-			sfuConnection.sfuManager.value.sfuClient.sendEvent("host_control", {
-				action: "mute_participant",
-				targetParticipantId: participantId,
-			});
-		} else {
-			console.error("SFU client not available");
-		}
-	} catch (error) {
-		console.error("Failed to mute participant:", error);
-	}
-};
-
-const handleKickParticipant = async (participantId: string, ban = false) => {
-	try {
-		if (ban) {
-			try {
-				await meetingDoc.setValue.submit({
-					banned_users: [
-						...(meetingDoc.doc?.banned_users || []),
-						{ user: participantId },
-					],
-				});
-			} catch (error) {
-				console.error("Failed to ban user:", error);
-			}
-		}
-
-		if (sfuConnection.sfuManager.value?.sfuClient) {
-			sfuConnection.sfuManager.value.sfuClient.sendEvent("host_control", {
-				action: "kick_participant",
-				targetParticipantId: participantId,
-			});
-		} else {
-			console.error("SFU client not available");
-		}
-	} catch (error) {
-		console.error("Failed to kick participant:", error);
-	}
-};
-
-const handleLowerHand = async (participantId: string) => {
-	try {
-		if (sfuConnection.sfuManager.value?.sfuClient) {
-			sfuConnection.sfuManager.value.sfuClient.sendEvent("host_control", {
-				action: "lower_hand",
-				targetParticipantId: participantId,
-			});
-		} else {
-			console.error("SFU client not available");
-		}
-	} catch (error) {
-		console.error("Failed to lower hand for participant:", error);
-	}
-};
-
-const handlePromoteToCohost = async (participantId: string) => {
-	try {
-		const response = await frappeRequest({
-			url: "meet.api.meeting.promote_to_cohost",
-			params: {
-				meeting_id: route.params.meetingId,
-				user_id: participantId,
-			},
-		});
-
-		if ((response as { meeting_id?: string })?.meeting_id) {
-			toast.success("User promoted to co-host");
-			await meetingDoc.reload();
-		}
-	} catch (error) {
-		console.error("Failed to promote participant to co-host:", error);
-		toast.error("Failed to promote user to co-host");
-	}
-};
-
-const handleApproveLobbyUser = async (participantId: string) => {
-	try {
-		await lobby.approveUser(participantId);
-		notifiedLobbyUsers.value.add(participantId);
-	} catch (error) {
-		console.error("Failed to approve lobby user:", error);
-	}
-};
-
-const handleApproveAllLobbyUsers = async (participantIds: string[]) => {
-	try {
-		await lobby.approveAllUsers();
-		for (const userId of participantIds) {
-			notifiedLobbyUsers.value.add(userId);
-		}
-	} catch (error) {
-		console.error("Failed to approve all lobby users:", error);
-	}
-};
-
-const handleRejectLobbyUser = async (participantId: string) => {
-	try {
-		await lobby.rejectUser(participantId);
-		notifiedLobbyUsers.value.add(participantId);
-	} catch (error) {
-		console.error("Failed to reject lobby user:", error);
-	}
-};
-
-const handleNotificationClick = () => {
-	if (!chatStore.isChatOpen.value) {
-		toggleChat();
-	}
+const toggleReactions = (payload: string) => {
+	reactions.onSendReaction(payload);
+	isReactionPickerOpen.value = false;
 };
 
 const syncFullscreenState = () => {
 	isFullscreen.value = !!document.fullscreenElement;
 };
 
-const toggleFullscreen = async () => {
-	try {
-		if (!document.fullscreenElement) {
-			const targetElement = document.body;
-			if (targetElement?.requestFullscreen) {
-				await targetElement.requestFullscreen();
-			}
-			return;
-		}
-		if (document.exitFullscreen) {
-			await document.exitFullscreen();
-		}
-	} catch (error) {
-		console.error("Failed to toggle fullscreen:", error);
-	} finally {
-		syncFullscreenState();
-	}
-};
-
 const setSinkIdOnVideoElements = async (sinkId: string) => {
 	const videoElements = document.querySelectorAll("video");
 	const promises = [];
 	for (const videoEl of videoElements) {
-		const promise = (videoEl as HTMLVideoElement)
-			.setSinkId(sinkId)
-			.catch((error: Error) => {
-				console.error("Failed to set speaker for video element:", error);
-			});
-		promises.push(promise);
+		promises.push(
+			(videoEl as HTMLVideoElement).setSinkId(sinkId).catch(() => {}),
+		);
 	}
 
 	if (sfuConnection.sfuManager.value?.videoManager) {
-		const audioElements =
-			sfuConnection.sfuManager.value.videoManager.audioElements;
-		for (const [, audioElement] of audioElements) {
-			const promise = audioElement.setSinkId(sinkId).catch((error: Error) => {
-				console.warn("Failed to set speaker for audio element:", error);
-			});
-			promises.push(promise);
+		for (const [, audioElement] of sfuConnection.sfuManager.value.videoManager
+			.audioElements) {
+			promises.push(audioElement.setSinkId(sinkId).catch(() => {}));
 		}
 	}
 
 	await Promise.all(promises);
-};
-
-const handleReportProblem = async () => {
-	await openProblemReportEmail({
-		meetingId: String(meetingId.value || ""),
-		networkQuality: connectionState.networkQuality?.value,
-		localStream: mediaState.localStream.value,
-		transportManager: sfuConnection.sfuManager.value?.transportManager || null,
-		sfuClient: sfuConnection.sfuClient,
-	});
-};
-
-const handleDeviceChanged = async (event: Record<string, unknown>) => {
-	if (event.type === "speaker") {
-		await mediaControls.applySpeakerDevice();
-		return;
-	}
-
-	if (mediaState.isCameraOn.value || mediaState.isMicOn.value) {
-		try {
-			const oldStream = mediaState.localStream.value;
-			if (oldStream) {
-				for (const track of oldStream.getTracks()) {
-					track.stop();
-				}
-			}
-
-			const cameraDeviceId =
-				event.type === "camera"
-					? (event.deviceId as string)
-					: selectedCameraId.value;
-			const micDeviceId =
-				event.type === "microphone"
-					? (event.deviceId as string)
-					: selectedMicId.value;
-
-			const { stream: newStream } = await mediaControls.acquireUserMedia(
-				mediaState.isCameraOn.value,
-				mediaState.isMicOn.value,
-				{ cameraDeviceId, micDeviceId },
-			);
-			mediaState.localStream.value = newStream;
-
-			if (mediaState.localVideo.value) {
-				(mediaState.localVideo.value as HTMLVideoElement).srcObject = newStream;
-			}
-
-			if (sfuConnection.sfuManager.value?.mediaHandler) {
-				const mh = sfuConnection.sfuManager.value.mediaHandler;
-
-				if (mh.audioProducer && newStream.getAudioTracks().length > 0) {
-					const audioTrack = newStream.getAudioTracks()[0];
-					await mh.audioProducer.replaceTrack({ track: audioTrack });
-				}
-
-				if (mh.videoProducer && newStream.getVideoTracks().length > 0) {
-					const videoTrack = newStream.getVideoTracks()[0];
-					await mh.videoProducer.replaceTrack({ track: videoTrack });
-				}
-			}
-		} catch (error) {
-			console.error("Failed to update media with new device:", error);
-		}
-	}
 };
 
 // --- Lifecycle ---
