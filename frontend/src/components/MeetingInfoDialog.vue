@@ -16,27 +16,20 @@
 	</Dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Dialog } from "frappe-ui";
 import { computed } from "vue";
 import ClickToCopyField from "./ClickToCopyField.vue";
 
-const props = defineProps({
-	modelValue: {
-		type: Boolean,
-		default: false,
-	},
-	meetingId: {
-		type: String,
-		required: true,
-	},
-	meetingTitle: {
-		type: String,
-		default: "",
-	},
-});
+const props = defineProps<{
+	modelValue?: boolean;
+	meetingId: string;
+	meetingTitle?: string;
+}>();
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{
+	"update:modelValue": [value: boolean];
+}>();
 
 const show = computed({
 	get: () => props.modelValue,

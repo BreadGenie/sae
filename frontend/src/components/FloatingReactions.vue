@@ -25,24 +25,29 @@
 	</TransitionGroup>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from "vue";
 
-const props = defineProps({
-	reactions: {
-		type: Array,
-		default: () => [],
-	},
-	containerRef: {
-		type: Object,
-		default: null,
-	},
-});
+interface Reaction {
+	id?: string;
+	uniqueId?: string;
+	userId: string;
+	userName: string;
+	emoji: string;
+	timestamp: number;
+	expiresAt: number;
+	position?: { x: number; y: number };
+}
 
-const positionAssignments = ref(new Map());
-const usedPositions = ref(new Set());
+const props = defineProps<{
+	reactions?: Reaction[];
+	containerRef?: { getBoundingClientRect: () => DOMRect };
+}>();
 
-const getReactionKey = (reaction) => {
+const positionAssignments = ref(new Map<string, number>());
+const usedPositions = ref(new Set<number>());
+
+const getReactionKey = (reaction: Reaction): string => {
 	return (
 		reaction.uniqueId ||
 		reaction.id ||
@@ -50,8 +55,13 @@ const getReactionKey = (reaction) => {
 	);
 };
 
-const floatingReactions = computed(() => {
-	const currentReactionKeys = new Set();
+interface ReactionWithPosition extends Reaction {
+	id: string;
+	position: { x: number; y: number };
+}
+
+const floatingReactions = computed<ReactionWithPosition[]>(() => {
+	const currentReactionKeys = new Set<string>();
 
 	for (const reaction of props.reactions) {
 		const reactionKey = getReactionKey(reaction);

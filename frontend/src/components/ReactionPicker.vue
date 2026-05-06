@@ -42,7 +42,7 @@
 	</PopoverRoot>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
 	PopoverContent,
 	PopoverPortal,
@@ -50,18 +50,16 @@ import {
 	PopoverTrigger,
 } from "reka-ui";
 
-const props = defineProps({
-	isOpen: {
-		type: Boolean,
-		default: false,
-	},
-	isHandRaised: {
-		type: Boolean,
-		default: false,
-	},
-});
+const props = defineProps<{
+	isOpen?: boolean;
+	isHandRaised?: boolean;
+}>();
 
-const emit = defineEmits(["select", "update:open", "toggle-raise-hand"]);
+const emit = defineEmits<{
+	select: [emoji: string];
+	"update:open": [value: boolean];
+	"toggle-raise-hand": [];
+}>();
 
 const reactionEmojis = [
 	"👍",

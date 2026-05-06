@@ -67,7 +67,7 @@
 				:participants="displayParticipants.hidden"
 				:size="mode === 'sidebar' ? 'small' : 'medium'"
 				:style="tileStyle"
-				@click="emit('openPeoplePanel')"
+				@click="emit('open-people-panel')"
 			/>
 		</TransitionGroup>
 
@@ -80,38 +80,48 @@
 	</div>
 </template>
 
-<script setup>
-import { computed, inject, ref, watch } from "vue";
+<script setup lang="ts">
+import { type ComputedRef, computed, inject, ref, watch } from "vue";
 import { useLayout } from "../composables/useLayout";
 import { useMeetingContext } from "../composables/useMeetingContext";
 import { usePinnedTileAnimation } from "../composables/usePinnedTileAnimation";
 import { useScreenShareTiles } from "../composables/useScreenShareTiles";
 import { useTileAdaptiveStreaming } from "../composables/useTileAdaptiveStreaming";
+import type { Participant } from "../utils/media/ParticipantManager";
 import { getInitials } from "../utils/text";
 import FloatingReactions from "./FloatingReactions.vue";
 import GroupTile from "./GroupTile.vue";
 import ParticipantTile from "./ParticipantTile.vue";
 
-const emit = defineEmits(["openPeoplePanel"]);
+const emit = defineEmits<{
+	"open-people-panel": [];
+}>();
 
 const meetingCtx = useMeetingContext();
-const setLocalVideoRef = inject("setLocalVideoRef");
-const setRemoteVideoRef = inject("setRemoteVideoRef");
-const setScreenShareVideoRef = inject("setScreenShareVideoRef");
-const getParticipantName = inject("getParticipantName");
+const setLocalVideoRef = inject<(el: unknown) => void>("setLocalVideoRef");
+const setRemoteVideoRef =
+	inject<(participantId: string, el: HTMLVideoElement | null) => void>(
+		"setRemoteVideoRef",
+	);
+const setScreenShareVideoRef = inject<
+	(pinId: string, el: HTMLVideoElement | null) => void
+>("setScreenShareVideoRef");
+const getParticipantName =
+	inject<(participantId: string) => string>("getParticipantName") ||
+	(() => "Unknown");
 
 const { registerTile } = useTileAdaptiveStreaming();
 
-const container = ref(null);
-const pinnedPanel = ref(null);
+const container = ref<HTMLElement | null>(null);
+const pinnedPanel = ref<HTMLElement | null>(null);
 
 // Cache ref handlers to avoid UI flicker
-const videoRefHandlers = new Map();
-const getRemoteVideoRef = (participantId) => {
+const videoRefHandlers = new Map<string, (el: unknown) => void>();
+const getRemoteVideoRef = (participantId: string): ((el: unknown) => void) => {
 	if (!videoRefHandlers.has(participantId)) {
-		videoRefHandlers.set(participantId, (el) => {
-			setRemoteVideoRef(participantId, el);
-			registerTile(participantId, el);
+		videoRefHandlers.set(participantId, (el: unknown) => {
+			setRemoteVideoRef(participantId, el as HTMLVideoElement | null);
+			registerTile(participantId, el as HTMLVideoElement | null);
 		});
 	}
 	return videoRefHandlers.get(participantId);
@@ -119,7 +129,9 @@ const getRemoteVideoRef = (participantId) => {
 
 // ── Reactive state from meeting context ───────────────────────────────────────
 
-const participants = computed(() => meetingCtx.participantStore.participants);
+const participants = computed(
+	() => meetingCtx.participantStore.participants,
+) as ComputedRef<Record<string, Participant>>;
 const currentUser = computed(() => meetingCtx.currentUser.currentUser.value);
 const isCameraOn = computed(() => meetingCtx.mediaState.isCameraOn);
 const isMicOn = computed(() => meetingCtx.mediaState.isMicOn);
@@ -162,22 +174,31 @@ const { screenShareTiles: allScreenShareTiles } = useScreenShareTiles({
 	getParticipantName,
 });
 
-const getScreenShareTileBindings = (shareTile) => {
+const getScreenShareTileBindings = (shareTile: {
+	pinId: string;
+	participant:
+		| Record<string, unknown>
+		| { user_id: string; user_name: string; avatar: string };
+}) => {
 	const isPinned = isPinnedScreenShare(shareTile.pinId);
+	const wrappedVideoRef = setScreenShareVideoRef
+		? (el: unknown) =>
+				setScreenShareVideoRef(shareTile.pinId, el as HTMLVideoElement | null)
+		: undefined;
 
 	return {
-		participant: shareTile.participant,
+		participant: shareTile.participant as unknown as Participant,
 		isLocal: false,
 		isVideoEnabled: true,
 		isAudioEnabled: false,
-		videoRef: setScreenShareVideoRef,
+		videoRef: wrappedVideoRef,
 		tileCount: isPinned ? 1 : visibleTileCount.value,
 		class: isPinned ? "pinned-tile" : undefined,
 		style: isPinned ? pinnedTileStyle.value : tileStyle.value,
-		pinType: "screenshare",
+		pinType: "screenshare" as const,
 		pinId: shareTile.pinId,
-		labelSize: isPinned ? "sm" : undefined,
-		labelPosition: isPinned ? "top-left" : undefined,
+		labelSize: isPinned ? ("sm" as const) : undefined,
+		labelPosition: isPinned ? ("top-left" as const) : undefined,
 		videoObjectFitClass: isPinned ? "object-contain" : undefined,
 		videoBackgroundClass: isPinned ? "bg-gray-900" : undefined,
 		tileBackgroundClass: isPinned ? "bg-black" : undefined,
@@ -189,7 +210,9 @@ const getScreenShareTileBindings = (shareTile) => {
 	};
 };
 
-const getParticipantTileBindings = (participant) => {
+const getParticipantTileBindings = (
+	participant: Participant & { isVisible: boolean },
+) => {
 	const isPinned = isPinnedParticipant(participant.user_id);
 
 	return {
@@ -264,9 +287,13 @@ const {
 	participants,
 	pinnedTile,
 	{
-		raisedHands: meetingCtx.raiseHandStore.raisedHands,
-		activeSpeakerIds: meetingCtx.participantStore.activeSpeakerIds,
-		stableSpeakerIds: meetingCtx.participantStore.stableSpeakerIds,
+		raisedHands: computed(() => meetingCtx.raiseHandStore.raisedHands),
+		activeSpeakerIds: computed(
+			() => meetingCtx.participantStore.activeSpeakerIds,
+		),
+		stableSpeakerIds: computed(
+			() => meetingCtx.participantStore.stableSpeakerIds,
+		),
 	},
 	extraTileCount,
 );
@@ -285,36 +312,45 @@ const { isFlipAnimating, pinnedTileStyle } = usePinnedTileAnimation({
 
 const floatingReactions = computed(() => {
 	const reactions = meetingCtx.reactionStore.reactions;
-	const currentUserId = currentUser.value?.user_id;
+	const currentUserId = (currentUser.value as Record<string, unknown> | null)
+		?.user_id as string | undefined;
 
-	let sourceIds;
+	let sourceIds: Set<string>;
 	if (mode.value === "grid") {
 		sourceIds = new Set(displayParticipants.value.hidden.map((p) => p.user_id));
 	} else {
-		// All participant IDs for sidebar mode
 		sourceIds = new Set([
 			...Object.keys(participants.value),
 			...(currentUserId ? [currentUserId] : []),
 		]);
 	}
 
-	const result = [];
+	const result: Array<{
+		userId: string;
+		userName: string;
+		emoji: string;
+		timestamp: number;
+		expiresAt: number;
+		uniqueId: string;
+	}> = [];
 	for (const [userId, reaction] of Object.entries(reactions)) {
 		if (!sourceIds.has(userId) || !reaction) continue;
 		const participant =
 			userId === currentUserId ? currentUser.value : participants.value[userId];
+		const p = participant as Record<string, unknown> | null;
 		const userName =
-			participant?.user_name ||
-			participant?.name ||
-			participant?.user_id ||
+			(p?.user_name as string) ||
+			(p?.full_name as string) ||
+			(p?.name as string) ||
+			(p?.user_id as string) ||
 			"Unknown";
 		result.push({
 			userId,
 			userName,
-			emoji: reaction.emoji,
-			timestamp: reaction.expiresAt - 5000,
-			expiresAt: reaction.expiresAt,
-			uniqueId: `${userId}-${reaction.emoji}-${reaction.expiresAt}`,
+			emoji: (reaction as { emoji: string }).emoji,
+			timestamp: (reaction as { expiresAt: number }).expiresAt - 5000,
+			expiresAt: (reaction as { expiresAt: number }).expiresAt,
+			uniqueId: `${userId}-${(reaction as { emoji: string }).emoji}-${(reaction as { expiresAt: number }).expiresAt}`,
 		});
 	}
 

@@ -128,10 +128,8 @@ const showHostControls = computed(() => {
 });
 
 const isHandRaised = computed(() => {
-	if (!meetingCtx?.raiseHandStore?.raisedHands.value) return false;
-	return !!meetingCtx.raiseHandStore.raisedHands.value[
-		props.participant.user_id
-	];
+	if (!meetingCtx?.raiseHandStore?.raisedHands) return false;
+	return !!meetingCtx.raiseHandStore.raisedHands[props.participant.user_id];
 });
 
 const handleKickConfirm = (ban: boolean) => {

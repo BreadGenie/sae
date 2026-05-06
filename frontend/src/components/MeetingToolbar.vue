@@ -209,9 +209,16 @@
 	/>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Button, Dropdown } from "frappe-ui";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import {
+	type Component,
+	computed,
+	onMounted,
+	onUnmounted,
+	ref,
+	watch,
+} from "vue";
 import LucideBug from "~icons/lucide/bug";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useResponsiveGrid } from "../composables/useResponsiveGrid";
@@ -221,89 +228,44 @@ import MeetingInfoDialog from "./MeetingInfoDialog.vue";
 import ReactionPicker from "./ReactionPicker.vue";
 import SettingsDialog from "./settings/SettingsDialog.vue";
 
-const props = defineProps({
-	isChatOpen: {
-		type: Boolean,
-		required: true,
-	},
-	isPeopleOpen: {
-		type: Boolean,
-		default: false,
-	},
-	hasUnread: {
-		type: Boolean,
-		default: false,
-	},
-	lobbyUserCount: {
-		type: Number,
-		default: 0,
-	},
-	isMicOn: {
-		type: Boolean,
-		required: true,
-	},
-	isCameraOn: {
-		type: Boolean,
-		required: true,
-	},
-	isScreenSharing: {
-		type: Boolean,
-		required: true,
-	},
-	isHandRaised: {
-		type: Boolean,
-		default: false,
-	},
-	isReactionPickerOpen: {
-		type: Boolean,
-		default: false,
-	},
-	meetingId: {
-		type: String,
-		default: "",
-	},
-	meetingTitle: {
-		type: String,
-		default: "",
-	},
-	currentUser: {
-		type: Object,
-		default: null,
-	},
-	isFullscreen: {
-		type: Boolean,
-		default: false,
-	},
-	cameraPermissionGranted: {
-		type: Boolean,
-		default: false,
-	},
-	microphonePermissionGranted: {
-		type: Boolean,
-		default: false,
-	},
-});
-
-const { getMeetingDoc } = useMeetingDoc();
-
-if (props.meetingId) {
-	getMeetingDoc(props.meetingId);
+interface MoreOption {
+	icon: string | Component;
+	label: string;
+	onClick: () => void;
 }
 
-const emit = defineEmits([
-	"toggle-chat",
-	"toggle-people",
-	"toggle-reactions",
-	"toggle-microphone",
-	"toggle-camera",
-	"toggle-screen-share",
-	"toggle-fullscreen",
-	"toggle-raise-hand",
-	"report-problem",
-	"end-call",
-	"device-changed",
-	"update:isReactionPickerOpen",
-]);
+const props = defineProps<{
+	isChatOpen: boolean;
+	isPeopleOpen?: boolean;
+	hasUnread?: boolean;
+	lobbyUserCount?: number;
+	isMicOn: boolean;
+	isCameraOn: boolean;
+	isScreenSharing: boolean;
+	isHandRaised?: boolean;
+	isReactionPickerOpen?: boolean;
+	meetingId?: string;
+	meetingTitle?: string;
+	currentUser?: unknown;
+	isFullscreen?: boolean;
+	cameraPermissionGranted?: boolean;
+	microphonePermissionGranted?: boolean;
+}>();
+
+const emit = defineEmits<{
+	"toggle-chat": [];
+	"toggle-people": [];
+	"toggle-reactions": [emoji: string];
+	"toggle-microphone": [];
+	"toggle-camera": [];
+	"toggle-screen-share": [];
+	"toggle-fullscreen": [];
+	"toggle-raise-hand": [];
+	"report-problem": [];
+	"end-call": [];
+	"device-changed": [event: unknown];
+	"update:isReactionPickerOpen": [value: boolean];
+}>();
 
 const { windowWidth } = useResponsiveGrid();
 const isMobile = computed(() => windowWidth.value < 768);

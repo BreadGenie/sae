@@ -27,7 +27,7 @@
 							data-testid="preview-video-shell"
 						>
 							<video
-										:ref="(el) => props.setLocalVideoRef?.(el)"
+								:ref="(el: unknown) => setLocalVideoRef?.(el as HTMLVideoElement | null)"
 								class="w-full h-full object-cover transform scale-x-[-1]"
 								autoplay
 								muted
@@ -90,7 +90,7 @@
 						<!-- Avatar group for current participants -->
 						<ParticipantAvatarGroup
 							v-if="!isGuest"
-							:participants="participants"
+							:participants="[...participants]"
 							:error="presenceError"
 							:maxDisplayed="3"
 						/>
@@ -132,9 +132,17 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Button, createResource, FormControl, toast } from "frappe-ui";
-import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
+import {
+	computed,
+	inject,
+	nextTick,
+	onMounted,
+	type Ref,
+	ref,
+	watch,
+} from "vue";
 import ParticipantAvatarGroup from "../components/ParticipantAvatarGroup.vue";
 import PreviewToolbar from "../components/PreviewToolbar.vue";
 import { useMeetingPreviewPresence } from "../composables/useMeetingPreviewPresence";
@@ -142,20 +150,34 @@ import { session } from "../data/session";
 import FrappeMeetingLogo from "../icons/FrappeMeetingLogo.vue";
 import MeetingAvatar from "./MeetingAvatar.vue";
 
-const props = defineProps({
-	meetingId: { type: String, required: true },
-	isCameraOn: { type: Boolean, default: false },
-	isMicOn: { type: Boolean, default: false },
-	cameraPermissionGranted: { type: Boolean, default: false },
-	microphonePermissionGranted: { type: Boolean, default: false },
-	isConnecting: { type: Boolean, default: false },
-	userInitials: { type: String, default: "" },
-	userAvatar: { type: String, default: "" },
-	currentUserName: { type: String, default: "You" },
-	guestAuthToken: { type: String, default: null },
-	isWaitingForApproval: { type: Boolean, default: false },
-	setLocalVideoRef: { type: Function, default: null },
-});
+interface VideoElement {
+	$el?:
+		| HTMLElement
+		| { querySelector: (sel: string) => HTMLInputElement | null };
+}
+
+const props = defineProps<{
+	meetingId: string;
+	isCameraOn?: boolean;
+	isMicOn?: boolean;
+	cameraPermissionGranted?: boolean;
+	microphonePermissionGranted?: boolean;
+	isConnecting?: boolean;
+	userInitials?: string;
+	userAvatar?: string;
+	currentUserName?: string;
+	guestAuthToken?: string | null;
+	isWaitingForApproval?: boolean;
+	setLocalVideoRef?: ((el: HTMLVideoElement | null) => void) | null;
+}>();
+
+const emit = defineEmits<{
+	"toggle-microphone": [];
+	"toggle-camera": [];
+	"join-from-preview": [];
+	"device-changed": [event: unknown];
+	"guest-join-complete": [data: { guestName: string; joinResult: unknown }];
+}>();
 
 const guestName = ref("");
 
@@ -165,7 +187,7 @@ onMounted(() => {
 		guestName.value = savedGuestName;
 	}
 });
-const guestNameInputRef = ref(null);
+const guestNameInputRef = ref<VideoElement | null>(null);
 
 const joinGuestAPI = createResource({
 	url: "meet.api.meeting.join_meeting_as_guest",
@@ -185,14 +207,6 @@ const { participants, error: presenceError } = useMeetingPreviewPresence(
 	props.meetingId,
 );
 
-const emit = defineEmits([
-	"toggle-microphone",
-	"toggle-camera",
-	"join-from-preview",
-	"device-changed",
-	"guest-join-complete",
-]);
-
 watch(guestNameInputRef, (inputRef) => {
 	if (inputRef) {
 		nextTick(() => {
@@ -203,7 +217,7 @@ watch(guestNameInputRef, (inputRef) => {
 });
 
 const handleJoin = async () => {
-	if (joinGuestAPI.loading || props.isConnecting.value) {
+	if (joinGuestAPI.loading || props.isConnecting) {
 		return;
 	}
 

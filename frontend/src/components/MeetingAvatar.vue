@@ -18,14 +18,14 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps({
-	image: { type: String, default: "" },
-	label: { type: String, default: "" },
-	tiles: { type: Number, default: 1 }, // number of visible tiles in grid
-});
+const props = defineProps<{
+	image?: string;
+	label?: string;
+	tiles?: number;
+}>();
 
 // Dynamic sizing tiers based on total visible tiles
 // Uses responsive classes that scale down on smaller screens

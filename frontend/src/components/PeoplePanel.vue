@@ -168,7 +168,7 @@ const filteredLobbyUsers = computed(() => {
 });
 
 const participantsList = computed(() => {
-	const raisedHands = meetingCtx?.raiseHandStore.raisedHands.value || {};
+	const raisedHands = meetingCtx?.raiseHandStore.raisedHands || {};
 
 	return Object.values(props.participants).sort((a, b) => {
 		// 1. Raised hands first

@@ -35,28 +35,25 @@
 	</Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 
-const props = defineProps({
-	notification: {
-		type: Object,
-		required: true,
-		validator: (value) => {
-			return (
-				value &&
-				typeof value.message === "string" &&
-				(value.fromName || value.fromUser)
-			);
-		},
-	},
-	autoDismissDelay: {
-		type: Number,
-		default: 5000,
-	},
-});
+interface Notification {
+	message: string;
+	fromUser: string;
+	fromName?: string;
+	timestamp?: string;
+}
 
-const emit = defineEmits(["close", "click"]);
+const props = defineProps<{
+	notification: Notification;
+	autoDismissDelay?: number;
+}>();
+
+const emit = defineEmits<{
+	close: [];
+	click: [notification: Notification];
+}>();
 
 const visible = ref(true);
 let dismissTimer = null;

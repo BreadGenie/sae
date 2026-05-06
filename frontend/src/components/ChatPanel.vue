@@ -36,7 +36,7 @@
 							</div>
 						</div>
 					</div>
-					<div v-if="messages.length === 0" class="text-gray-500 text-sm text-center mt-8">
+					<div v-if="resolvedMessages.length === 0" class="text-gray-500 text-sm text-center mt-8">
 						No messages yet
 					</div>
 				</div>
@@ -66,29 +66,61 @@
 	</Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import data from "@emoji-mart/data";
 import { init, SearchIndex } from "emoji-mart";
 import { Button, FormControl } from "frappe-ui";
-import { computed, nextTick, onMounted, ref, toRefs, watch } from "vue";
+import {
+	computed,
+	nextTick,
+	onMounted,
+	type Ref,
+	ref,
+	toRefs,
+	watch,
+} from "vue";
 import EmojiPicker from "./EmojiPicker.vue";
 
-const props = defineProps({
-	open: { type: Boolean, default: false },
-	userId: { type: String, default: "" },
-	userName: { type: String, default: "" },
-	messages: { type: [Array, Object], default: () => [] },
-});
+interface ChatMessage {
+	id: string | number;
+	user_name: string;
+	message: string;
+	timestamp: string;
+}
 
-const emit = defineEmits(["close", "send"]);
-const listEl = ref(null);
-const { messages } = toRefs(props);
+interface EmojiItem {
+	emoji: string;
+	keywords: string[];
+}
+
+interface MessageGroup {
+	id: string | number;
+	user_name: string;
+	timestamp: string;
+	messages: ChatMessage[];
+}
+
+const props = defineProps<{
+	open?: boolean;
+	userId?: string;
+	userName?: string;
+	messages?: ChatMessage[] | { value: ChatMessage[] };
+}>();
+
+const emit = defineEmits<{
+	close: [];
+	send: [text: string];
+}>();
+const listEl = ref<HTMLElement | null>(null);
+const { messages } = toRefs(props) as {
+	messages: Ref<ChatMessage[] | { value: ChatMessage[] }>;
+};
 const draft = ref("");
 const selectedEmojiIndex = ref(0);
-const filteredEmojis = ref([]);
+const filteredEmojis = ref<EmojiItem[]>([]);
 const isEmojiDataReady = ref(false);
 
-const defaultEmojis = [
+const defaultEmojis: EmojiItem[] = [
 	{ emoji: "😀", keywords: ["smile"] },
 	{ emoji: "😂", keywords: ["laugh"] },
 	{ emoji: "❤️", keywords: ["heart"] },
@@ -101,7 +133,7 @@ const defaultEmojis = [
 	{ emoji: "🎉", keywords: ["party"] },
 ];
 
-const recentlyUsedEmojis = ref(defaultEmojis.slice());
+const recentlyUsedEmojis = ref<EmojiItem[]>(defaultEmojis.slice());
 
 onMounted(async () => {
 	await scrollToBottom();
@@ -124,20 +156,27 @@ onMounted(async () => {
 	}
 });
 
-const groupedMessages = computed(() => {
-	if (!messages.value || messages.value.length === 0) return [];
+const resolvedMessages = computed<ChatMessage[]>(() => {
+	const m = messages.value;
+	if (!m) return [];
+	if (Array.isArray(m)) return m;
+	return m.value || [];
+});
 
-	const groups = [];
-	let currentGroup = null;
+const groupedMessages = computed<MessageGroup[]>(() => {
+	if (resolvedMessages.value.length === 0) return [];
 
-	for (const message of messages.value) {
+	const groups: MessageGroup[] = [];
+	let currentGroup: MessageGroup | null = null;
+
+	for (const message of resolvedMessages.value) {
 		const shouldStartNewGroup =
 			!currentGroup ||
 			currentGroup.user_name !== message.user_name ||
 			(currentGroup.messages.length > 0 &&
 				Math.abs(
-					new Date(message.timestamp) -
-						new Date(currentGroup.messages[0].timestamp),
+					new Date(message.timestamp).getTime() -
+						new Date(currentGroup.messages[0].timestamp).getTime(),
 				) > 300000);
 
 		if (shouldStartNewGroup) {
@@ -206,7 +245,10 @@ watch(emojiQuery, async (query) => {
 		return;
 	}
 	try {
-		const results = await SearchIndex.search(query, { maxResults: 10 });
+		const results = await SearchIndex.search(query, {
+			maxResults: 10,
+			caller: undefined as unknown as string,
+		});
 		filteredEmojis.value = results.map((emoji) => ({
 			emoji: emoji.skins[0].native,
 			keywords: emoji.keywords || [],

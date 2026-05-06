@@ -36,7 +36,7 @@
 					</FormControl>
 
 					<div v-if="selectedMicIdLocal" class="w-5">
-						<AudioIndicator class="mt-2" :device-id="selectedMicIdLocal" :is-active="true" :sensitivity="2"
+						<AudioIndicator class="mt-2" :device-id="getDeviceId(selectedMicIdLocal)" :is-active="true" :sensitivity="2"
 							:max-height="40" />
 					</div>
 				</div>
@@ -64,7 +64,7 @@
 	</SettingsLayoutBase>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Button, FormControl, LoadingText } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import LucideCamera from "~icons/lucide/camera";
@@ -82,25 +82,53 @@ import { deviceManager } from "../../utils/media/DeviceManager";
 import AudioIndicator from "../AudioIndicator.vue";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
-const props = defineProps({
-	isDialogOpen: {
-		type: Boolean,
-		default: false,
-	},
-});
+interface DeviceInfo {
+	label: string;
+	deviceId: string;
+}
 
-const emit = defineEmits(["device-changed"]);
+interface AutocompleteOption {
+	label: string;
+	value: string;
+	icon?: string;
+}
 
-const selectedCameraIdLocal = ref(selectedCameraId.value);
-const selectedMicIdLocal = ref(selectedMicId.value);
-const selectedSpeakerIdLocal = ref(selectedSpeakerId.value);
+declare global {
+	interface AudioContext {
+		setSinkId?: (deviceId: string) => Promise<void>;
+	}
+}
 
-const cameraOptions = ref([]);
-const micOptions = ref([]);
-const speakerOptions = ref([]);
+const props = defineProps<{
+	isDialogOpen?: boolean;
+}>();
+
+const emit = defineEmits<{
+	"device-changed": [data: { type: string; deviceId: string }];
+}>();
+
+const selectedCameraIdLocal = ref<string | AutocompleteOption>(
+	selectedCameraId.value,
+);
+const selectedMicIdLocal = ref<string | AutocompleteOption>(
+	selectedMicId.value,
+);
+const selectedSpeakerIdLocal = ref<string | AutocompleteOption>(
+	selectedSpeakerId.value,
+);
+
+const cameraOptions = ref<DeviceInfo[]>([]);
+const micOptions = ref<DeviceInfo[]>([]);
+const speakerOptions = ref<DeviceInfo[]>([]);
 
 const isTestingAudio = ref(false);
-let testAudio = null;
+let testAudio: HTMLAudioElement | null = null;
+
+const getDeviceId = (
+	value: string | AutocompleteOption | undefined,
+): string => {
+	return typeof value === "object" ? value?.value || "" : value || "";
+};
 
 const cameraSelectOptions = computed(() =>
 	cameraOptions.value.map((camera) => ({
@@ -292,19 +320,28 @@ const handleDeviceChange = () => {
 	// clear selection if the selected device is no longer available
 	if (
 		selectedCameraIdLocal.value &&
-		!deviceManager.findDeviceById(selectedCameraIdLocal.value, "camera")
+		!deviceManager.findDeviceById(
+			getDeviceId(selectedCameraIdLocal.value),
+			"camera",
+		)
 	) {
 		selectedCameraIdLocal.value = "";
 	}
 	if (
 		selectedMicIdLocal.value &&
-		!deviceManager.findDeviceById(selectedMicIdLocal.value, "microphone")
+		!deviceManager.findDeviceById(
+			getDeviceId(selectedMicIdLocal.value),
+			"microphone",
+		)
 	) {
 		selectedMicIdLocal.value = "";
 	}
 	if (
 		selectedSpeakerIdLocal.value &&
-		!deviceManager.findDeviceById(selectedSpeakerIdLocal.value, "speaker")
+		!deviceManager.findDeviceById(
+			getDeviceId(selectedSpeakerIdLocal.value),
+			"speaker",
+		)
 	) {
 		selectedSpeakerIdLocal.value = "";
 	}

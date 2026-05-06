@@ -167,7 +167,7 @@ type TileSize = "xs" | "sm" | "md";
 type TilePosition = "bottom-left" | "top-left" | "top-right" | "bottom-right";
 
 interface Props {
-	participant: Record<string, any>;
+	participant: Participant;
 	isLocal?: boolean;
 	isVideoEnabled?: boolean;
 	isAudioEnabled?: boolean;
@@ -275,17 +275,13 @@ const networkQualityMessage = computed(() => {
 });
 
 const currentReaction = computed(() => {
-	if (!meetingCtx?.reactionStore.reactions.value) return null;
-	return (
-		meetingCtx.reactionStore.reactions.value[props.participant.user_id] || null
-	);
+	if (!meetingCtx?.reactionStore.reactions) return null;
+	return meetingCtx.reactionStore.reactions[props.participant.user_id] || null;
 });
 
 const isHandRaised = computed(() => {
-	if (!meetingCtx?.raiseHandStore.raisedHands.value) return false;
-	return !!meetingCtx.raiseHandStore.raisedHands.value[
-		props.participant.user_id
-	];
+	if (!meetingCtx?.raiseHandStore.raisedHands) return false;
+	return !!meetingCtx.raiseHandStore.raisedHands[props.participant.user_id];
 });
 
 const isAnimating = ref(false);

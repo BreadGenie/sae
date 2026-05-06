@@ -14,51 +14,36 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
 
-const props = defineProps({
-	deviceId: {
-		type: String,
-		required: false,
-		default: "",
-	},
-	mediaStream: {
-		type: MediaStream,
-		required: false,
-		default: null,
-	},
-	isActive: {
-		type: Boolean,
-		default: false,
-	},
-	sensitivity: {
-		type: Number,
-		default: 1.0,
-	},
-	maxHeight: {
-		type: Number,
-		default: 80,
-	},
-	activeColorClass: {
-		type: String,
-		default: "bg-blue-700",
-	},
-});
+const props = defineProps<{
+	deviceId?: string;
+	mediaStream?: MediaStream;
+	isActive?: boolean;
+	sensitivity?: number;
+	maxHeight?: number;
+	activeColorClass?: string;
+}>();
 
-const bars = ref(
+interface BarState {
+	height: number;
+	className: string;
+}
+
+const bars = ref<BarState[]>(
 	Array.from({ length: 3 }, () => ({
 		height: 4,
 		className: props.activeColorClass,
 	})),
 );
 
-let audioContext = null;
-let analyser = null;
-let microphone = null;
-let animationFrame = null;
+let audioContext: AudioContext | null = null;
+let analyser: AnalyserNode | null = null;
+let microphone: MediaStreamAudioSourceNode | null = null;
+let animationFrame: number | null = null;
 let isListening = false;
-let localMediaStream = null;
+let localMediaStream: MediaStream | null = null;
 
 const startListening = async () => {
 	if (isListening || !props.isActive) return;

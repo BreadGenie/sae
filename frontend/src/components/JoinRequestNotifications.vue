@@ -71,29 +71,35 @@
 	</Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Button } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { getInitials } from "../utils/text";
 
-const props = defineProps({
-	waitingUsers: {
-		type: [Array, Object],
-		default: () => [],
-	},
-	maxVisible: {
-		type: Number,
-		default: 3,
-	},
-});
+interface WaitingUser {
+	user_id: string;
+	user_name?: string;
+	user_image?: string;
+}
 
-defineEmits(["approve-user", "reject-user", "view-all-requests"]);
+const props = defineProps<{
+	waitingUsers?: WaitingUser[] | { value: WaitingUser[] };
+	maxVisible?: number;
+}>();
+
+const emit = defineEmits<{
+	"approve-user": [userId: string];
+	"reject-user": [userId: string];
+	"view-all-requests": [];
+}>();
 
 const dismissedRequests = ref([]);
 
-const resolvedWaitingUsers = computed(() => {
-	const users = props.waitingUsers?.value || props.waitingUsers;
-	return Array.isArray(users) ? users : [];
+const resolvedWaitingUsers = computed<WaitingUser[]>(() => {
+	const users = props.waitingUsers;
+	if (!users) return [];
+	if (Array.isArray(users)) return users;
+	return users.value || [];
 });
 
 const joinRequests = computed(() => {

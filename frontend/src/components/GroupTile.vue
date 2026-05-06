@@ -37,29 +37,24 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
 
-const emit = defineEmits(["click"]);
+const emit = defineEmits<{
+	click: [];
+}>();
 
-const props = defineProps({
-	count: {
-		type: Number,
-		required: true,
-	},
-	tooltip: {
-		type: String,
-		default: "",
-	},
-	participants: {
-		type: Array,
-		default: () => [],
-	},
-	size: {
-		type: String,
-		default: "small",
-	},
-});
+const props = defineProps<{
+	count: number;
+	tooltip?: string;
+	participants?: Array<{
+		user_id: string;
+		user_name?: string;
+		avatar?: string;
+		initials?: string;
+	}>;
+	size?: "small" | "medium";
+}>();
 
 const sizeClasses = computed(() => {
 	// Responsive sizing: smaller on mobile, larger on desktop

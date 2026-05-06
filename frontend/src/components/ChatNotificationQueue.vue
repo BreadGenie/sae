@@ -18,28 +18,30 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from "vue";
 import ChatNotification from "./ChatNotification.vue";
 
-const props = defineProps({
-	autoDismissDelay: {
-		type: Number,
-		default: 5000,
-	},
-	maxVisible: {
-		type: Number,
-		default: 3,
-	},
-	chatOpen: {
-		type: Boolean,
-		default: false,
-	},
-});
+interface NotificationItem {
+	id: string;
+	message: string;
+	fromUser: string;
+	fromName: string;
+	timestamp: string;
+	originalData: Record<string, unknown>;
+}
 
-const emit = defineEmits(["notification-click"]);
+const props = defineProps<{
+	autoDismissDelay?: number;
+	maxVisible?: number;
+	chatOpen?: boolean;
+}>();
 
-const notifications = ref([]);
+const emit = defineEmits<{
+	"notification-click": [notification: NotificationItem];
+}>();
+
+const notifications = ref<NotificationItem[]>([]);
 const notificationCounter = ref(0);
 
 const activeNotifications = computed(() => {

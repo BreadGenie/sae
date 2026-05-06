@@ -34,7 +34,7 @@
 
 				<!-- Background Options -->
 				<div class="grid grid-cols-4 gap-3">
-					<div v-for="option in allBackgroundOptions" :key="option.name"
+					<div v-for="option in allBackgroundOptionsTyped" :key="option.name"
 						@click="handleBackgroundOptionClick(option)"
 						class="relative cursor-pointer rounded-lg border overflow-hidden transition-all duration-200 hover:shadow-sm group"
 						:class="[
@@ -106,7 +106,7 @@
 	</SettingsLayoutBase>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useBackgroundEffects } from "../../composables/useBackgroundEffects";
@@ -129,41 +129,65 @@ import {
 import { selectedCameraId } from "../../data/mediaPreferences";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";
 
-const props = defineProps({
-	isVisible: {
-		type: Boolean,
-		default: true,
+interface BackgroundOption {
+	name: string;
+	label: string;
+	type?: "none" | "blur";
+	url?: string | null;
+	isAddButton?: boolean;
+	isCustom?: boolean;
+}
+
+interface BackgroundImageOption {
+	label: string;
+	value: string;
+}
+
+const props = withDefaults(
+	defineProps<{
+		isVisible?: boolean;
+	}>(),
+	{
+		isVisible: true,
 	},
-});
+);
 
 const meetingContext = useMeetingContext();
 const isInMeeting = computed(() => !!meetingContext?.isInMeeting?.value);
-const processedStream = computed(
-	() => meetingContext?.processedStream?.value || null,
-);
+const processedStream = computed(() => meetingContext?.processedStream || null);
 const onBackgroundEffectsChanged = meetingContext?.onBackgroundEffectsChanged;
 
 // Video preview
-const videoPreviewRef = ref(null);
-const previewStream = ref(null);
+const videoPreviewRef = ref<HTMLVideoElement | null>(null);
+const previewStream = ref<MediaStream | null>(null);
 const isLoadingPreview = ref(false);
 const pendingPreviewRefresh = ref(false);
-const fileInputRef = ref(null);
-let previewSession = null;
-let previewInputStream = null; // Raw stream feeding the preview pipeline
+const fileInputRef = ref<HTMLInputElement | null>(null);
+let previewSession: {
+	cleanup: () => void;
+	updateOptions?: (opts: unknown) => Promise<void>;
+	stream?: MediaStream;
+} | null = null;
+let previewInputStream: MediaStream | null = null; // Raw stream feeding the preview pipeline
 let isPreviewStreamDedicated = false; // Track if preview stream is dedicated (not meeting's processed stream; needed when cam is off in meeting)
 
 // Background effects
 const backgroundBlurEnabledLocal = ref(backgroundBlurEnabled.value);
 const backgroundImageEnabledLocal = ref(backgroundImageEnabled.value);
-const selectedBackgroundImageLocal = ref(selectedBackgroundImage.value);
+const selectedBackgroundImageLocal = ref<BackgroundImageOption | string | null>(
+	selectedBackgroundImage.value,
+);
 const blurIntensityLocal = ref(blurIntensity.value);
+
+const allBackgroundOptionsTyped = computed(
+	() => allBackgroundOptions.value as unknown as BackgroundOption[],
+);
 
 // Background effects composable
 const { applyBackgroundEffects, stopProcessing: stopBackgroundProcessing } =
 	useBackgroundEffects();
 
-const backgroundImageOptions = computed(() =>
+const backgroundImageOptions = computed<BackgroundImageOption[]>(() =>
 	availableBackgroundImages.map((image) => ({
 		label: image.label,
 		value: image.name,
@@ -180,10 +204,11 @@ const selectedBackgroundOption = computed({
 			backgroundImageEnabledLocal.value &&
 			selectedBackgroundImageLocal.value
 		) {
-			return (
-				selectedBackgroundImageLocal.value.value ||
-				selectedBackgroundImageLocal.value
-			);
+			const img = selectedBackgroundImageLocal.value;
+			if (typeof img === "string") {
+				return img;
+			}
+			return img.value || img;
 		}
 		return "none";
 	},
@@ -230,7 +255,7 @@ const selectedBackgroundOption = computed({
 	},
 });
 
-function handleBackgroundOptionClick(option) {
+function handleBackgroundOptionClick(option: BackgroundOption) {
 	if (option.isAddButton) {
 		fileInputRef.value?.click();
 	} else {
@@ -238,8 +263,9 @@ function handleBackgroundOptionClick(option) {
 	}
 }
 
-async function handleFileSelect(event) {
-	const file = event.target.files[0];
+async function handleFileSelect(event: Event) {
+	const target = event.target as HTMLInputElement;
+	const file = target.files?.[0];
 	if (!file) return;
 
 	try {
@@ -251,10 +277,10 @@ async function handleFileSelect(event) {
 		toast.error(error.message || "Failed to add custom background image");
 	}
 
-	event.target.value = "";
+	target.value = "";
 }
 
-async function handleDeleteCustomImage(imageId) {
+async function handleDeleteCustomImage(imageId: string) {
 	try {
 		await removeCustomBackgroundImage(imageId);
 		toast.success("Custom background removed");
@@ -264,7 +290,7 @@ async function handleDeleteCustomImage(imageId) {
 	}
 }
 
-async function startVideoPreview(deviceId) {
+async function startVideoPreview(deviceId: string) {
 	try {
 		isLoadingPreview.value = true;
 
@@ -307,7 +333,7 @@ async function startVideoPreview(deviceId) {
 		// for when we don't have a cam on in a meeting
 		isPreviewStreamDedicated = true;
 
-		const constraints = {
+		const constraints: MediaStreamConstraints = {
 			video: deviceId ? { deviceId: { exact: deviceId } } : true,
 			audio: false,
 		};
@@ -323,10 +349,12 @@ async function startVideoPreview(deviceId) {
 				previewSession = await applyBackgroundEffects(rawStream, {
 					backgroundBlurEnabled: backgroundBlurEnabledLocal.value,
 					backgroundImageEnabled: backgroundImageEnabledLocal.value,
-					selectedBackgroundImage:
-						selectedBackgroundImageLocal.value?.value ||
-						selectedBackgroundImageLocal.value ||
-						null,
+					selectedBackgroundImage: (() => {
+						const img = selectedBackgroundImageLocal.value;
+						if (typeof img === "string") return img;
+						if (img && typeof img === "object") return img.value;
+						return null;
+					})(),
 					blurIntensity: blurIntensityLocal.value,
 				});
 				previewStream.value = previewSession.stream;
@@ -403,10 +431,12 @@ async function applyPreviewOptions() {
 		return;
 	}
 
-	const selectedImageValue =
-		selectedBackgroundImageLocal.value?.value ||
-		selectedBackgroundImageLocal.value ||
-		null;
+	const selectedImageValue = (() => {
+		const img = selectedBackgroundImageLocal.value;
+		if (typeof img === "string") return img;
+		if (img && typeof img === "object") return img.value;
+		return null;
+	})();
 
 	try {
 		await previewSession.updateOptions({
@@ -423,10 +453,11 @@ async function applyPreviewOptions() {
 	}
 }
 
-function handleImageError(event) {
+function handleImageError(event: Event) {
 	// Replace broken image with a placeholder
-	event.target.style.display = "none";
-	const parent = event.target.parentElement;
+	const target = event.target as HTMLImageElement;
+	target.style.display = "none";
+	const parent = target.parentElement;
 	if (parent) {
 		const placeholder =
 			parent.querySelector(".image-placeholder") ||
@@ -441,7 +472,7 @@ function handleImageError(event) {
 	}
 }
 
-function handleBackgroundBlurToggle(enabled) {
+function handleBackgroundBlurToggle(enabled: boolean) {
 	backgroundBlurEnabledLocal.value = enabled;
 
 	if (enabled && backgroundImageEnabledLocal.value) {
@@ -452,7 +483,7 @@ function handleBackgroundBlurToggle(enabled) {
 	setBackgroundBlurEnabled(enabled);
 }
 
-function handleBackgroundImageToggle(enabled) {
+function handleBackgroundImageToggle(enabled: boolean) {
 	backgroundImageEnabledLocal.value = enabled;
 
 	if (enabled && backgroundBlurEnabledLocal.value) {
@@ -552,7 +583,12 @@ watch(selectedBackgroundImage, (newVal) => {
 });
 
 watch(selectedBackgroundImageLocal, (newImageOption) => {
-	const imageValue = newImageOption?.value || "";
+	const imageValue = (() => {
+		if (typeof newImageOption === "string") return newImageOption;
+		if (newImageOption && typeof newImageOption === "object")
+			return newImageOption.value;
+		return "";
+	})();
 	if (imageValue && imageValue !== selectedBackgroundImage.value) {
 		setSelectedBackgroundImage(imageValue);
 		setBackgroundImageEnabled(true);

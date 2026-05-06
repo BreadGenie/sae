@@ -85,9 +85,9 @@
 </template>
 
 
-<script setup>
+<script setup lang="ts">
 import { Dialog, Tabs as FTabs } from "frappe-ui";
-import { computed, h, markRaw, ref, watch } from "vue";
+import { type Component, computed, h, markRaw, ref, watch } from "vue";
 import LucideAudioLines from "~icons/lucide/audio-lines";
 import LucideBell from "~icons/lucide/bell";
 import LucideCamera from "~icons/lucide/camera";
@@ -103,22 +103,31 @@ import LayoutSettingsTab from "./LayoutSettingsTab.vue";
 import MeetingAccessSettingsTab from "./MeetingAccessSettingsTab.vue";
 import NotificationSettingsTab from "./NotificationSettingsTab.vue";
 
-const props = defineProps({
-	modelValue: {
-		type: Boolean,
-		default: false,
-	},
-	meetingId: {
-		type: String,
-		default: "",
-	},
-	isPreview: {
-		type: Boolean,
-		default: false,
-	},
-});
+interface TabItem {
+	label: string;
+	value: string;
+	icon: Component;
+	component: ReturnType<typeof markRaw>;
+	condition?: () => boolean;
+	hideLabel?: boolean;
+	groupLabel?: string;
+}
 
-const emit = defineEmits(["device-changed", "update:modelValue"]);
+interface TabGroup {
+	label: string;
+	items: TabItem[];
+}
+
+const props = defineProps<{
+	modelValue?: boolean;
+	meetingId?: string;
+	isPreview?: boolean;
+}>();
+
+const emit = defineEmits<{
+	"device-changed": [event: unknown];
+	"update:modelValue": [value: boolean];
+}>();
 
 const { isCurrentUserHost, isCurrentUserCohost, getMeetingDoc } =
 	useMeetingDoc();

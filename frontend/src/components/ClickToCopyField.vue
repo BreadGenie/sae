@@ -24,36 +24,25 @@
 	</div>
 </template>
 
-<script>
+<script setup lang="ts">
 import { toast } from "frappe-ui";
+import { ref } from "vue";
 
-export default {
-	props: {
-		textContent: {
-			type: String,
-			required: true,
-		},
-		breakLines: {
-			type: Boolean,
-			default: true,
-		},
-	},
-	data() {
-		return {
-			copied: false,
-		};
-	},
-	methods: {
-		copyTextContentToClipboard() {
-			const clipboard = window.navigator.clipboard;
-			clipboard.writeText(this.textContent).then(() => {
-				this.copied = true;
-				setTimeout(() => {
-					this.copied = false;
-				}, 4000);
-				toast.success("Copied to clipboard!");
-			});
-		},
-	},
-};
+const props = defineProps<{
+	textContent: string;
+	breakLines?: boolean;
+}>();
+
+const copied = ref(false);
+
+function copyTextContentToClipboard() {
+	const clipboard = window.navigator.clipboard;
+	clipboard.writeText(props.textContent).then(() => {
+		copied.value = true;
+		setTimeout(() => {
+			copied.value = false;
+		}, 4000);
+		toast.success("Copied to clipboard!");
+	});
+}
 </script>
