@@ -46,34 +46,37 @@ export function useNetworkQuality() {
 		if (isPolling.value) return;
 
 		isPolling.value = true;
-		const transportManager = sfuManager?.transportManager;
+		try {
+			const transportManager = sfuManager?.transportManager;
 
-		if (!transportManager) {
-			networkQuality.value = "good";
-			return;
+			if (!transportManager) {
+				networkQuality.value = "good";
+				return;
+			}
+
+			// check for transport failure initially
+			const tStats = transportManager.getTransportStats();
+			const sendState = tStats?.sendTransport?.state;
+			const recvState = tStats?.recvTransport?.state;
+
+			// Local quality should primarily reflect uplink health.
+			// recv can be disconnected while local publishing still works.
+			const sendFailed = ["failed", "disconnected"].includes(sendState);
+			const recvFailed = recvState === "failed";
+			const isFailed = sendFailed || recvFailed;
+
+			if (isFailed) {
+				networkQuality.value = "critical";
+				return;
+			}
+
+			if (transportManager.getNetworkStats) {
+				const stats = await transportManager.getNetworkStats();
+				updateQuality(stats);
+			}
+		} finally {
+			isPolling.value = false;
 		}
-
-		// check for transport failure initially
-		const tStats = transportManager.getTransportStats();
-		const sendState = tStats?.sendTransport?.state;
-		const recvState = tStats?.recvTransport?.state;
-
-		// Local quality should primarily reflect uplink health.
-		// recv can be disconnected while local publishing still works.
-		const sendFailed = ["failed", "disconnected"].includes(sendState);
-		const recvFailed = recvState === "failed";
-		const isFailed = sendFailed || recvFailed;
-
-		if (isFailed) {
-			networkQuality.value = "critical";
-			return;
-		}
-
-		if (transportManager.getNetworkStats) {
-			const stats = await transportManager.getNetworkStats();
-			updateQuality(stats);
-		}
-		isPolling.value = false;
 	};
 
 	onMounted(() => {
