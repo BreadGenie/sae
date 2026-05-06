@@ -11,7 +11,7 @@
 		"lint:fix": "biome check --write .",
 		"format": "biome format .",
 		"format:write": "biome format --write .",
-		"typecheck": "yarn vue-tsc --noEmit 2>&1 | (grep -v node_modules | grep 'src/.*error TS' && exit 1 || exit 0)"
+		"typecheck": "vue-tsgo --noEmit 2>&1 | (grep -v node_modules | grep 'src/.*error TS' && exit 1 || exit 0)"
 	},
 	"dependencies": {
 		"@emoji-mart/data": "^1.2.1",
@@ -35,6 +35,6 @@
 		"tailwindcss": "^3.4.15",
 		"typescript": "^6.0.3",
 		"vite": "^8.0.2",
-		"vue-tsc": "^3.2.8"
+		"vue-tsgo": "^0.2.2"
 	}
 }
