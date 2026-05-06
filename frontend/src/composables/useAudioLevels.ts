@@ -13,10 +13,11 @@ export function useAudioStream(
 	const stream = ref<MediaStream | null>(null);
 	const { mediaState, currentUser } = deps;
 	const sfuManagerRef = inject<Ref<SFUMeetingManager | null>>("sfuManager");
-	const sfuManager = sfuManagerRef?.value;
 
 	const getStream = () => {
 		try {
+			const sfuManager = sfuManagerRef?.value;
+
 			if (participantId === currentUser.currentUser.value?.user_id) {
 				const audioTrack = mediaState.localStream?.getAudioTracks()[0];
 				if (audioTrack) {
