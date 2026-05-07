@@ -1,7 +1,7 @@
 import type { Producer } from 'mediasoup/node/lib/ProducerTypes';
 import type { TranscriptSegment } from '../types';
 import { loggers } from '../utils/logger';
-import type { AudioIngester } from './AudioIngester';
+import { AudioIngester } from './AudioIngester';
 import {
 	type IWhisperClient,
 	MockWhisperClient,
@@ -137,7 +137,6 @@ export class SttManager {
 			return;
 		}
 
-		const { AudioIngester } = await import('./AudioIngester');
 		const ingester = new AudioIngester({
 			roomId,
 			participantId,
