@@ -321,6 +321,7 @@ export class MediasoupManager {
 			throw new Error(`Failed to create producer ${result.id}`);
 		}
 		peer.producers.set(result.id, producer);
+		room.producerToPeerId.set(result.id, peerId);
 
 		// Add audio producers to the audio level observer for active speaker detection
 		if (kind === 'audio') {
@@ -417,6 +418,7 @@ export class MediasoupManager {
 			if (peer) {
 				peer.producers.delete(producerId);
 			}
+			room.producerToPeerId.delete(producerId);
 		}
 
 		// Close related consumers

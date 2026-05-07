@@ -326,6 +326,7 @@ export interface Room {
 	router: Router;
 	audioLevelObserver: AudioLevelObserver;
 	peers: Map<string, Peer>;
+	producerToPeerId: Map<string, string>;
 	created: Date;
 }
 
