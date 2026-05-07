@@ -278,8 +278,6 @@ export class AudioIngester {
 				);
 			}
 		});
-
-		await new Promise((resolve) => setTimeout(resolve, 300));
 	}
 
 	// ── VAD loop ───────────────────────────────────────────────────────────────
