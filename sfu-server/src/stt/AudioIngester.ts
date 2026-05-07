@@ -137,7 +137,7 @@ export class AudioIngester {
 		this.running = false;
 
 		if (this.vadTimer) {
-			clearInterval(this.vadTimer);
+			clearTimeout(this.vadTimer);
 			this.vadTimer = null;
 		}
 
@@ -282,12 +282,25 @@ export class AudioIngester {
 	// ── VAD loop ───────────────────────────────────────────────────────────────
 
 	private startVadLoop(): void {
-		this.vadTimer = setInterval(() => {
-			this.runVadCheck();
-		}, VAD_CHECK_MS);
+		const run = () => {
+			if (!this.running) return;
+			this.runVadCheck()
+				.then(() => {
+					if (this.running) {
+						this.vadTimer = setTimeout(run, VAD_CHECK_MS);
+					}
+				})
+				.catch((error) => {
+					loggers.stt.error('VAD check error: %s', (error as Error).message);
+					if (this.running) {
+						this.vadTimer = setTimeout(run, VAD_CHECK_MS);
+					}
+				});
+		};
+		run();
 	}
 
-	private runVadCheck(): void {
+	private async runVadCheck(): Promise<void> {
 		// Need at least one full frame to analyze
 		if (this.vadScratch.length < BYTES_PER_CHECK) return;
 
@@ -312,9 +325,7 @@ export class AudioIngester {
 		}
 
 		if (this.shouldFlush()) {
-			this.flushBuffer().catch((error) => {
-				loggers.stt.error('Flush error: %s', (error as Error).message);
-			});
+			await this.flushBuffer();
 		}
 	}
 

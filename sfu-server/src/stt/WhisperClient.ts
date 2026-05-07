@@ -60,6 +60,8 @@ export class WhisperClient implements IWhisperClient {
 		pcmBuffer: Buffer,
 		sampleRate = 16000,
 	): Promise<WhisperTranscription> {
+		const currentContext = this.context;
+
 		// Pad 0.5s silence before and after to give Whisper clean boundaries
 		const padSamples = Math.round(sampleRate * 0.5);
 		const padBytes = padSamples * 2;
@@ -75,7 +77,7 @@ export class WhisperClient implements IWhisperClient {
 		formData.append('temperature', '0.0');
 		formData.append('best_of', '1');
 		formData.append('audio_ctx', '1500');
-		formData.append('prompt', this.context);
+		formData.append('prompt', currentContext);
 
 		const response = await fetch(`${this.serverUrl}/inference`, {
 			method: 'POST',

@@ -183,7 +183,7 @@ export class MediasoupManager {
 
 	async closeRoom(roomId: string): Promise<void> {
 		if (this.sttManager) {
-			this.sttManager.stopRoom(roomId);
+			await this.sttManager.stopRoom(roomId);
 		}
 		await this.roomManager.closeRoom(roomId);
 	}
@@ -866,9 +866,12 @@ export class MediasoupManager {
 
 		// Stop all STT sessions
 		if (this.sttManager) {
-			for (const room of this.roomManager.getAllRooms()) {
-				this.sttManager.stopRoom(room.id);
-			}
+			const sttManager = this.sttManager;
+			await Promise.all(
+				this.roomManager
+					.getAllRooms()
+					.map((room) => sttManager.stopRoom(room.id)),
+			);
 		}
 
 		// Close all rooms (this will also close peers, transports, producers, consumers)

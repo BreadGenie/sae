@@ -175,22 +175,26 @@ export class SttManager {
 		const ingester = this.activeSessions.get(sessionKey);
 		if (!ingester) return;
 
-		this.activeSessions.delete(sessionKey);
 		await ingester.stop();
+		this.activeSessions.delete(sessionKey);
 	}
 
-	stopRoom(roomId: string): void {
+	async stopRoom(roomId: string): Promise<void> {
+		const stops: Promise<void>[] = [];
 		for (const [key, ingester] of this.activeSessions) {
 			if (key.startsWith(`${roomId}:`)) {
 				this.activeSessions.delete(key);
-				ingester.stop().catch((error) => {
-					loggers.stt.error(
-						'Error stopping ingester: %s',
-						(error as Error).message,
-					);
-				});
+				stops.push(
+					ingester.stop().catch((error) => {
+						loggers.stt.error(
+							'Error stopping ingester: %s',
+							(error as Error).message,
+						);
+					}),
+				);
 			}
 		}
+		await Promise.all(stops);
 		this.roomSubscribers.delete(roomId);
 		this.roomActiveSpeakers.delete(roomId);
 	}

@@ -1155,7 +1155,7 @@ export class SocketHandlerManager {
 					const wasLast = this.sttManager.removeSubscriber(roomId, socket.id);
 					// If this was the last subscriber, stop all transcription in the room
 					if (wasLast) {
-						this.sttManager.stopRoom(roomId);
+						await this.sttManager.stopRoom(roomId);
 					}
 				}
 
@@ -1220,7 +1220,7 @@ export class SocketHandlerManager {
 							socket.id,
 						);
 						if (wasLastSubscriber) {
-							this.sttManager.stopRoom(roomId);
+							await this.sttManager.stopRoom(roomId);
 						}
 
 						loggers.socketHandler.info(
