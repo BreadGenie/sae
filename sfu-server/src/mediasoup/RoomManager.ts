@@ -32,12 +32,10 @@ export class RoomManager {
 			audioLevelObserver.on('volumes', (volumes) => {
 				const activeSpeakerIds: string[] = [];
 
-				for (const { producer, volume } of volumes) {
-					if (volume > -70) {
-						const peerId = room.producerToPeerId.get(producer.id);
-						if (peerId && !activeSpeakerIds.includes(peerId)) {
-							activeSpeakerIds.push(peerId);
-						}
+				for (const { producer } of volumes) {
+					const peerId = room.producerToPeerId.get(producer.id);
+					if (peerId && !activeSpeakerIds.includes(peerId)) {
+						activeSpeakerIds.push(peerId);
 					}
 				}
 
