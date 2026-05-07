@@ -1140,16 +1140,11 @@ export class SocketHandlerManager {
 
 				if (enabled) {
 					const wasFirst = this.sttManager.addSubscriber(roomId, socket.id);
-					// If this is the first subscriber, start transcription for existing audio producers
 					if (wasFirst) {
-						this.mediasoup
-							.startSttForExistingProducers(roomId, this.sttManager)
-							.catch((error) => {
-								loggers.socketHandler.warn(
-									'Failed to start STT for existing producers: %s',
-									(error as Error).message,
-								);
-							});
+						await this.mediasoup.startSttForExistingProducers(
+							roomId,
+							this.sttManager,
+						);
 					}
 				} else {
 					const wasLast = this.sttManager.removeSubscriber(roomId, socket.id);
