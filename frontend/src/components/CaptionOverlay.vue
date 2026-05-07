@@ -16,7 +16,7 @@
 					v-for="line in visibleLines"
 					:key="line.id"
 					:class="[
-						'inline-block rounded-sm px-2 py-0.5 text-center text-base font-medium text-white',
+						'block w-fit mx-auto rounded-sm px-2 py-0.5 text-center text-base font-medium text-white',
 						{ 'opacity-60 italic': line.text === '...' },
 					]"
 					style="
@@ -44,13 +44,9 @@ const props = defineProps({
 });
 
 const visibleLines = computed(() => {
-	const last = props.lines[props.lines.length - 1];
-	if (!last) return [];
-	return [
-		{
-			...last,
-			id: `${last.participantId}-${last.timestamp}`,
-		},
-	];
+	return props.lines.map((line) => ({
+		...line,
+		id: `${line.participantId}-${line.timestamp}`,
+	}));
 });
 </script>
