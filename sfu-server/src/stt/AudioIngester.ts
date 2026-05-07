@@ -83,7 +83,8 @@ export class AudioIngester {
 
 	// ── VAD state ──────────────────────────────────────────────────────────────
 	private pcmBuffer = Buffer.alloc(0);
-	private vadScratch = Buffer.alloc(0);
+	private vadQueue: Buffer[] = [];
+	private vadQueueBytes = 0;
 	private speechCheckCount = 0;
 	private silenceCheckCount = 0;
 	private isInSpeech = false;
@@ -248,7 +249,8 @@ export class AudioIngester {
 		});
 
 		this.ffmpeg.stdout!.on('data', (data: Buffer) => {
-			this.vadScratch = Buffer.concat([this.vadScratch, data]);
+			this.vadQueue.push(data);
+			this.vadQueueBytes += data.length;
 		});
 
 		this.ffmpeg.stderr!.on('data', (data: Buffer) => {
@@ -301,12 +303,9 @@ export class AudioIngester {
 	}
 
 	private async runVadCheck(): Promise<void> {
-		// Need at least one full frame to analyze
-		if (this.vadScratch.length < BYTES_PER_CHECK) return;
+		if (this.vadQueueBytes < BYTES_PER_CHECK) return;
 
-		// Extract exactly one check-frame from scratch
-		const frame = this.vadScratch.subarray(0, BYTES_PER_CHECK);
-		this.vadScratch = this.vadScratch.subarray(BYTES_PER_CHECK);
+		const frame = this.dequeueBytes(BYTES_PER_CHECK);
 
 		const rms = this.calculateRms(frame);
 		const isSpeech = rms > SPEECH_RMS_THRESHOLD;
@@ -319,7 +318,6 @@ export class AudioIngester {
 		} else {
 			this.silenceCheckCount++;
 			if (this.isInSpeech) {
-				// Still append silence while we're "in" an utterance
 				this.pcmBuffer = Buffer.concat([this.pcmBuffer, frame]);
 			}
 		}
@@ -447,6 +445,34 @@ export class AudioIngester {
 			sum += sample * sample;
 		}
 		return Math.sqrt(sum / sampleCount) / 32768;
+	}
+
+	/**
+	 * Read exactly `n` bytes from the front of the vad queue.
+	 * Handles partial buffers by splitting/consuming from the head.
+	 */
+	private dequeueBytes(n: number): Buffer {
+		const out = Buffer.alloc(n);
+		let written = 0;
+
+		while (written < n && this.vadQueue.length > 0) {
+			const head = this.vadQueue[0];
+			const remaining = n - written;
+
+			if (head.length <= remaining) {
+				head.copy(out, written);
+				written += head.length;
+				this.vadQueue.shift();
+				this.vadQueueBytes -= head.length;
+			} else {
+				head.copy(out, written, 0, remaining);
+				this.vadQueue[0] = head.subarray(remaining);
+				this.vadQueueBytes -= remaining;
+				written += remaining;
+			}
+		}
+
+		return out;
 	}
 
 	/**
