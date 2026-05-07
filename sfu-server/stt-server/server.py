@@ -12,6 +12,7 @@ Form fields:
   prompt      - Rolling context from previous transcriptions
 """
 
+import asyncio
 import io
 import os
 import time
@@ -78,7 +79,7 @@ async def inference(
 		vad_filter=False,
 	)
 
-	segments_iter, info = model.transcribe(**transcribe_kwargs)
+	segments_iter, info = await asyncio.to_thread(model.transcribe, **transcribe_kwargs)
 
 	segments = list(segments_iter)
 	text = " ".join(s.text.strip() for s in segments if s.text).strip()
