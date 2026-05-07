@@ -11,6 +11,7 @@ declare module 'vue' {
     AudioIndicator: typeof import('./src/components/AudioIndicator.vue')['default']
     AudioSettingsTab: typeof import('./src/components/settings/AudioSettingsTab.vue')['default']
     BackgroundSettingsTab: typeof import('./src/components/settings/BackgroundSettingsTab.vue')['default']
+    CaptionOverlay: typeof import('./src/components/CaptionOverlay.vue')['default']
     ChatNotification: typeof import('./src/components/ChatNotification.vue')['default']
     ChatNotificationQueue: typeof import('./src/components/ChatNotificationQueue.vue')['default']
     ChatPanel: typeof import('./src/components/ChatPanel.vue')['default']
@@ -80,5 +81,6 @@ declare module 'vue' {
     SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SettingsLayoutBase: typeof import('./src/components/settings/SettingsLayoutBase.vue')['default']
     Spinner: typeof import('./src/components/Spinner.vue')['default']
+    SubtitleOverlay: typeof import('./src/components/SubtitleOverlay.vue')['default']
   }
 }

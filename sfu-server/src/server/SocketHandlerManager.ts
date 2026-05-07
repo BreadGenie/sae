@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import type { MediasoupManager } from '../mediasoup/MediasoupManager';
+import type { SttManager } from '../stt/SttManager';
 import type {
 	ChatMessage,
 	ClientToServerEvents,
@@ -25,6 +26,7 @@ export class SocketHandlerManager {
 	private io: Server<ClientToServerEvents, ServerToClientEvents>;
 	private mediasoup: MediasoupManager;
 	private authManager: AuthManager;
+	private sttManager: SttManager;
 	private raisedHands: Record<string, Record<string, string>> = {};
 	private rateLimiter: RateLimiter;
 	private fullAccessSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
@@ -34,10 +36,12 @@ export class SocketHandlerManager {
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
 		mediasoup: MediasoupManager,
 		authManager: AuthManager,
+		sttManager: SttManager,
 	) {
 		this.io = io;
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
+		this.sttManager = sttManager;
 		this.rateLimiter = new RateLimiter();
 
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
@@ -46,6 +50,10 @@ export class SocketHandlerManager {
 				quality,
 			});
 		});
+	}
+
+	getFullAccessSockets(roomId: string): Set<string> | undefined {
+		return this.fullAccessSockets.get(roomId);
 	}
 
 	private isRealParticipant(participantId: string): boolean {
@@ -245,6 +253,7 @@ export class SocketHandlerManager {
 			this.setupChatHandlers(socket);
 			this.setupReactionHandlers(socket);
 			this.setupRaiseHandHandlers(socket);
+			this.setupSttHandlers(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);
 		});
@@ -470,6 +479,7 @@ export class SocketHandlerManager {
 				this.emitToFullAccessParticipants(roomId, 'active_speaker', {
 					participantIds,
 				});
+				this.sttManager.setActiveSpeakers(roomId, participantIds);
 			});
 
 			socket.join(roomId);
@@ -1115,6 +1125,51 @@ export class SocketHandlerManager {
 		});
 	}
 
+	private setupSttHandlers(socket: TypedSocket): void {
+		socket.on('stt:toggle', async (data, callback) => {
+			try {
+				this.authManager.ensureFullAccess(socket);
+				const roomId = socket.roomId;
+				const enabled =
+					typeof data?.enabled === 'boolean' ? data.enabled : false;
+
+				if (!roomId) {
+					callback({ success: false, error: 'Not in a room' });
+					return;
+				}
+
+				if (enabled) {
+					const wasFirst = this.sttManager.addSubscriber(roomId, socket.id);
+					// If this is the first subscriber, start transcription for existing audio producers
+					if (wasFirst) {
+						this.mediasoup
+							.startSttForExistingProducers(roomId, this.sttManager)
+							.catch((error) => {
+								loggers.socketHandler.warn(
+									'Failed to start STT for existing producers: %s',
+									(error as Error).message,
+								);
+							});
+					}
+				} else {
+					const wasLast = this.sttManager.removeSubscriber(roomId, socket.id);
+					// If this was the last subscriber, stop all transcription in the room
+					if (wasLast) {
+						this.sttManager.stopRoom(roomId);
+					}
+				}
+
+				callback({ success: true, enabled });
+			} catch (error) {
+				loggers.socketHandler.warn(
+					'stt:toggle failed: %s',
+					(error as Error).message,
+				);
+				callback({ success: false, error: (error as Error).message });
+			}
+		});
+	}
+
 	private setupDisconnectHandlers(socket: Socket): void {
 		socket.on('disconnect', async () => {
 			this.authManager.cleanupSocket(socket);
@@ -1157,6 +1212,15 @@ export class SocketHandlerManager {
 								raised: false,
 								timestamp: new Date().toISOString(),
 							});
+						}
+
+						// Remove from STT subscribers; stop transcription if last subscriber
+						const wasLastSubscriber = this.sttManager.removeSubscriber(
+							roomId,
+							socket.id,
+						);
+						if (wasLastSubscriber) {
+							this.sttManager.stopRoom(roomId);
 						}
 
 						loggers.socketHandler.info(

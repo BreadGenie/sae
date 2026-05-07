@@ -1,6 +1,15 @@
 #!/bin/bash
 
 # Frappe Meet SFU Server Setup and Start Script
+#
+# Usage:
+#   ./start.sh              Start SFU server only
+#   ./start.sh --with-stt   Start SFU + STT (faster-whisper) service
+#
+# Environment:
+#   WHISPER_MODEL       Model name: tiny, base, small (default: small)
+#   WHISPER_HOST        Host for whisper server (default: 127.0.0.1)
+#   WHISPER_PORT        Port for whisper server (default: 8080)
 
 set -e
 
@@ -11,8 +20,39 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+WITH_STT=false
+
+# Parse arguments
+for arg in "$@"; do
+	case $arg in
+		--with-stt)
+			WITH_STT=true
+			shift
+			;;
+		--help|-h)
+			echo "Usage: $0 [--with-stt]"
+			echo ""
+			echo "Options:"
+			echo "  --with-stt    Start STT (faster-whisper) service alongside SFU"
+			echo ""
+			echo "Environment variables:"
+			echo "  WHISPER_MODEL          Model name: tiny, base, small, medium (default: small)"
+			echo "  WHISPER_HOST           Whisper server host (default: 127.0.0.1)"
+			echo "  WHISPER_PORT           Whisper server port (default: 8080)"
+			echo "  WHISPER_COMPUTE_TYPE   Compute type: int8, float16 (default: int8)"
+			echo "  WHISPER_CPU_THREADS    Number of CPU threads (default: 4)"
+			echo "  STT_VAD_THRESHOLD      Speech detection sensitivity (default: 0.012)"
+			exit 0
+			;;
+	esac
+done
+
 echo -e "${BLUE}🚀 Frappe Meet SFU Server Setup${NC}"
 echo "================================"
+
+if [ "$WITH_STT" = true ]; then
+	echo -e "${BLUE}📝 STT mode enabled${NC}"
+fi
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
@@ -65,14 +105,124 @@ else
     echo -e "${GREEN}✅ .env file exists${NC}"
 fi
 
+# Load .env variables into the shell environment so child processes can see them.
+# We only export lines that look like KEY=VALUE, ignoring comments and blanks.
+if [ -f ".env" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and lines starting with # or //
+        case "$line" in
+            ''|\#*|//*) continue ;;
+        esac
+        # Only export if it looks like KEY=VALUE
+        if echo "$line" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*='; then
+            key=$(echo "$line" | cut -d'=' -f1)
+            val=$(echo "$line" | cut -d'=' -f2-)
+            export "$key=$val"
+        fi
+    done < .env
+fi
+
+# ── STT Service Setup ──────────────────────────────────────────────────────────
+
+WHISPER_PIDS=()
+
+if [ "$WITH_STT" = true ]; then
+	echo -e "${BLUE}🎙️  Setting up STT service...${NC}"
+
+	WHISPER_MODEL=${WHISPER_MODEL:-small}
+	WHISPER_HOST=${WHISPER_HOST:-127.0.0.1}
+	WHISPER_PORT=${WHISPER_PORT:-8080}
+
+	# Ensure logs directory exists
+	mkdir -p logs
+
+	# Check if port is available
+	if lsof -Pi :$WHISPER_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+		echo -e "${RED}❌ Whisper port $WHISPER_PORT is already in use.${NC}"
+		exit 1
+	fi
+
+	# Check python3
+	if ! command -v python3 &> /dev/null; then
+		echo -e "${RED}❌ python3 is required for STT. Please install Python 3.9+.${NC}"
+		exit 1
+	fi
+
+	PYTHON_VENV="./.venv"
+	if [ ! -d "$PYTHON_VENV" ]; then
+		echo -e "${YELLOW}📦 Creating Python virtual environment...${NC}"
+		python3 -m venv "$PYTHON_VENV"
+	fi
+
+	source "$PYTHON_VENV/bin/activate"
+
+	if ! python3 -c "import faster_whisper" 2>/dev/null; then
+		echo -e "${YELLOW}📦 Installing faster-whisper dependencies...${NC}"
+		pip install -q -r stt-server/requirements.txt
+	fi
+
+	WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+	WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-4}
+
+	echo -e "${GREEN}✅ Starting faster-whisper server on ${WHISPER_HOST}:${WHISPER_PORT} (model=${WHISPER_MODEL}, compute=${WHISPER_COMPUTE_TYPE}, threads=${WHISPER_CPU_THREADS})${NC}"
+	WHISPER_MODEL="$WHISPER_MODEL" \
+	WHISPER_HOST="$WHISPER_HOST" \
+	WHISPER_PORT="$WHISPER_PORT" \
+	WHISPER_COMPUTE_TYPE="$WHISPER_COMPUTE_TYPE" \
+	WHISPER_CPU_THREADS="$WHISPER_CPU_THREADS" \
+	HF_HOME="${HF_HOME:-./.cache}" \
+	HF_TOKEN="${HF_TOKEN:-}" \
+		python3 stt-server/server.py > "logs/faster-whisper-server.log" 2>&1 &
+	WHISPER_PIDS+=("$!")
+
+	# Wait for whisper server to be ready
+	echo -e "${YELLOW}⏳ Waiting for whisper server to be ready...${NC}"
+	READY=false
+	for i in {1..60}; do
+		if curl -fsS "http://${WHISPER_HOST}:${WHISPER_PORT}/health" >/dev/null 2>&1; then
+			echo -e "${GREEN}✅ Whisper server is ready${NC}"
+			READY=true
+			break
+		fi
+		sleep 1
+	done
+	if [ "$READY" = false ]; then
+		echo -e "${RED}❌ Whisper server failed to start. Check logs/faster-whisper-server.log${NC}"
+		for pid in "${WHISPER_PIDS[@]}"; do
+			kill $pid 2>/dev/null || true
+		done
+		exit 1
+	fi
+
+	export WHISPER_SERVER_URL="http://${WHISPER_HOST}:${WHISPER_PORT}"
+	echo -e "${GREEN}✅ STT backend ready: ${WHISPER_SERVER_URL}${NC}"
+fi
+
 # Check if port is available
 PORT=${PORT:-3000}
-if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null ; then
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo -e "${RED}❌ Port $PORT is already in use. Please change the PORT in .env file.${NC}"
+    for pid in "${WHISPER_PIDS[@]}"; do
+		kill $pid 2>/dev/null || true
+	done
     exit 1
 fi
 
 echo -e "${GREEN}✅ Port $PORT is available${NC}"
+
+# ── Cleanup trap ───────────────────────────────────────────────────────────────
+
+cleanup() {
+	if [ ${#WHISPER_PIDS[@]} -gt 0 ]; then
+		echo -e "${YELLOW}🛑 Stopping ${#WHISPER_PIDS[@]} whisper worker(s)...${NC}"
+		for pid in "${WHISPER_PIDS[@]}"; do
+			kill $pid 2>/dev/null || true
+			wait $pid 2>/dev/null || true
+		done
+		echo -e "${GREEN}✅ Whisper worker(s) stopped${NC}"
+	fi
+}
+trap cleanup EXIT INT TERM
 
 # Start the server
 echo -e "${BLUE}🎬 Starting SFU Server...${NC}"

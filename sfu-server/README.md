@@ -2,6 +2,30 @@
 
 Mediasoup-based Selective Forwarding Unit (SFU) for Frappe Meet.
 
+## Speech-to-Text (Captions)
+
+Real-time captions are powered by an on-premise [faster-whisper](https://github.com/SYSTRAN/faster-whisper) backend.
+
+### Local Development
+
+```bash
+# Start SFU + STT service
+./start.sh --with-stt
+```
+
+### Docker Compose
+
+The STT backend is included in the runtime image and started automatically as a sidecar container.
+
+### Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `WHISPER_MODEL` | Model size: `tiny`, `base`, `small`, `medium` | `small` |
+| `WHISPER_COMPUTE_TYPE` | Quantization: `int8`, `float16` | `int8` |
+| `WHISPER_CPU_THREADS` | CPU threads | `4` |
+| `STT_VAD_THRESHOLD` | Speech detection sensitivity (0.0–1.0) | `0.012` |
+| `HF_TOKEN` | Hugging Face token (optional, avoids rate limits) | — |
 
 ## Production Deployment
 

@@ -7,6 +7,7 @@ import { MediasoupManager } from './mediasoup/MediasoupManager';
 import { AuthManager } from './server/AuthManager';
 import { RouteManager } from './server/RouteManager';
 import { SocketHandlerManager } from './server/SocketHandlerManager';
+import { SttManager } from './stt/SttManager';
 import type { ServerConfig } from './types';
 import { loggers } from './utils/logger';
 
@@ -18,6 +19,7 @@ export class SFUServer {
 	private authManager: AuthManager;
 	private routeManager: RouteManager;
 	private socketHandlerManager: SocketHandlerManager;
+	private sttManager: SttManager;
 	private config: ServerConfig;
 
 	constructor() {
@@ -55,10 +57,32 @@ export class SFUServer {
 		this.mediasoup = new MediasoupManager();
 		this.authManager = new AuthManager(this.config.jwtSecret);
 		this.routeManager = new RouteManager(this.app, this.mediasoup);
+
+		// Initialize STT manager
+		const sttUrl = process.env.WHISPER_SERVER_URL;
+		this.sttManager = new SttManager({
+			whisperServerUrl: sttUrl,
+			allowMockFallback: process.env.NODE_ENV === 'development',
+		});
+		this.sttManager.setEmitToRoom((roomId, event, data) => {
+			// Emit only to STT subscribers in the room
+			const socketIds = this.sttManager.getSubscribers(roomId);
+			if (!socketIds) return;
+			for (const socketId of socketIds) {
+				const socket = this.io.sockets.sockets.get(socketId);
+				if (socket) {
+					// biome-ignore lint/suspicious/noExplicitAny: Internal event emission
+					(socket as any).emit(event, data);
+				}
+			}
+		});
+		this.mediasoup.setSttManager(this.sttManager);
+
 		this.socketHandlerManager = new SocketHandlerManager(
 			this.io,
 			this.mediasoup,
 			this.authManager,
+			this.sttManager,
 		);
 
 		this.setupMiddleware();

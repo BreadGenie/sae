@@ -82,11 +82,6 @@ interface SFUConsumerResponse {
 	[key: string]: unknown;
 }
 
-interface SFUProducersResponse {
-	producers: unknown[];
-	[key: string]: unknown;
-}
-
 interface SFUParticipantsResponse {
 	participants: unknown[];
 	[key: string]: unknown;
@@ -445,7 +440,6 @@ export class SFUClient {
 		if (handler) {
 			this.signalChannel.off(event, handler);
 		}
-		this.eventHandlers.delete(event);
 	}
 
 	// ==================== WEBRTC OPERATIONS ====================

@@ -34,6 +34,8 @@ services:
       - MEDIASOUP_LISTEN_IP=0.0.0.0
       - MEDIASOUP_ANNOUNCED_IP=${WEBRTC_ANNOUNCED_IP}
       - SFU_LOG_LEVEL=${SFU_LOG_LEVEL:-info}
+      - WHISPER_SERVER_URL=${WHISPER_SERVER_URL:-http://127.0.0.1:8080}
+      - STT_VAD_THRESHOLD=${STT_VAD_THRESHOLD:-0.012}
       - NODE_ENV=production
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${PORT:-3000}/health"]
@@ -41,6 +43,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Whisper STT Server ──────────────────────────────────────────────────────
+  whisper:
+    image: ${SFU_IMAGE:-ghcr.io/frappe/meet/sfu-server:latest}
+    container_name: meet-whisper
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - /app/.venv/bin/python3
+      - /app/stt-server/server.py
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+      - WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-4}
+      - WHISPER_HOST=127.0.0.1
+      - WHISPER_PORT=8080
+      - HF_TOKEN=${HF_TOKEN:-}
     logging:
       driver: json-file
       options:

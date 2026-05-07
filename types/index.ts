@@ -239,3 +239,24 @@ export interface PresenceJoinResponse {
 	success: boolean;
 	error?: string;
 }
+
+// ── STT / Transcription Types ──
+
+export interface TranscriptSegment {
+	participantId: string;
+	participantName?: string;
+	text: string;
+	isFinal: boolean;
+	timestamp: string; // ISO
+	segmentStart: number; // ms from meeting start
+	segmentEnd: number; // ms from meeting start
+}
+
+export interface SttSegmentEvent {
+	roomId: string;
+	segment: TranscriptSegment;
+}
+
+export interface SttToggleRequest {
+	enabled: boolean;
+}

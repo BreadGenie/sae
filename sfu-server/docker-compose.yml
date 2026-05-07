@@ -1,0 +1,61 @@
+# ==============================================================================
+# Frappe Meet SFU — Local Docker Compose
+# ==============================================================================
+# Quick-start for local development. Builds the SFU image with faster-whisper
+# included. No nginx/certbot — just the SFU + STT services.
+#
+# Usage:
+#   docker compose up --build     # build & start
+#   docker compose down           # stop
+# ==============================================================================
+
+services:
+  sfu:
+    build:
+      context: ../..
+      dockerfile: sfu-server/Dockerfile
+    ports:
+      - "3000:3000"
+      - "40000-40200:40000-40200/udp"
+      - "40000-40200:40000-40200/tcp"
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+      - PORT=3000
+      - HOST=0.0.0.0
+      - WEBRTC_LISTEN_IP=0.0.0.0
+      - WEBRTC_ANNOUNCED_IP=${WEBRTC_ANNOUNCED_IP:-127.0.0.1}
+      - RTC_MIN_PORT=40000
+      - RTC_MAX_PORT=40200
+      - SFU_LOG_LEVEL=debug
+      - WHISPER_SERVER_URL=http://whisper:8080
+      - STT_VAD_THRESHOLD=0.012
+      - NODE_ENV=development
+    depends_on:
+      - whisper
+    command: ["node", "dist/sfu-server/src/server.js"]
+
+  whisper:
+    build:
+      context: ../..
+      dockerfile: sfu-server/Dockerfile
+      target: runtime
+    command:
+      - /app/.venv/bin/python3
+      - /app/stt-server/server.py
+    environment:
+      - WHISPER_MODEL=small
+      - WHISPER_COMPUTE_TYPE=int8
+      - WHISPER_CPU_THREADS=4
+      - WHISPER_HOST=0.0.0.0
+      - WHISPER_PORT=8080
+      - HF_TOKEN=${HF_TOKEN:-}
+    ports:
+      - "8080:8080"
+    # Uncomment for Linux NVIDIA GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

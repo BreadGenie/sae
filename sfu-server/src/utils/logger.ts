@@ -86,4 +86,5 @@ export const loggers = {
 	authManager: new Logger('AuthManager', defaultLevel),
 	server: new Logger('Server', defaultLevel),
 	config: new Logger('Config', defaultLevel),
+	stt: new Logger('STT', defaultLevel),
 } as const;

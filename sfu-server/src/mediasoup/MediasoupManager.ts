@@ -1,3 +1,4 @@
+import type { SttManager } from '../stt/SttManager';
 import type {
 	AppData,
 	CloseProducerResult,
@@ -31,6 +32,7 @@ export class MediasoupManager {
 	private transportManager = new TransportManager();
 	private producerManager = new ProducerManager();
 	private consumerManager = new ConsumerManager();
+	private sttManager: SttManager | null = null;
 
 	private networkQualityListeners: Array<
 		(
@@ -77,13 +79,34 @@ export class MediasoupManager {
 
 		this.producerManager.on(
 			'producer_closed',
-			(roomId: string, peerId: string, kind: 'audio' | 'video') => {
+			(
+				roomId: string,
+				peerId: string,
+				kind: 'audio' | 'video',
+				_producerId: string,
+			) => {
 				const peerState = this.peerScores.get(peerId);
 				if (peerState) {
 					delete peerState[kind];
 					this.evaluateAndEmitNetworkQuality(roomId, peerId);
 				}
+				// Notify STT manager
+				if (this.sttManager && kind === 'audio') {
+					this.sttManager.stopTranscription(roomId, peerId).catch((error) => {
+						loggers.mediasoupManager.warn(
+							'STT stop error on producer close: %s',
+							(error as Error).message,
+						);
+					});
+				}
 			},
+		);
+	}
+
+	setSttManager(sttManager: SttManager): void {
+		this.sttManager = sttManager;
+		this.sttManager.setGetRouter((roomId) =>
+			this.roomManager.getRouter(roomId),
 		);
 	}
 
@@ -159,6 +182,9 @@ export class MediasoupManager {
 	}
 
 	async closeRoom(roomId: string): Promise<void> {
+		if (this.sttManager) {
+			this.sttManager.stopRoom(roomId);
+		}
 		await this.roomManager.closeRoom(roomId);
 	}
 
@@ -299,6 +325,19 @@ export class MediasoupManager {
 		// Add audio producers to the audio level observer for active speaker detection
 		if (kind === 'audio') {
 			room.audioLevelObserver.addProducer({ producerId: result.id });
+		}
+
+		// Start STT transcription for audio producers
+		if (this.sttManager && kind === 'audio') {
+			const peerInfo = peer.info;
+			this.sttManager
+				.startTranscription(roomId, peerId, peerInfo?.name, producer)
+				.catch((error) => {
+					loggers.mediasoupManager.warn(
+						'STT start error: %s',
+						(error as Error).message,
+					);
+				});
 		}
 
 		return result;
@@ -748,6 +787,62 @@ export class MediasoupManager {
 		return room?.peers.has(peerId) || false;
 	}
 
+	/**
+	 * Start STT transcription for all existing audio producers in a room.
+	 * Called when STT is toggled on after participants have already joined.
+	 */
+	async startSttForExistingProducers(
+		roomId: string,
+		sttManager: SttManager,
+	): Promise<void> {
+		const room = this.roomManager.getRoom(roomId);
+		if (!room) {
+			loggers.mediasoupManager.warn(
+				'Cannot start STT: room %s not found',
+				roomId,
+			);
+			return;
+		}
+
+		const started: string[] = [];
+		for (const [peerId, peer] of room.peers) {
+			for (const producer of peer.producers.values()) {
+				if (producer.kind !== 'audio') continue;
+				if (producer.closed) continue;
+
+				try {
+					await sttManager.startTranscription(
+						roomId,
+						peerId,
+						peer.info.name,
+						producer,
+					);
+					started.push(peerId);
+				} catch (error) {
+					loggers.mediasoupManager.warn(
+						'Failed to start STT for existing producer %s in room %s: %s',
+						producer.id,
+						roomId,
+						(error as Error).message,
+					);
+				}
+			}
+		}
+
+		if (started.length > 0) {
+			loggers.mediasoupManager.info(
+				'Started STT for %d existing audio producer(s) in room %s',
+				started.length,
+				roomId,
+			);
+		} else {
+			loggers.mediasoupManager.debug(
+				'No existing audio producers to transcribe in room %s',
+				roomId,
+			);
+		}
+	}
+
 	get rooms() {
 		return this.roomManager;
 	}
@@ -768,6 +863,13 @@ export class MediasoupManager {
 			workers: this.workerManager.getAllWorkers().length,
 		};
 		loggers.mediasoupManager.info('Initial cleanup stats: %o', initialStats);
+
+		// Stop all STT sessions
+		if (this.sttManager) {
+			for (const room of this.roomManager.getAllRooms()) {
+				this.sttManager.stopRoom(room.id);
+			}
+		}
 
 		// Close all rooms (this will also close peers, transports, producers, consumers)
 		await this.roomManager.cleanup();

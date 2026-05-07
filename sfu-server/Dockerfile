@@ -1,38 +1,42 @@
 ARG NODE_VERSION=24-bookworm-slim
 
-# --- Build stage (installs build deps & compiles native modules) ---
+# --- Build stage (Node app) ---
 FROM node:${NODE_VERSION} AS build
 WORKDIR /app
-# Install build dependencies for mediasoup (glibc base so prebuilt usually works; still keep toolchain)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 build-essential python3-pip pkg-config libssl-dev git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy the shared types directory
 COPY types /app/types
-
-# Copy sfu-server source code
 WORKDIR /app/sfu-server
 COPY sfu-server/package.json sfu-server/yarn.lock sfu-server/tsconfig.json ./
-RUN corepack enable
-RUN corepack prepare yarn@1.22.22 --activate
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 RUN yarn install --frozen-lockfile
 COPY sfu-server/src ./src
 RUN yarn build
 
-# --- Runtime stage (minimal) ---
+# --- Runtime stage ---
 FROM node:${NODE_VERSION} AS runtime
 WORKDIR /app/sfu-server
 ENV NODE_ENV=production \
   PORT=3000
 
-RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates curl \
+# Install runtime deps: tini, ca-certificates, curl, ffmpeg, python3 (for faster-whisper)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini ca-certificates curl ffmpeg python3 python3-pip python3-venv \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app /app
 
-# Create logs dir and set ownership to existing 'node' user (already in base image)
-RUN mkdir -p /app/sfu-server/logs && chown -R node:node /app
+# Install faster-whisper into a system venv
+COPY sfu-server/stt-server /app/stt-server
+RUN python3 -m venv /app/.venv && \
+    /app/.venv/bin/pip install --no-cache-dir -r /app/stt-server/requirements.txt && \
+    mkdir -p /app/sfu-server/logs /app/.cache && \
+    chown -R node:node /app
+
+ENV HF_HOME=/app/.cache \
+    XDG_CACHE_HOME=/app/.cache
 
 USER node
 

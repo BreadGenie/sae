@@ -64,8 +64,12 @@
 						:style="{ paddingBottom: isToolbarVisible ? '6rem' : '0' }"
 					>
 						<!-- Video area -->
-						<div class="p-4 flex flex-col flex-1 min-h-0 text-white">
+						<div class="p-4 flex flex-col flex-1 min-h-0 text-white relative">
 							<MeetingLayout @open-people-panel="togglePeople" />
+							<CaptionOverlay
+								:is-captions-enabled="captionStore.isCaptionsEnabled"
+								:lines="captionStore.captionLines"
+							/>
 						</div>
 					</div>
 
@@ -93,10 +97,15 @@
 								v-if="activePanel === 'chat'"
 								:open="true"
 								:messages="chatStore.chatMessages"
-								:user-id="(currentUser.currentUser.value?.user_id as string) || ''"
+								:user-id="
+									(currentUser.currentUser.value
+										?.user_id as string) || ''
+								"
 								:user-name="
-									(currentUser.currentUser.value?.full_name as string) ||
-									(currentUser.currentUser.value?.name as string) ||
+									(currentUser.currentUser.value
+										?.full_name as string) ||
+									(currentUser.currentUser.value
+										?.name as string) ||
 									'You'
 								"
 								@close="toggleChat"
@@ -141,6 +150,7 @@
 						:isFullscreen="isFullscreen"
 						:isHandRaised="isHandRaised"
 						:isReactionPickerOpen="isReactionPickerOpen"
+						:isCaptionsEnabled="captionStore.isCaptionsEnabled"
 						@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 						:meetingId="meetingId"
 						:meetingTitle="meetingTitle"
@@ -155,6 +165,7 @@
 						@toggle-screen-share="mediaControls.toggleScreenShare()"
 						@toggle-fullscreen="toggleFullscreen"
 						@toggle-raise-hand="raiseHand.toggleRaiseHand()"
+						@toggle-captions="toggleCaptions"
 						@report-problem="handleReportProblem"
 						@end-call="sfuConnection.endCall()"
 						@device-changed="handleDeviceChanged"
@@ -191,7 +202,7 @@
 import { Button, frappeRequest, toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-
+import CaptionOverlay from "../components/CaptionOverlay.vue";
 import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
@@ -203,6 +214,8 @@ import PeoplePanel from "../components/PeoplePanel.vue";
 import RejectionOverlay from "../components/RejectionOverlay.vue";
 import Spinner from "../components/Spinner.vue";
 import { useBackgroundEffects } from "../composables/useBackgroundEffects";
+import { useCaptionStore } from "../composables/useCaptionStore";
+import { useCaptions } from "../composables/useCaptions";
 import { useChat } from "../composables/useChat";
 import { useChatStore } from "../composables/useChatStore";
 import { useConnectionState } from "../composables/useConnectionState";
@@ -255,6 +268,7 @@ const lobbyStore = useLobbyStore();
 const reactionStore = useReactionStore();
 const raiseHandStore = useRaiseHandStore();
 const gridLayout = useGridLayout(mediaState);
+const captionStore = useCaptionStore();
 
 // --- Lobby notification tracking ---
 const notifiedLobbyUsers = ref(new Set<string>());
@@ -404,6 +418,11 @@ const reactions = useReactions({
 const raiseHand = useRaiseHand({
 	raiseHandStore,
 	currentUser,
+	sfuClient: sfuConnection.sfuClient,
+});
+
+// --- Captions ---
+const { toggleCaptions } = useCaptions({
 	sfuClient: sfuConnection.sfuClient,
 });
 

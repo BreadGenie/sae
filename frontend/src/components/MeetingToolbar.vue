@@ -214,6 +214,8 @@ import {
 	watch,
 } from "vue";
 import LucideBug from "~icons/lucide/bug";
+import LucideCaptions from "~icons/lucide/captions";
+import LucideCaptionsOff from "~icons/lucide/captions-off";
 import { useMeetingDoc } from "../composables/useMeetingDoc";
 import { useResponsiveGrid } from "../composables/useResponsiveGrid";
 import { autoHideToolbar } from "../data/mediaPreferences";
@@ -244,6 +246,7 @@ const props = defineProps<{
 	isFullscreen?: boolean;
 	cameraPermissionGranted?: boolean;
 	microphonePermissionGranted?: boolean;
+	isCaptionsEnabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -255,6 +258,7 @@ const emit = defineEmits<{
 	"toggle-screen-share": [];
 	"toggle-fullscreen": [];
 	"toggle-raise-hand": [];
+	"toggle-captions": [];
 	"report-problem": [];
 	"end-call": [];
 	"device-changed": [event: unknown];
@@ -266,6 +270,14 @@ const { windowWidth } = useResponsiveGrid();
 const isMobile = computed(() => windowWidth.value < 768);
 
 const moreOptions = computed(() => [
+	{
+		icon: props.isCaptionsEnabled ? LucideCaptionsOff : LucideCaptions,
+		label: props.isCaptionsEnabled ? "Disable captions" : "Enable captions",
+		onClick: () => {
+			emit("toggle-captions");
+			resetHideTimer();
+		},
+	},
 	{
 		icon: "settings",
 		label: "Settings",
