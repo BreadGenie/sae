@@ -28,6 +28,14 @@ export class WhisperClient implements IWhisperClient {
 	private context = '';
 	private readonly maxContextLength = 80;
 
+	private queue: Array<{
+		pcmBuffer: Buffer;
+		sampleRate: number;
+		resolve: (result: WhisperTranscription) => void;
+		reject: (error: Error) => void;
+	}> = [];
+	private processing = false;
+
 	constructor(serverUrl: string) {
 		this.serverUrl = serverUrl.replace(/\/$/, '');
 
@@ -59,6 +67,31 @@ export class WhisperClient implements IWhisperClient {
 	async transcribe(
 		pcmBuffer: Buffer,
 		sampleRate = 16000,
+	): Promise<WhisperTranscription> {
+		return new Promise((resolve, reject) => {
+			this.queue.push({ pcmBuffer, sampleRate, resolve, reject });
+			this.processQueue();
+		});
+	}
+
+	private async processQueue(): Promise<void> {
+		if (this.processing || this.queue.length === 0) return;
+		this.processing = true;
+		const { pcmBuffer, sampleRate, resolve, reject } = this.queue.shift()!;
+		try {
+			const result = await this.doTranscribe(pcmBuffer, sampleRate);
+			resolve(result);
+		} catch (error) {
+			reject(error as Error);
+		} finally {
+			this.processing = false;
+			this.processQueue();
+		}
+	}
+
+	private async doTranscribe(
+		pcmBuffer: Buffer,
+		sampleRate: number,
 	): Promise<WhisperTranscription> {
 		const currentContext = this.context;
 
