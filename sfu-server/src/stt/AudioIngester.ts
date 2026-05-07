@@ -89,6 +89,7 @@ export class AudioIngester {
 	private silenceCheckCount = 0;
 	private isInSpeech = false;
 	private vadTimer: NodeJS.Timeout | null = null;
+	private chunkSumSq = 0;
 
 	constructor(options: AudioIngesterOptions) {
 		this.roomId = options.roomId;
@@ -306,8 +307,9 @@ export class AudioIngester {
 		if (this.vadQueueBytes < BYTES_PER_CHECK) return;
 
 		const frame = this.dequeueBytes(BYTES_PER_CHECK);
-
-		const rms = this.calculateRms(frame);
+		const frameSumSq = this.calculateSumSq(frame);
+		const rms =
+			Math.sqrt(frameSumSq / (BYTES_PER_CHECK / BYTES_PER_SAMPLE)) / 32768;
 		const isSpeech = rms > SPEECH_RMS_THRESHOLD;
 
 		if (isSpeech) {
@@ -315,10 +317,12 @@ export class AudioIngester {
 			this.speechCheckCount++;
 			this.isInSpeech = true;
 			this.pcmBuffer = Buffer.concat([this.pcmBuffer, frame]);
+			this.chunkSumSq += frameSumSq;
 		} else {
 			this.silenceCheckCount++;
 			if (this.isInSpeech) {
 				this.pcmBuffer = Buffer.concat([this.pcmBuffer, frame]);
+				this.chunkSumSq += frameSumSq;
 			}
 		}
 
@@ -346,12 +350,17 @@ export class AudioIngester {
 	private async flushBuffer(): Promise<void> {
 		const chunk = this.pcmBuffer;
 		const speechChecks = this.speechCheckCount;
+		const chunkRms =
+			this.chunkSumSq > 0
+				? Math.sqrt(this.chunkSumSq / (chunk.length / BYTES_PER_SAMPLE)) / 32768
+				: 0;
 
 		// Reset state immediately so audio keeps accumulating
 		this.pcmBuffer = Buffer.alloc(0);
 		this.speechCheckCount = 0;
 		this.silenceCheckCount = 0;
 		this.isInSpeech = false;
+		this.chunkSumSq = 0;
 
 		const durationMs = (chunk.length / BYTES_PER_SAMPLE / SAMPLE_RATE) * 1000;
 
@@ -384,7 +393,7 @@ export class AudioIngester {
 		try {
 			// Normalize audio to target RMS (-20 dBFS) so quiet speakers
 			// are boosted and loud speakers are attenuated.
-			const normalized = this.normalizeAudio(chunk, -20);
+			const normalized = this.normalizeAudio(chunk, -20, chunkRms);
 			const result = await this.transcribeWithTimeout(
 				normalized,
 				TRANSCRIBE_TIMEOUT_MS,
@@ -437,14 +446,13 @@ export class AudioIngester {
 
 	// ── Helpers ────────────────────────────────────────────────────────────────
 
-	private calculateRms(buffer: Buffer): number {
+	private calculateSumSq(buffer: Buffer): number {
 		let sum = 0;
-		const sampleCount = buffer.length / BYTES_PER_SAMPLE;
 		for (let i = 0; i < buffer.length; i += BYTES_PER_SAMPLE) {
 			const sample = buffer.readInt16LE(i);
 			sum += sample * sample;
 		}
-		return Math.sqrt(sum / sampleCount) / 32768;
+		return sum;
 	}
 
 	/**
@@ -480,16 +488,23 @@ export class AudioIngester {
 	 * Whisper was trained on normalized audio; feeding it unnormalized
 	 * quiet/loud audio severely degrades accuracy.
 	 */
-	private normalizeAudio(buffer: Buffer, targetDbFs: number): Buffer {
+	private normalizeAudio(
+		buffer: Buffer,
+		targetDbFs: number,
+		precomputedRms?: number,
+	): Buffer {
 		const targetRms = 32768 * 10 ** (targetDbFs / 20);
-		let currentSum = 0;
-		const sampleCount = buffer.length / BYTES_PER_SAMPLE;
+		const currentRms =
+			precomputedRms !== undefined
+				? precomputedRms * 32768
+				: (() => {
+						let currentSum = 0;
+						for (let i = 0; i < buffer.length; i += BYTES_PER_SAMPLE) {
+							currentSum += buffer.readInt16LE(i) ** 2;
+						}
+						return Math.sqrt(currentSum / (buffer.length / BYTES_PER_SAMPLE));
+					})();
 
-		for (let i = 0; i < buffer.length; i += BYTES_PER_SAMPLE) {
-			currentSum += buffer.readInt16LE(i) ** 2;
-		}
-
-		const currentRms = Math.sqrt(currentSum / sampleCount);
 		if (currentRms === 0) return buffer;
 
 		let gain = targetRms / currentRms;
