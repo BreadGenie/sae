@@ -122,6 +122,7 @@ export class SFUServer {
 
 		try {
 			await this.mediasoup.cleanup();
+			this.sttManager.destroy();
 
 			this.server.close(() => {
 				loggers.server.info('SFU Server stopped');

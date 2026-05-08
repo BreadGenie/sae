@@ -12,7 +12,7 @@
 services:
   sfu:
     build:
-      context: ../..
+      context: ..
       dockerfile: sfu-server/Dockerfile
     ports:
       - "3000:3000"
@@ -36,14 +36,14 @@ services:
 
   whisper:
     build:
-      context: ../..
+      context: ..
       dockerfile: sfu-server/Dockerfile
       target: runtime
     command:
       - /app/.venv/bin/python3
       - /app/stt-server/server.py
     environment:
-      - WHISPER_MODEL=small
+      - WHISPER_MODEL=tiny.en
       - WHISPER_COMPUTE_TYPE=int8
       - WHISPER_CPU_THREADS=4
       - WHISPER_HOST=0.0.0.0

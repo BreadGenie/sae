@@ -34,11 +34,10 @@ const BYTES_PER_CHECK = (SAMPLE_RATE * BYTES_PER_SAMPLE * VAD_CHECK_MS) / 1000;
 
 /** Consecutive silent checks before we flush (300 ms pause) */
 const SILENCE_CHECKS_TO_FLUSH = 3;
-/** Minimum speech checks before we consider it worth flushing (4 s).
- *  4s chunks give Whisper enough context for reliable transcription. */
-const MIN_SPEECH_CHECKS = 40;
-/** Force-flush after this much accumulated speech (12 s) */
-const MAX_SPEECH_CHECKS = 120;
+/** Minimum speech checks before we consider it worth flushing (1.5 s). */
+const MIN_SPEECH_CHECKS = 15;
+/** Force-flush after this much accumulated speech (4 s) */
+const MAX_SPEECH_CHECKS = 40;
 
 /**
  * Normalized RMS threshold for speech vs silence.
@@ -51,7 +50,7 @@ const SPEECH_RMS_THRESHOLD = Number.parseFloat(
 
 /** Max time one transcription can block the pipeline (ms) */
 const TRANSCRIBE_TIMEOUT_MS = Number.parseInt(
-	process.env.STT_TRANSCRIBE_TIMEOUT || '8000',
+	process.env.STT_TRANSCRIBE_TIMEOUT || '5000',
 	10,
 );
 

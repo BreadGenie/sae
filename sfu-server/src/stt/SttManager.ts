@@ -198,6 +198,12 @@ export class SttManager {
 		this.roomActiveSpeakers.delete(roomId);
 	}
 
+	destroy(): void {
+		if (typeof (this.whisperClient as WhisperClient).destroy === 'function') {
+			(this.whisperClient as WhisperClient).destroy();
+		}
+	}
+
 	private handleTranscript(
 		roomId: string,
 		participantId: string,

@@ -31,14 +31,37 @@ export class WhisperClient implements IWhisperClient {
 	private queue: Array<{
 		pcmBuffer: Buffer;
 		sampleRate: number;
+		createdAt: number;
 		resolve: (result: WhisperTranscription) => void;
 		reject: (error: Error) => void;
 	}> = [];
 	private processing = false;
 
+	private readonly maxQueueLength = 2;
+	private readonly maxQueueAgeMs = 3_000;
+
+	private healthCheckTimer: NodeJS.Timeout | null = null;
+	private readonly healthCheckIntervalMs = 10_000; // retry every 10s until available
+
 	constructor(serverUrl: string) {
 		this.serverUrl = serverUrl.replace(/\/$/, '');
 
+		this.checkHealth();
+		this.startHealthCheckLoop();
+	}
+
+	private startHealthCheckLoop(): void {
+		this.healthCheckTimer = setInterval(() => {
+			if (this.available) {
+				if (this.healthCheckTimer) clearInterval(this.healthCheckTimer);
+				this.healthCheckTimer = null;
+			} else {
+				this.checkHealth();
+			}
+		}, this.healthCheckIntervalMs);
+	}
+
+	private checkHealth(): void {
 		fetch(`${this.serverUrl}/health`)
 			.then((res) => {
 				if (res.ok) {
@@ -52,12 +75,17 @@ export class WhisperClient implements IWhisperClient {
 				}
 			})
 			.catch((err) => {
-				loggers.stt.warn(
+				loggers.stt.debug(
 					'STT server unreachable at %s: %s',
 					this.serverUrl,
 					err.message,
 				);
 			});
+	}
+
+	destroy(): void {
+		if (this.healthCheckTimer) clearInterval(this.healthCheckTimer);
+		this.healthCheckTimer = null;
 	}
 
 	isAvailable(): boolean {
@@ -69,7 +97,22 @@ export class WhisperClient implements IWhisperClient {
 		sampleRate = 16000,
 	): Promise<WhisperTranscription> {
 		return new Promise((resolve, reject) => {
-			this.queue.push({ pcmBuffer, sampleRate, resolve, reject });
+			// Cap queue length to prevent unbounded backlog
+			while (this.queue.length >= this.maxQueueLength) {
+				const dropped = this.queue.shift()!;
+				loggers.stt.debug(
+					'Dropping oldest queue item (age %dms)',
+					Date.now() - dropped.createdAt,
+				);
+				dropped.reject(new Error('Dropped: queue full'));
+			}
+			this.queue.push({
+				pcmBuffer,
+				sampleRate,
+				createdAt: Date.now(),
+				resolve,
+				reject,
+			});
 			this.processQueue();
 		});
 	}
@@ -77,9 +120,31 @@ export class WhisperClient implements IWhisperClient {
 	private async processQueue(): Promise<void> {
 		if (this.processing || this.queue.length === 0) return;
 		this.processing = true;
-		const { pcmBuffer, sampleRate, resolve, reject } = this.queue.shift()!;
+
+		// Drop stale jobs before processing
+		while (this.queue.length > 0) {
+			const front = this.queue[0];
+			if (Date.now() - front.createdAt > this.maxQueueAgeMs) {
+				const stale = this.queue.shift()!;
+				loggers.stt.warn(
+					'Dropping stale transcription job (age %dms, %d bytes)',
+					Date.now() - stale.createdAt,
+					stale.pcmBuffer.length,
+				);
+				stale.reject(new Error('Dropped: transcription too stale'));
+			} else {
+				break;
+			}
+		}
+
+		if (this.queue.length === 0) {
+			this.processing = false;
+			return;
+		}
+
+		const { pcmBuffer, resolve, reject } = this.queue.shift()!;
 		try {
-			const result = await this.doTranscribe(pcmBuffer, sampleRate);
+			const result = await this.doTranscribe(pcmBuffer);
 			resolve(result);
 		} catch (error) {
 			reject(error as Error);
@@ -89,32 +154,13 @@ export class WhisperClient implements IWhisperClient {
 		}
 	}
 
-	private async doTranscribe(
-		pcmBuffer: Buffer,
-		sampleRate: number,
-	): Promise<WhisperTranscription> {
-		const currentContext = this.context;
-
-		// Pad 0.5s silence before and after to give Whisper clean boundaries
-		const padSamples = Math.round(sampleRate * 0.5);
-		const padBytes = padSamples * 2;
-		const padded = Buffer.alloc(pcmBuffer.length + padBytes * 2);
-		pcmBuffer.copy(padded, padBytes);
-
-		const wavBuffer = this.pcmToWav(padded, sampleRate);
-
-		const formData = new FormData();
-		const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-		formData.append('file', blob, 'chunk.wav');
-		formData.append('language', 'en');
-		formData.append('temperature', '0.0');
-		formData.append('best_of', '1');
-		formData.append('audio_ctx', '1500');
-		formData.append('prompt', currentContext);
-
-		const response = await fetch(`${this.serverUrl}/inference`, {
+	private async doTranscribe(pcmBuffer: Buffer): Promise<WhisperTranscription> {
+		const response = await fetch(`${this.serverUrl}/transcribe-pcm`, {
 			method: 'POST',
-			body: formData,
+			headers: {
+				'Content-Type': 'application/octet-stream',
+			},
+			body: pcmBuffer,
 		});
 
 		if (!response.ok) {
@@ -132,34 +178,6 @@ export class WhisperClient implements IWhisperClient {
 		const trimmed = newText.trim();
 		if (!trimmed) return;
 		this.context = `${this.context} ${trimmed}`.slice(-this.maxContextLength);
-	}
-
-	private pcmToWav(
-		pcmBuffer: Buffer,
-		sampleRate: number,
-		channels = 1,
-		bitsPerSample = 16,
-	): Buffer {
-		const dataLength = pcmBuffer.length;
-		const byteRate = (sampleRate * channels * bitsPerSample) / 8;
-		const blockAlign = (channels * bitsPerSample) / 8;
-		const header = Buffer.alloc(44);
-
-		header.write('RIFF', 0);
-		header.writeUInt32LE(36 + dataLength, 4);
-		header.write('WAVE', 8);
-		header.write('fmt ', 12);
-		header.writeUInt32LE(16, 16);
-		header.writeUInt16LE(1, 20);
-		header.writeUInt16LE(channels, 22);
-		header.writeUInt32LE(sampleRate, 24);
-		header.writeUInt32LE(byteRate, 28);
-		header.writeUInt16LE(blockAlign, 32);
-		header.writeUInt16LE(bitsPerSample, 34);
-		header.write('data', 36);
-		header.writeUInt32LE(dataLength, 40);
-
-		return Buffer.concat([header, pcmBuffer]);
 	}
 }
 
