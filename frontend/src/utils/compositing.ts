@@ -21,12 +21,12 @@ interface CompositingOptions {
  * Apply background blur effect using person segmentation mask
  */
 export function applyBlurEffect(
-	imageData: ImageData,
-	maskData: Float32Array,
+	source: HTMLCanvasElement | ImageBitmap | ImageData,
+	mask: ImageBitmap | Float32Array,
 	width: number,
 	height: number,
 	options: CompositingOptions = {},
-): ImageData {
+): HTMLCanvasElement {
 	const { blurIntensity = 4, webglManager } = options;
 
 	if (!webglManager) {
@@ -38,8 +38,8 @@ export function applyBlurEffect(
 
 	try {
 		return webglManager.applyBlur(
-			imageData,
-			maskData,
+			source,
+			mask,
 			width,
 			height,
 			blurIntensity / 2,
@@ -53,56 +53,38 @@ export function applyBlurEffect(
  * Apply virtual background effect using person segmentation mask with light wrapping
  */
 export function applyVirtualBackground(
-	imageData: ImageData,
-	maskData: Float32Array,
+	source: HTMLCanvasElement | ImageBitmap | ImageData,
+	mask: ImageBitmap | Float32Array,
 	backgroundImageData: ImageData,
 	options: CompositingOptions = {},
-): ImageData {
+): HTMLCanvasElement {
 	const { webglManager } = options;
 
-	// Try if WebGL is available
-	if (webglManager) {
-		try {
-			return webglManager.applyLightWrap(
-				imageData,
-				maskData,
-				backgroundImageData,
-				imageData.width,
-				imageData.height,
-			);
-		} catch (error) {
-			console.warn(
-				"Light wrap failed, falling back to standard compositing:",
-				error,
-			);
-		}
+	if (!webglManager) {
+		throw new CompositingError(
+			"WebGL is required for virtual background but is not available",
+			"WEBGL_UNAVAILABLE",
+		);
 	}
 
-	// fallback
-	const outputData = new ImageData(imageData.width, imageData.height);
-	const originalData = imageData.data;
-	const backgroundData = backgroundImageData.data;
-
-	for (let i = 0; i < maskData.length; i++) {
-		const personConfidence = maskData[i];
-		const pixelIndex = i * 4;
-
-		const alpha = personConfidence;
-
-		// Blend between person (original) and background image based on confidence
-		outputData.data[pixelIndex] =
-			originalData[pixelIndex] * alpha +
-			backgroundData[pixelIndex] * (1 - alpha);
-		outputData.data[pixelIndex + 1] =
-			originalData[pixelIndex + 1] * alpha +
-			backgroundData[pixelIndex + 1] * (1 - alpha);
-		outputData.data[pixelIndex + 2] =
-			originalData[pixelIndex + 2] * alpha +
-			backgroundData[pixelIndex + 2] * (1 - alpha);
-		outputData.data[pixelIndex + 3] = originalData[pixelIndex + 3]; // Keep original alpha
+	try {
+		return webglManager.applyLightWrap(
+			source,
+			mask,
+			backgroundImageData,
+			backgroundImageData.width,
+			backgroundImageData.height,
+		);
+	} catch (error) {
+		console.warn(
+			"Light wrap failed, falling back to standard compositing:",
+			error,
+		);
+		throw new CompositingError(
+			"WebGL light wrap failed",
+			"WEBGL_LIGHTWRAP_FAILED",
+		);
 	}
-
-	return outputData;
 }
 
 /**

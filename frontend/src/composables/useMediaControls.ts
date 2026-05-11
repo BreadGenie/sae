@@ -1156,12 +1156,15 @@ export function useMediaControls(deps: MediaControlsDeps): MediaControlsAPI {
 	);
 
 	// Watch processed stream changes and update producer track
-	watch(mediaState.processedStream, async (newStream) => {
-		const reason = newStream
-			? "processed-stream-change"
-			: "processed-stream-removed";
-		await replacePublishedVideoTrack(newStream, reason);
-	});
+	watch(
+		() => mediaState.processedStream,
+		async (newStream) => {
+			const reason = newStream
+				? "processed-stream-change"
+				: "processed-stream-removed";
+			await replacePublishedVideoTrack(newStream, reason);
+		},
+	);
 
 	onUnmounted(() => {
 		if (backgroundSession) {

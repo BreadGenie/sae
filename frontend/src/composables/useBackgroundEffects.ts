@@ -230,39 +230,6 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 			);
 		};
 
-		const convertMaskToFloat32Array = async (
-			mask: ImageBitmap,
-			canvasWidth: number,
-			canvasHeight: number,
-		): Promise<Float32Array> => {
-			// alpha channel determines if a pixel belongs to person or background
-			// 255 = fully person, 0 = fully background
-			const extractAlphaChannel = (imageData: ImageData): Float32Array => {
-				const length = imageData.data.length / 4;
-				const result = new Float32Array(length);
-				for (let i = 0; i < length; i++) {
-					result[i] = imageData.data[i * 4 + 3] / 255;
-				}
-				return result;
-			};
-
-			const tempCanvas = document.createElement("canvas");
-			const tempCtx = tempCanvas.getContext("2d");
-			if (!tempCtx) {
-				throw new Error("Failed to get canvas context for mask conversion");
-			}
-
-			tempCanvas.width = canvasWidth;
-			tempCanvas.height = canvasHeight;
-			tempCtx.drawImage(mask, 0, 0, canvasWidth, canvasHeight);
-			const maskImageData = tempCtx.getImageData(
-				0,
-				0,
-				canvasWidth,
-				canvasHeight,
-			);
-			return extractAlphaChannel(maskImageData);
-		};
 		try {
 			isProcessing.value = true;
 			error.value = null;
@@ -428,84 +395,86 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 			}
 
 			// Helper to apply background effects (blur or virtual background)
-			const applyEffectsToFrame = async (maskData: Float32Array) => {
+			const applyEffectsToFrame = async (maskBitmap: ImageBitmap) => {
 				if (settings.backgroundBlurEnabled) {
-					try {
-						// Apply blur effect using compositing utilities
-						const currentImageData = ctx.getImageData(
-							0,
-							0,
-							canvas.width,
-							canvas.height,
-						);
-
-						const compositedImageData = applyBlurEffect(
-							currentImageData,
-							maskData,
-							canvas.width,
-							canvas.height,
-							{
-								blurIntensity: settings.blurIntensity,
-								webglManager: webglManager || undefined,
-							},
-						);
-
-						outputCtx.putImageData(compositedImageData, 0, 0);
-					} catch (error) {
-						if (
-							error instanceof CompositingError &&
-							error.code === "WEBGL_UNAVAILABLE"
-						) {
-							toast.error(
-								"Background blur requires WebGL but it's not available on this device. Blur effects have been disabled.",
+					if (webglManager) {
+						try {
+							const resultCanvas = applyBlurEffect(
+								canvas,
+								maskBitmap,
+								canvas.width,
+								canvas.height,
+								{
+									blurIntensity: settings.blurIntensity,
+									webglManager,
+								},
 							);
-							settings.backgroundBlurEnabled = false;
-						} else if (
-							error instanceof CompositingError &&
-							error.code === "WEBGL_BLUR_FAILED"
-						) {
-							toast.error(
-								"Background blur failed due to WebGL error. Blur effects have been disabled.",
-							);
-							settings.backgroundBlurEnabled = false;
-						} else {
-							console.error("Blur effect failed:", error);
+							outputCtx.drawImage(resultCanvas, 0, 0);
+						} catch (error) {
+							if (
+								error instanceof CompositingError &&
+								error.code === "WEBGL_UNAVAILABLE"
+							) {
+								toast.error(
+									"Background blur requires WebGL but it's not available on this device. Blur effects have been disabled.",
+								);
+								settings.backgroundBlurEnabled = false;
+							} else if (
+								error instanceof CompositingError &&
+								error.code === "WEBGL_BLUR_FAILED"
+							) {
+								toast.error(
+									"Background blur failed due to WebGL error. Blur effects have been disabled.",
+								);
+								settings.backgroundBlurEnabled = false;
+							} else {
+								console.error("Blur effect failed:", error);
+							}
+							outputCtx.drawImage(canvas, 0, 0);
 						}
+					} else {
 						outputCtx.drawImage(canvas, 0, 0);
 					}
 				} else if (backgroundImageData) {
-					const currentImageData = ctx.getImageData(
-						0,
-						0,
-						canvas.width,
-						canvas.height,
-					);
-
-					const compositedImageData = applyVirtualBackground(
-						currentImageData,
-						maskData,
-						backgroundImageData,
-						{
-							webglManager: webglManager || undefined,
-						},
-					);
-
-					outputCtx.putImageData(compositedImageData, 0, 0);
+					if (webglManager) {
+						try {
+							const resultCanvas = applyVirtualBackground(
+								canvas,
+								maskBitmap,
+								backgroundImageData,
+								{
+									webglManager,
+								},
+							);
+							outputCtx.drawImage(resultCanvas, 0, 0);
+						} catch (error) {
+							console.warn(
+								"Virtual background WebGL failed, falling back to raw frame:",
+								error,
+							);
+							outputCtx.drawImage(canvas, 0, 0);
+						}
+					} else {
+						outputCtx.drawImage(canvas, 0, 0);
+					}
 				} else {
 					outputCtx.drawImage(canvas, 0, 0);
 				}
 
 				if (trackWriter && outputCanvas instanceof OffscreenCanvas) {
+					let bitmap: ImageBitmap | null = null;
+					let videoFrame: VideoFrame | null = null;
 					try {
-						const bitmap = outputCanvas.transferToImageBitmap();
-						const videoFrame = new VideoFrame(bitmap, {
+						bitmap = outputCanvas.transferToImageBitmap();
+						videoFrame = new VideoFrame(bitmap, {
 							timestamp: performance.now() * 1000, // convert to microseconds
 						});
 						await trackWriter.write(videoFrame);
-						videoFrame.close();
-						bitmap.close();
 					} catch (err) {
 						console.warn("Failed to write VideoFrame:", err);
+					} finally {
+						if (videoFrame) videoFrame.close();
+						if (bitmap) bitmap.close();
 					}
 				}
 			};
@@ -549,31 +518,13 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 								continue;
 							}
 
-							// we convert segmentation mask to Float32Array
-							// since we need the alpha channel for compositing
-							const maskData = await convertMaskToFloat32Array(
-								results.segmentationMask,
-								canvas.width,
-								canvas.height,
-							);
-
 							outputCtx.clearRect(
 								0,
 								0,
 								outputCanvas.width,
 								outputCanvas.height,
 							);
-							if (maskData.length !== canvas.width * canvas.height) {
-								console.warn(
-									"Segmentation mask size mismatch. Falling back to original frame.",
-									maskData.length,
-									canvas.width * canvas.height,
-								);
-								outputCtx.drawImage(canvas, 0, 0);
-								continue;
-							}
-
-							await applyEffectsToFrame(maskData);
+							await applyEffectsToFrame(results.segmentationMask);
 						} catch (err) {
 							if (videoFrame) videoFrame.close();
 							console.error("Frame processing error:", err);
@@ -654,28 +605,9 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 						return;
 					}
 
-					// we convert segmentation mask to Float32Array
-					// since we need the alpha channel for compositing
-					const maskData = await convertMaskToFloat32Array(
-						results.segmentationMask,
-						canvas.width,
-						canvas.height,
-					);
-
 					// clear output canvas
 					outputCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
-					if (maskData.length !== canvas.width * canvas.height) {
-						console.warn(
-							"Segmentation mask size mismatch. Falling back to original frame.",
-							maskData.length,
-							canvas.width * canvas.height,
-						);
-						outputCtx.drawImage(canvas, 0, 0);
-						animationId = requestAnimationFrame(processFrameWithRAF);
-						return;
-					}
-
-					await applyEffectsToFrame(maskData);
+					await applyEffectsToFrame(results.segmentationMask);
 
 					if (isProcessing.value) {
 						animationId = requestAnimationFrame(processFrameWithRAF);
