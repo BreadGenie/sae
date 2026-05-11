@@ -207,7 +207,7 @@ export class WebGLManager {
 	private imageLocation: WebGLUniformLocation | null = null;
 	private maskLocation: WebGLUniformLocation | null = null;
 
-	// Cached light wrap program (compiled once, reused every frame)
+	// cache lightwrap program (compiled once, reused every frame)
 	private lightWrapProgram: WebGLProgram | null = null;
 	private lightWrapTexCoordLocation = -1;
 	private lightWrapResolutionLocation: WebGLUniformLocation | null = null;
@@ -524,7 +524,7 @@ export class WebGLManager {
 
 	applyBlur(
 		source: HTMLCanvasElement | ImageBitmap | ImageData,
-		mask: ImageBitmap | Float32Array,
+		mask: ImageBitmap,
 		width: number,
 		height: number,
 		sigma: number,
@@ -535,22 +535,7 @@ export class WebGLManager {
 			throw new WebGLError("Failed to create texture");
 		}
 
-		// Create texture from mask
-		let maskTexture: WebGLTexture | null;
-		if (mask instanceof ImageBitmap) {
-			maskTexture = this.createTextureFromSource(mask);
-		} else {
-			const maskImageData = new ImageData(width, height);
-			for (let i = 0; i < mask.length; i++) {
-				const pixelIndex = i * 4;
-				const maskValue = mask[i] * 255;
-				maskImageData.data[pixelIndex] = maskValue;
-				maskImageData.data[pixelIndex + 1] = maskValue;
-				maskImageData.data[pixelIndex + 2] = maskValue;
-				maskImageData.data[pixelIndex + 3] = 255;
-			}
-			maskTexture = this.createTextureFromSource(maskImageData);
-		}
+		const maskTexture = this.createTextureFromSource(mask);
 		if (!maskTexture) {
 			throw new WebGLError("Failed to create mask texture");
 		}
@@ -594,9 +579,10 @@ export class WebGLManager {
 		}
 	}
 
+	// used to apply the light wrap effect on the source image using the mask and background image
 	applyLightWrap(
 		source: HTMLCanvasElement | ImageBitmap | ImageData,
-		mask: ImageBitmap | Float32Array,
+		mask: ImageBitmap,
 		backgroundImageData: ImageData,
 		width: number,
 		height: number,
@@ -610,21 +596,7 @@ export class WebGLManager {
 			throw new WebGLError("Failed to create image texture");
 		}
 
-		let maskTexture: WebGLTexture | null;
-		if (mask instanceof ImageBitmap) {
-			maskTexture = this.createTextureFromSource(mask);
-		} else {
-			const maskImageData = new ImageData(width, height);
-			for (let i = 0; i < mask.length; i++) {
-				const pixelIndex = i * 4;
-				const maskValue = mask[i] * 255;
-				maskImageData.data[pixelIndex] = maskValue;
-				maskImageData.data[pixelIndex + 1] = maskValue;
-				maskImageData.data[pixelIndex + 2] = maskValue;
-				maskImageData.data[pixelIndex + 3] = 255;
-			}
-			maskTexture = this.createTextureFromSource(maskImageData);
-		}
+		const maskTexture = this.createTextureFromSource(mask);
 		if (!maskTexture) {
 			throw new WebGLError("Failed to create mask texture");
 		}
