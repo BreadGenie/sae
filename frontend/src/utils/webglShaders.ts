@@ -258,6 +258,23 @@ export class WebGLManager {
 	private maskBlurSigmaLocation: WebGLUniformLocation | null = null;
 	private maskBlurMaskLocation: WebGLUniformLocation | null = null;
 
+	// Cached FBO ping-pong pair for mask blur — reused every frame, recreated on resize
+	private maskBlurCache: {
+		width: number;
+		height: number;
+		fboA: WebGLFramebuffer | null;
+		textureA: WebGLTexture | null;
+		fboB: WebGLFramebuffer | null;
+		textureB: WebGLTexture | null;
+	} = {
+		width: 0,
+		height: 0,
+		fboA: null,
+		textureA: null,
+		fboB: null,
+		textureB: null,
+	};
+
 	constructor(canvas: HTMLCanvasElement) {
 		const gl =
 			canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
@@ -682,6 +699,86 @@ export class WebGLManager {
 		this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
 	}
 
+	private ensureMaskBlurCache(width: number, height: number): void {
+		if (
+			this.maskBlurCache.width === width &&
+			this.maskBlurCache.height === height &&
+			this.maskBlurCache.textureA
+		) {
+			return;
+		}
+
+		if (this.maskBlurCache.textureA) {
+			this.gl.deleteTexture(this.maskBlurCache.textureA);
+			this.maskBlurCache.textureA = null;
+		}
+		if (this.maskBlurCache.fboA) {
+			this.gl.deleteFramebuffer(this.maskBlurCache.fboA);
+			this.maskBlurCache.fboA = null;
+		}
+		if (this.maskBlurCache.textureB) {
+			this.gl.deleteTexture(this.maskBlurCache.textureB);
+			this.maskBlurCache.textureB = null;
+		}
+		if (this.maskBlurCache.fboB) {
+			this.gl.deleteFramebuffer(this.maskBlurCache.fboB);
+			this.maskBlurCache.fboB = null;
+		}
+
+		const textureA = this.createEmptyTexture(width, height);
+		if (!textureA)
+			throw new WebGLError("Failed to create mask cache texture A");
+		const fboA = this.gl.createFramebuffer();
+		if (!fboA) {
+			this.gl.deleteTexture(textureA);
+			throw new WebGLError("Failed to create mask cache FBO A");
+		}
+		this.setupFramebuffer(fboA, textureA);
+
+		const textureB = this.createEmptyTexture(width, height);
+		if (!textureB) {
+			this.gl.deleteTexture(textureA);
+			this.gl.deleteFramebuffer(fboA);
+			throw new WebGLError("Failed to create mask cache texture B");
+		}
+		const fboB = this.gl.createFramebuffer();
+		if (!fboB) {
+			this.gl.deleteTexture(textureA);
+			this.gl.deleteFramebuffer(fboA);
+			this.gl.deleteTexture(textureB);
+			throw new WebGLError("Failed to create mask cache FBO B");
+		}
+		this.setupFramebuffer(fboB, textureB);
+
+		this.maskBlurCache.width = width;
+		this.maskBlurCache.height = height;
+		this.maskBlurCache.textureA = textureA;
+		this.maskBlurCache.fboA = fboA;
+		this.maskBlurCache.textureB = textureB;
+		this.maskBlurCache.fboB = fboB;
+	}
+
+	private destroyMaskBlurCache(): void {
+		if (this.maskBlurCache.textureA) {
+			this.gl.deleteTexture(this.maskBlurCache.textureA);
+		}
+		if (this.maskBlurCache.fboA) {
+			this.gl.deleteFramebuffer(this.maskBlurCache.fboA);
+		}
+		if (this.maskBlurCache.textureB) {
+			this.gl.deleteTexture(this.maskBlurCache.textureB);
+		}
+		if (this.maskBlurCache.fboB) {
+			this.gl.deleteFramebuffer(this.maskBlurCache.fboB);
+		}
+		this.maskBlurCache.width = 0;
+		this.maskBlurCache.height = 0;
+		this.maskBlurCache.textureA = null;
+		this.maskBlurCache.fboA = null;
+		this.maskBlurCache.textureB = null;
+		this.maskBlurCache.fboB = null;
+	}
+
 	private renderMaskBlur(
 		maskTexture: WebGLTexture,
 		width: number,
@@ -754,6 +851,8 @@ export class WebGLManager {
 			return texture;
 		}
 
+		this.ensureMaskBlurCache(width, height);
+
 		const maskBlurSigma = 3.0;
 
 		const rawMaskTexture = this.createTextureFromSource(mask);
@@ -761,32 +860,7 @@ export class WebGLManager {
 			throw new WebGLError("Failed to create raw mask texture");
 		}
 
-		let hBlurTexture: WebGLTexture | null = null;
-		let fboA: WebGLFramebuffer | null = null;
-		let resultTexture: WebGLTexture | null = null;
-		let fboB: WebGLFramebuffer | null = null;
-
 		try {
-			hBlurTexture = this.createEmptyTexture(width, height);
-			if (!hBlurTexture) {
-				throw new WebGLError("Failed to create horizontal blur texture");
-			}
-			fboA = this.gl.createFramebuffer();
-			if (!fboA) {
-				throw new WebGLError("Failed to create FBO A");
-			}
-			this.setupFramebuffer(fboA, hBlurTexture);
-
-			resultTexture = this.createEmptyTexture(width, height);
-			if (!resultTexture) {
-				throw new WebGLError("Failed to create result texture");
-			}
-			fboB = this.gl.createFramebuffer();
-			if (!fboB) {
-				throw new WebGLError("Failed to create FBO B");
-			}
-			this.setupFramebuffer(fboB, resultTexture);
-
 			// Horizontal pass
 			this.renderMaskBlur(
 				rawMaskTexture,
@@ -794,28 +868,22 @@ export class WebGLManager {
 				height,
 				maskBlurSigma,
 				[1, 0],
-				fboA,
+				this.maskBlurCache.fboA,
 			);
 
 			// Vertical pass
 			this.renderMaskBlur(
-				hBlurTexture,
+				this.maskBlurCache.textureA,
 				width,
 				height,
 				maskBlurSigma,
 				[0, 1],
-				fboB,
+				this.maskBlurCache.fboB,
 			);
 
-			const output = resultTexture;
-			resultTexture = null;
-			return output;
+			return this.maskBlurCache.textureB;
 		} finally {
 			this.gl.deleteTexture(rawMaskTexture);
-			if (hBlurTexture) this.gl.deleteTexture(hBlurTexture);
-			if (fboA) this.gl.deleteFramebuffer(fboA);
-			if (resultTexture) this.gl.deleteTexture(resultTexture);
-			if (fboB) this.gl.deleteFramebuffer(fboB);
 		}
 	}
 
@@ -960,7 +1028,8 @@ export class WebGLManager {
 			return canvas;
 		} finally {
 			if (imageTexture) this.gl.deleteTexture(imageTexture);
-			if (blurredMaskTexture) this.gl.deleteTexture(blurredMaskTexture);
+			if (blurredMaskTexture && !this.maskBlurProgram)
+				this.gl.deleteTexture(blurredMaskTexture);
 			if (backgroundTexture) this.gl.deleteTexture(backgroundTexture);
 		}
 	}
@@ -994,5 +1063,6 @@ export class WebGLManager {
 			this.gl.deleteProgram(this.maskBlurProgram);
 			this.maskBlurProgram = null;
 		}
+		this.destroyMaskBlurCache();
 	}
 }
