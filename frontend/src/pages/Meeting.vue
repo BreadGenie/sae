@@ -697,8 +697,12 @@ onUnmounted(() => {
 
 // Watch for localVideo element and localStream connection
 watch(
-	[() => mediaState.localVideo, () => mediaState.localStream],
-	async ([videoElement, stream]) => {
+	[
+		() => mediaState.localVideo,
+		() => mediaState.localStream,
+		() => mediaState.processedStream,
+	],
+	async ([videoElement, stream, _processedStream]) => {
 		if (videoElement && stream) {
 			try {
 				// Prefer processed stream (with background effects) over raw local stream
