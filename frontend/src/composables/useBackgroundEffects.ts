@@ -449,9 +449,10 @@ export function useBackgroundEffects(): UseBackgroundEffectsReturn {
 							outputCtx.drawImage(resultCanvas, 0, 0);
 						} catch (error) {
 							console.warn(
-								"Virtual background WebGL failed, falling back to raw frame:",
+								"Virtual background WebGL failed, disabling:",
 								error,
 							);
+							backgroundImageData = null;
 							outputCtx.drawImage(canvas, 0, 0);
 						}
 					} else {
