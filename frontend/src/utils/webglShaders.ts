@@ -809,21 +809,23 @@ export class WebGLManager {
 			throw new WebGLError("Light wrap program not initialized");
 		}
 
-		const imageTexture = this.createTextureFromSource(source);
-		if (!imageTexture) {
-			throw new WebGLError("Failed to create image texture");
-		}
-
-		const blurredMaskTexture = this.preprocessMask(mask, width, height);
-
-		const backgroundTexture = this.createTextureFromSource(backgroundImageData);
-		if (!backgroundTexture) {
-			this.gl.deleteTexture(imageTexture);
-			this.gl.deleteTexture(blurredMaskTexture);
-			throw new WebGLError("Failed to create background texture");
-		}
+		let imageTexture: WebGLTexture | null = null;
+		let blurredMaskTexture: WebGLTexture | null = null;
+		let backgroundTexture: WebGLTexture | null = null;
 
 		try {
+			imageTexture = this.createTextureFromSource(source);
+			if (!imageTexture) {
+				throw new WebGLError("Failed to create image texture");
+			}
+
+			blurredMaskTexture = this.preprocessMask(mask, width, height);
+
+			backgroundTexture = this.createTextureFromSource(backgroundImageData);
+			if (!backgroundTexture) {
+				throw new WebGLError("Failed to create background texture");
+			}
+
 			const canvas = this.gl.canvas as HTMLCanvasElement;
 			canvas.width = width;
 			canvas.height = height;
@@ -878,9 +880,9 @@ export class WebGLManager {
 
 			return canvas;
 		} finally {
-			this.gl.deleteTexture(imageTexture);
-			this.gl.deleteTexture(blurredMaskTexture);
-			this.gl.deleteTexture(backgroundTexture);
+			if (imageTexture) this.gl.deleteTexture(imageTexture);
+			if (blurredMaskTexture) this.gl.deleteTexture(blurredMaskTexture);
+			if (backgroundTexture) this.gl.deleteTexture(backgroundTexture);
 		}
 	}
 
