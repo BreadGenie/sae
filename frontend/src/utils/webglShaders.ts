@@ -31,13 +31,12 @@ const SHADERS = {
       vec2 texelSize = 1.0 / u_resolution;
 
       // Get current pixel's mask value (0 = background, 1 = person)
-      float centerMask = texture2D(u_mask, v_texCoord).r;
+      float centerMask = texture2D(u_mask, v_texCoord).a;
       vec4 originalColor = texture2D(u_image, v_texCoord);
 
       // Smooth the mask to reduce blockiness from low-res segmentation
       float smoothMask = smoothstep(0.02, 0.98, centerMask);
 
-	  // If this is clearly foreground (person), just return the original color
       if (smoothMask > 0.99) {
         gl_FragColor = originalColor;
         return;
@@ -57,7 +56,7 @@ const SHADERS = {
           vec2 sampleCoord = v_texCoord + offset;
 
           // Get mask value at sample position
-          float sampleMask = texture2D(u_mask, sampleCoord).r;
+          float sampleMask = texture2D(u_mask, sampleCoord).a;
           float sampleSmoothMask = smoothstep(0.02, 0.98, sampleMask);
 
           // Only sample background pixels for background blur
@@ -97,7 +96,7 @@ const SHADERS = {
       vec2 texelSize = 1.0 / u_resolution;
 
       // Get current pixel's mask value (0 = background, 1 = person)
-      float centerMask = texture2D(u_mask, v_texCoord).r;
+      float centerMask = texture2D(u_mask, v_texCoord).a;
       vec4 originalColor = texture2D(u_image, v_texCoord);
       vec4 backgroundColor = texture2D(u_background, v_texCoord);
 
@@ -106,10 +105,10 @@ const SHADERS = {
 
       // Edge region - apply light wrapping
       // Calculate edge normal by sampling mask gradient
-      float maskLeft = texture2D(u_mask, v_texCoord + vec2(-texelSize.x, 0.0)).r;
-      float maskRight = texture2D(u_mask, v_texCoord + vec2(texelSize.x, 0.0)).r;
-      float maskUp = texture2D(u_mask, v_texCoord + vec2(0.0, -texelSize.y)).r;
-      float maskDown = texture2D(u_mask, v_texCoord + vec2(0.0, texelSize.y)).r;
+      float maskLeft = texture2D(u_mask, v_texCoord + vec2(-texelSize.x, 0.0)).a;
+      float maskRight = texture2D(u_mask, v_texCoord + vec2(texelSize.x, 0.0)).a;
+      float maskUp = texture2D(u_mask, v_texCoord + vec2(0.0, -texelSize.y)).a;
+      float maskDown = texture2D(u_mask, v_texCoord + vec2(0.0, texelSize.y)).a;
 
       // Gradient points from background to foreground
       vec2 gradient = vec2(maskRight - maskLeft, maskDown - maskUp);
@@ -296,12 +295,19 @@ export class WebGLManager {
 		);
 
 		if (!vertexShader || !fragmentShader) {
+			if (vertexShader) this.gl.deleteShader(vertexShader);
+			if (fragmentShader) this.gl.deleteShader(fragmentShader);
 			throw new WebGLError("Failed to create light wrap shaders");
 		}
 
-		this.lightWrapProgram = this.createProgram(vertexShader, fragmentShader);
-		if (!this.lightWrapProgram) {
-			throw new WebGLError("Failed to create light wrap shader program");
+		try {
+			this.lightWrapProgram = this.createProgram(vertexShader, fragmentShader);
+			if (!this.lightWrapProgram) {
+				throw new WebGLError("Failed to create light wrap shader program");
+			}
+		} finally {
+			this.gl.deleteShader(vertexShader);
+			this.gl.deleteShader(fragmentShader);
 		}
 
 		this.lightWrapTexCoordLocation = this.gl.getAttribLocation(
