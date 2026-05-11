@@ -76,10 +76,7 @@ export function applyVirtualBackground(
 			backgroundImageData.height,
 		);
 	} catch (error) {
-		console.warn(
-			"Light wrap failed, falling back to standard compositing:",
-			error,
-		);
+		console.warn("Light wrap WebGL render failed:", error);
 		throw new CompositingError(
 			"WebGL light wrap failed",
 			"WEBGL_LIGHTWRAP_FAILED",
