@@ -523,7 +523,7 @@ export class WebGLManager {
 	}
 
 	applyBlur(
-		source: HTMLCanvasElement | ImageBitmap | ImageData,
+		source: HTMLCanvasElement,
 		mask: ImageBitmap,
 		width: number,
 		height: number,
@@ -581,7 +581,7 @@ export class WebGLManager {
 
 	// used to apply the light wrap effect on the source image using the mask and background image
 	applyLightWrap(
-		source: HTMLCanvasElement | ImageBitmap | ImageData,
+		source: HTMLCanvasElement,
 		mask: ImageBitmap,
 		backgroundImageData: ImageData,
 		width: number,

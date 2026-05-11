@@ -21,7 +21,7 @@ interface CompositingOptions {
  * Apply background blur effect using person segmentation mask
  */
 export function applyBlurEffect(
-	source: HTMLCanvasElement | ImageBitmap | ImageData,
+	source: HTMLCanvasElement,
 	mask: ImageBitmap,
 	width: number,
 	height: number,
@@ -53,7 +53,7 @@ export function applyBlurEffect(
  * Apply virtual background effect using person segmentation mask with light wrapping
  */
 export function applyVirtualBackground(
-	source: HTMLCanvasElement | ImageBitmap | ImageData,
+	source: HTMLCanvasElement,
 	mask: ImageBitmap,
 	backgroundImageData: ImageData,
 	options: CompositingOptions = {},
