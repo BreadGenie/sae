@@ -626,17 +626,71 @@ export class WebGLManager {
 		return canvas;
 	}
 
+	private createEmptyTexture(
+		width: number,
+		height: number,
+	): WebGLTexture | null {
+		const texture = this.gl.createTexture();
+		if (!texture) return null;
+
+		this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+		this.gl.texParameteri(
+			this.gl.TEXTURE_2D,
+			this.gl.TEXTURE_WRAP_S,
+			this.gl.CLAMP_TO_EDGE,
+		);
+		this.gl.texParameteri(
+			this.gl.TEXTURE_2D,
+			this.gl.TEXTURE_WRAP_T,
+			this.gl.CLAMP_TO_EDGE,
+		);
+		this.gl.texParameteri(
+			this.gl.TEXTURE_2D,
+			this.gl.TEXTURE_MIN_FILTER,
+			this.gl.LINEAR,
+		);
+		this.gl.texParameteri(
+			this.gl.TEXTURE_2D,
+			this.gl.TEXTURE_MAG_FILTER,
+			this.gl.LINEAR,
+		);
+
+		this.gl.texImage2D(
+			this.gl.TEXTURE_2D,
+			0,
+			this.gl.RGBA,
+			width,
+			height,
+			0,
+			this.gl.RGBA,
+			this.gl.UNSIGNED_BYTE,
+			null,
+		);
+
+		return texture;
+	}
+
+	private setupFramebuffer(fbo: WebGLFramebuffer, texture: WebGLTexture): void {
+		this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, fbo);
+		this.gl.framebufferTexture2D(
+			this.gl.FRAMEBUFFER,
+			this.gl.COLOR_ATTACHMENT0,
+			this.gl.TEXTURE_2D,
+			texture,
+			0,
+		);
+		this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+	}
+
 	private renderMaskBlur(
 		maskTexture: WebGLTexture,
 		width: number,
 		height: number,
 		sigma: number,
 		direction: number[],
-	): HTMLCanvasElement {
-		const canvas = this.gl.canvas as HTMLCanvasElement;
-		canvas.width = width;
-		canvas.height = height;
-
+		targetFbo: WebGLFramebuffer,
+	): void {
+		this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, targetFbo);
 		this.gl.viewport(0, 0, width, height);
 		this.gl.clearColor(0, 0, 0, 0);
 		this.gl.clear(this.gl.COLOR_BUFFER_BIT);
@@ -684,7 +738,7 @@ export class WebGLManager {
 
 		this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
-		return canvas;
+		this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
 	}
 
 	private preprocessMask(
@@ -707,36 +761,61 @@ export class WebGLManager {
 			throw new WebGLError("Failed to create raw mask texture");
 		}
 
-		let hMaskTexture: WebGLTexture | null = null;
+		let hBlurTexture: WebGLTexture | null = null;
+		let fboA: WebGLFramebuffer | null = null;
+		let resultTexture: WebGLTexture | null = null;
+		let fboB: WebGLFramebuffer | null = null;
+
 		try {
-			const hResult = this.renderMaskBlur(
+			hBlurTexture = this.createEmptyTexture(width, height);
+			if (!hBlurTexture) {
+				throw new WebGLError("Failed to create horizontal blur texture");
+			}
+			fboA = this.gl.createFramebuffer();
+			if (!fboA) {
+				throw new WebGLError("Failed to create FBO A");
+			}
+			this.setupFramebuffer(fboA, hBlurTexture);
+
+			resultTexture = this.createEmptyTexture(width, height);
+			if (!resultTexture) {
+				throw new WebGLError("Failed to create result texture");
+			}
+			fboB = this.gl.createFramebuffer();
+			if (!fboB) {
+				throw new WebGLError("Failed to create FBO B");
+			}
+			this.setupFramebuffer(fboB, resultTexture);
+
+			// Horizontal pass
+			this.renderMaskBlur(
 				rawMaskTexture,
 				width,
 				height,
 				maskBlurSigma,
 				[1, 0],
+				fboA,
 			);
-			hMaskTexture = this.createTextureFromSource(hResult);
-			if (!hMaskTexture) {
-				throw new WebGLError("Failed to create horizontal mask blur texture");
-			}
 
-			const vResult = this.renderMaskBlur(
-				hMaskTexture,
+			// Vertical pass
+			this.renderMaskBlur(
+				hBlurTexture,
 				width,
 				height,
 				maskBlurSigma,
 				[0, 1],
+				fboB,
 			);
-			const blurredMaskTexture = this.createTextureFromSource(vResult);
-			if (!blurredMaskTexture) {
-				throw new WebGLError("Failed to create blurred mask texture");
-			}
 
-			return blurredMaskTexture;
+			const output = resultTexture;
+			resultTexture = null;
+			return output;
 		} finally {
 			this.gl.deleteTexture(rawMaskTexture);
-			if (hMaskTexture) this.gl.deleteTexture(hMaskTexture);
+			if (hBlurTexture) this.gl.deleteTexture(hBlurTexture);
+			if (fboA) this.gl.deleteFramebuffer(fboA);
+			if (resultTexture) this.gl.deleteTexture(resultTexture);
+			if (fboB) this.gl.deleteFramebuffer(fboB);
 		}
 	}
 
