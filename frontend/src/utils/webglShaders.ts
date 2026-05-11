@@ -196,7 +196,6 @@ export class WebGLManager {
 	private program: WebGLProgram | null = null;
 	private positionBuffer: WebGLBuffer | null = null;
 	private texCoordBuffer: WebGLBuffer | null = null;
-	private outputCanvas: HTMLCanvasElement | null = null;
 
 	// Cached locations for blur program
 	private texCoordLocation = -1;
@@ -259,11 +258,9 @@ export class WebGLManager {
 		this.imageLocation = this.gl.getUniformLocation(this.program, "u_image");
 		this.maskLocation = this.gl.getUniformLocation(this.program, "u_mask");
 
-		// reusable buffers and canvas for perf
+		// reusable buffers for perf
 		this.positionBuffer = this.gl.createBuffer();
 		this.texCoordBuffer = this.gl.createBuffer();
-		this.outputCanvas = document.createElement("canvas");
-		this.outputCanvas.getContext("2d", { willReadFrequently: true }); // for perf as well
 
 		// Setup position buffer with quad vertices
 		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
@@ -698,6 +695,5 @@ export class WebGLManager {
 			this.gl.deleteProgram(this.lightWrapProgram);
 			this.lightWrapProgram = null;
 		}
-		this.outputCanvas = null;
 	}
 }
