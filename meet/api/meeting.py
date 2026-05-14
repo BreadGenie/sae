@@ -571,6 +571,6 @@ def check_meeting_access(meeting_id: str) -> dict:
 
 		return {"allow_guest": allow_guest}
 	except frappe.DoesNotExistError:
-		frappe.throw(_("Meeting not found hello"))
+		frappe.throw(_("Meeting not found"))
 	except Exception as e:
 		frappe.throw(str(e))

@@ -3,7 +3,7 @@
 		<div v-if="error" class="bg-red-50 border border-red-200 rounded-lg p-4">
 			<p class="text-sm text-red-800">
 				<lucide-alert-circle class="w-4 h-4 inline" />
-				{{ error}}
+				{{ error }}
 			</p>
 		</div>
 		<div v-else-if="participants.length > 0" class="flex flex-col items-center">
