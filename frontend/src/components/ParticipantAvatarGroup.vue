@@ -2,7 +2,7 @@
 	<div class="p-4">
 		<div v-if="error" class="bg-red-50 border border-red-200 rounded-lg p-4">
 			<p class="text-sm text-red-800">
-				<lucide-alert-circle class="w-4 h-4 inline" />
+				<lucide-alert-circle class="w-4 h-4 inline mr-2" />
 				{{ error }}
 			</p>
 		</div>
