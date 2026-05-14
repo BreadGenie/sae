@@ -287,6 +287,10 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 	This is used by the meeting preview page to fetch live participants
 	from the SFU without granting any media capabilities.
 	"""
+
+	if not frappe.db.exists("Sae Meeting", meeting_id):
+		frappe.throw(_("Meeting not found"))
+
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
 	if meeting.is_user_banned(frappe.session.user):
@@ -567,6 +571,6 @@ def check_meeting_access(meeting_id: str) -> dict:
 
 		return {"allow_guest": allow_guest}
 	except frappe.DoesNotExistError:
-		frappe.throw(_("Meeting not found"))
+		frappe.throw(_("Meeting not found hello"))
 	except Exception as e:
 		frappe.throw(str(e))
