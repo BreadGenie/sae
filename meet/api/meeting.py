@@ -288,10 +288,10 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 	from the SFU without granting any media capabilities.
 	"""
 
-	if not frappe.db.exists("Sae Meeting", meeting_id):
+	try:
+		meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+	except frappe.DoesNotExistError:
 		frappe.throw(_("Meeting not found"))
-
-	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
 	if meeting.is_user_banned(frappe.session.user):
 		frappe.throw(_("You are banned from this meeting"), frappe.PermissionError)
