@@ -103,7 +103,7 @@ add_to_apps_screen = [
 # Name of the app being installed is passed as an argument
 
 # before_app_install = "meet.utils.before_app_install"
-# after_app_install = "meet.utils.after_app_install"
+after_app_install = "meet.utils.after_app_install"
 
 # Integration Cleanup
 # -------------------
