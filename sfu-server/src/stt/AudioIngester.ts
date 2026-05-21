@@ -36,8 +36,10 @@ const BYTES_PER_CHECK = (SAMPLE_RATE * BYTES_PER_SAMPLE * VAD_CHECK_MS) / 1000;
 const SILENCE_CHECKS_TO_FLUSH = 3;
 /** Minimum speech checks before we consider it worth flushing (1.5 s). */
 const MIN_SPEECH_CHECKS = 15;
-/** Force-flush after this much accumulated speech (4 s) */
-const MAX_SPEECH_CHECKS = 40;
+/** Min checks for tail-end catch-up flush (500 ms) */
+const MIN_TAIL_CHECKS = 5;
+/** How often to send a draft update during continuous speech (2 s) */
+const DRAFT_INTERVAL_CHECKS = 20;
 
 /**
  * Normalized RMS threshold for speech vs silence.
@@ -81,7 +83,8 @@ export class AudioIngester {
 	private running = false;
 
 	// ── VAD state ──────────────────────────────────────────────────────────────
-	private pcmBuffer = Buffer.alloc(0);
+	private pcmChunks: Buffer[] = [];
+	private pcmChunkBytes = 0;
 	private vadQueue: Buffer[] = [];
 	private vadQueueBytes = 0;
 	private speechCheckCount = 0;
@@ -89,6 +92,7 @@ export class AudioIngester {
 	private isInSpeech = false;
 	private vadTimer: NodeJS.Timeout | null = null;
 	private chunkSumSq = 0;
+	private lastDraftCheck = 0;
 
 	constructor(options: AudioIngesterOptions) {
 		this.roomId = options.roomId;
@@ -143,11 +147,8 @@ export class AudioIngester {
 		}
 
 		// Flush any remaining speech
-		if (
-			this.pcmBuffer.length > 0 &&
-			this.speechCheckCount >= MIN_SPEECH_CHECKS
-		) {
-			await this.flushBuffer();
+		if (this.pcmChunkBytes > 0 && this.speechCheckCount >= MIN_TAIL_CHECKS) {
+			await this.flushBuffer(true);
 		}
 
 		if (this.consumer) {
@@ -313,18 +314,21 @@ export class AudioIngester {
 			this.silenceCheckCount = 0;
 			this.speechCheckCount++;
 			this.isInSpeech = true;
-			this.pcmBuffer = Buffer.concat([this.pcmBuffer, frame]);
+			this.pcmChunks.push(frame);
+			this.pcmChunkBytes += frame.length;
 			this.chunkSumSq += frameSumSq;
 		} else {
 			this.silenceCheckCount++;
 			if (this.isInSpeech) {
-				this.pcmBuffer = Buffer.concat([this.pcmBuffer, frame]);
-				this.chunkSumSq += frameSumSq;
+				this.pcmChunks.push(frame);
+				this.pcmChunkBytes += frame.length;
 			}
 		}
 
 		if (this.shouldFlush()) {
-			await this.flushBuffer();
+			this.flushBuffer(true).catch(() => {});
+		} else if (this.shouldDraft()) {
+			this.flushDraft().catch(() => {});
 		}
 	}
 
@@ -337,32 +341,60 @@ export class AudioIngester {
 		) {
 			return true;
 		}
-		// Force flush on very long utterances
-		if (this.speechCheckCount >= MAX_SPEECH_CHECKS) {
+		// Extended silence: flush whatever audio we have, even short utterances.
+		// Catches trailing words that didn't reach MIN_SPEECH_CHECKS.
+		if (
+			this.isInSpeech &&
+			this.silenceCheckCount >= SILENCE_CHECKS_TO_FLUSH * 4 &&
+			this.speechCheckCount >= MIN_TAIL_CHECKS
+		) {
 			return true;
 		}
 		return false;
 	}
 
-	private async flushBuffer(): Promise<void> {
-		const chunk = this.pcmBuffer;
+	private shouldDraft(): boolean {
+		return (
+			this.isInSpeech &&
+			this.speechCheckCount >= MIN_SPEECH_CHECKS &&
+			this.speechCheckCount - this.lastDraftCheck >= DRAFT_INTERVAL_CHECKS
+		);
+	}
+
+	private async flushBuffer(isFinal: boolean): Promise<void> {
+		// Concatenate accumulated chunks once
+		const chunk =
+			this.pcmChunks.length === 1
+				? this.pcmChunks[0]
+				: Buffer.concat(this.pcmChunks);
 		const speechChecks = this.speechCheckCount;
 		const chunkRms =
 			this.chunkSumSq > 0
 				? Math.sqrt(this.chunkSumSq / (chunk.length / BYTES_PER_SAMPLE)) / 32768
 				: 0;
 
-		// Reset state immediately so audio keeps accumulating
-		this.pcmBuffer = Buffer.alloc(0);
-		this.speechCheckCount = 0;
-		this.silenceCheckCount = 0;
-		this.isInSpeech = false;
-		this.chunkSumSq = 0;
+		if (isFinal) {
+			// Final flush: reset state, transcript starts fresh after this
+			this.pcmChunks = [];
+			this.pcmChunkBytes = 0;
+			this.speechCheckCount = 0;
+			this.silenceCheckCount = 0;
+			this.isInSpeech = false;
+			this.chunkSumSq = 0;
+			this.lastDraftCheck = 0;
+		} else {
+			// Draft flush: keep accumulating audio for the final flush.
+			this.pcmChunks = [];
+			this.pcmChunkBytes = 0;
+			this.chunkSumSq = 0;
+			this.lastDraftCheck = this.speechCheckCount;
+		}
 
 		const durationMs = (chunk.length / BYTES_PER_SAMPLE / SAMPLE_RATE) * 1000;
 
 		loggers.stt.debug(
-			'Flushing %d ms (%d checks) for %s',
+			'%s %d ms (%d checks) for %s',
+			isFinal ? 'Flushing' : 'Draft',
 			durationMs.toFixed(0),
 			speechChecks,
 			this.participantId,
@@ -379,28 +411,30 @@ export class AudioIngester {
 		}
 
 		// Skip chunks that are too short to transcribe meaningfully
-		if (chunk.length < BYTES_PER_CHECK * MIN_SPEECH_CHECKS) {
+		if (chunk.length < BYTES_PER_CHECK * MIN_TAIL_CHECKS) {
 			loggers.stt.debug('Chunk too short, skipping');
 			return;
 		}
-
-		// Emit placeholder so the viewer sees activity while CPU is working
-		this.onTranscript('...', false, 0);
 
 		try {
 			// Normalize audio to target RMS (-20 dBFS) so quiet speakers
 			// are boosted and loud speakers are attenuated.
 			const normalized = this.normalizeAudio(chunk, -20, chunkRms);
+			// Pass onTranscript as per-segment callback so segments
+			// stream to the frontend incrementally as Whisper decodes them
 			const result = await this.transcribeWithTimeout(
 				normalized,
 				TRANSCRIBE_TIMEOUT_MS,
+				(segText: string) => {
+					this.onTranscript(segText, false, durationMs);
+				},
 			);
 			const rawText = result.text?.trim();
 			if (rawText) {
 				const polished = this.postProcessText(rawText);
-				this.onTranscript(polished, true, durationMs);
-			} else {
-				// Clear placeholder when nothing was transcribed
+				this.onTranscript(polished, isFinal, durationMs);
+			} else if (isFinal) {
+				// Clear placeholder on final flush when nothing transcribed
 				this.onTranscript('', true, 0);
 			}
 		} catch (error) {
@@ -409,19 +443,28 @@ export class AudioIngester {
 				this.participantId,
 				(error as Error).message,
 			);
-			// Clear placeholder on error
-			this.onTranscript('', true, 0);
+			if (isFinal) {
+				this.onTranscript('', true, 0);
+			}
 		} finally {
-			// If more audio accumulated while we were transcribing, flush again
-			if (this.shouldFlush()) {
-				this.flushBuffer().catch(() => {});
+			// Catch-up flush: if audio accumulated during transcription,
+			// flush it even if MIN_SPEECH_CHECKS isn't met.
+			if (isFinal && this.pcmChunkBytes >= BYTES_PER_CHECK * MIN_TAIL_CHECKS) {
+				this.flushBuffer(true).catch(() => {});
 			}
 		}
+	}
+
+	private flushDraft(): Promise<void> {
+		// Fire-and-forget: transcription continues in background,
+		// audio keeps accumulating for the final flush.
+		return this.flushBuffer(false).catch(() => {});
 	}
 
 	private async transcribeWithTimeout(
 		pcmBuffer: Buffer,
 		timeoutMs: number,
+		onSegment?: (text: string) => void,
 	): Promise<{ text?: string }> {
 		return new Promise((resolve, reject) => {
 			const timer = setTimeout(() => {
@@ -429,7 +472,7 @@ export class AudioIngester {
 			}, timeoutMs);
 
 			this.whisperClient
-				.transcribe(pcmBuffer, SAMPLE_RATE)
+				.transcribe(pcmBuffer, SAMPLE_RATE, onSegment)
 				.then((result) => {
 					clearTimeout(timer);
 					resolve(result);
@@ -518,10 +561,10 @@ export class AudioIngester {
 	}
 
 	/**
-	 * Text post-processing for professional-looking captions.
+	 * Text post-processing for live captions.
 	 * - Filters common Whisper hallucinations on silence
 	 * - Deduplicates repeated words
-	 * - Capitalizes first letter and ensures trailing punctuation
+	 * - Capitalizes first letter
 	 */
 	private postProcessText(text: string): string {
 		let t = text.trim();
@@ -544,10 +587,6 @@ export class AudioIngester {
 		// Capitalize first letter
 		t = t.charAt(0).toUpperCase() + t.slice(1);
 
-		// Ensure trailing punctuation (add period if none exists)
-		if (!/[.!?]$/.test(t)) {
-			t += '.';
-		}
 		return t;
 	}
 

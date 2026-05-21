@@ -1,8 +1,12 @@
 # ==============================================================================
-# Frappe Meet SFU — Local Docker Compose
+# Frappe Meet SFU — Docker Compose
 # ==============================================================================
-# Quick-start for local development. Builds the SFU image with faster-whisper
-# included. No nginx/certbot — just the SFU + STT services.
+# Supports CPU-only and NVIDIA GPU deployments. Server auto-detects CUDA:
+# - GPU available → float16 on NVIDIA
+# - CPU only      → int8 on CPU
+#
+# For GPU support, uncomment the `deploy` block below and ensure:
+#   apt install nvidia-container-toolkit && systemctl restart docker
 #
 # Usage:
 #   docker compose up --build     # build & start
@@ -43,12 +47,14 @@ services:
       - /app/.venv/bin/python3
       - /app/stt-server/server.py
     environment:
-      - WHISPER_MODEL=tiny.en
-      - WHISPER_COMPUTE_TYPE=int8
-      - WHISPER_CPU_THREADS=4
+      - WHISPER_MODEL=large-v3-turbo
       - WHISPER_HOST=0.0.0.0
       - WHISPER_PORT=8080
+      - WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-4}
       - HF_TOKEN=${HF_TOKEN:-}
+      # Auto-detected by server.py (cuda/float16 vs cpu/int8):
+      #   WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, WHISPER_BACKEND
+      - NVIDIA_VISIBLE_DEVICES=all
     ports:
       - "8080:8080"
     healthcheck:
@@ -56,12 +62,17 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 60s
-    # Uncomment for Linux NVIDIA GPU support:
+      start_period: 120s
+    # ════════════════════════════════════════════════════════════════════
+    # NVIDIA GPU — uncomment for GPU-accelerated transcription on Linux
+    # Prerequisites:
+    #   apt install nvidia-container-toolkit
+    #   systemctl restart docker
+    # ════════════════════════════════════════════════════════════════════
     # deploy:
     #   resources:
     #     reservations:
     #       devices:
     #         - driver: nvidia
-    #           count: 1
+    #           count: all
     #           capabilities: [gpu]

@@ -23,8 +23,13 @@ export const useCaptionStore = defineStore("caption", () => {
 
 	function addCaptionLine(segment: CaptionSegment) {
 		const maxLines = 2;
+		const text = segment.text?.trim() || "";
 
-		if (segment.isFinal && !segment.text?.trim()) {
+		const existingIndex = captionLines.value.findIndex(
+			(l) => l.participantId === segment.participantId && !l.isFinal,
+		);
+
+		if (segment.isFinal && !text) {
 			const idx = captionLines.value.findIndex(
 				(l) => l.participantId === segment.participantId,
 			);
@@ -40,10 +45,6 @@ export const useCaptionStore = defineStore("caption", () => {
 			text: segment.text,
 			timestamp: segment.timestamp,
 		};
-
-		const existingIndex = captionLines.value.findIndex(
-			(l) => l.participantId === segment.participantId && !l.isFinal,
-		);
 
 		if (existingIndex >= 0) {
 			captionLines.value.splice(existingIndex, 1, {

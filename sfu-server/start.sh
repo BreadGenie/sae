@@ -7,7 +7,11 @@
 #   ./start.sh --with-stt   Start SFU + STT (faster-whisper) service
 #
 # Environment:
-#   WHISPER_MODEL       Model name: tiny, base, small (default: small)
+#   WHISPER_MODEL       Model name (default: large-v3-turbo)
+#   WHISPER_BACKEND     auto | faster-whisper | mlx (default: auto — mlx on Mac, fw on Linux)
+#   WHISPER_DEVICE      auto | cuda | cpu (default: auto — cuda if available)
+#   WHISPER_COMPUTE_TYPE auto | float16 | int8 (default: auto — float16 on GPU, int8 on CPU)
+#   WHISPER_LANGUAGE    Language code (e.g. en, hi, ko) or empty for auto-detect
 #   WHISPER_HOST        Host for whisper server (default: 127.0.0.1)
 #   WHISPER_PORT        Port for whisper server (default: 8080)
 
@@ -36,12 +40,15 @@ for arg in "$@"; do
 			echo "  --with-stt    Start STT (faster-whisper) service alongside SFU"
 			echo ""
 			echo "Environment variables:"
-			echo "  WHISPER_MODEL          Model name: tiny, base, small, medium (default: small)"
-			echo "  WHISPER_HOST           Whisper server host (default: 127.0.0.1)"
-			echo "  WHISPER_PORT           Whisper server port (default: 8080)"
-			echo "  WHISPER_COMPUTE_TYPE   Compute type: int8, float16 (default: int8)"
-			echo "  WHISPER_CPU_THREADS    Number of CPU threads (default: 4)"
-			echo "  STT_VAD_THRESHOLD      Speech detection sensitivity (default: 0.012)"
+			echo "  WHISPER_MODEL           Model name (default: large-v3-turbo)"
+			echo "  WHISPER_BACKEND         auto | faster-whisper | mlx (default: auto)"
+			echo "  WHISPER_DEVICE          auto | cuda | cpu (default: auto)"
+			echo "  WHISPER_COMPUTE_TYPE    auto | float16 | int8 (default: auto)"
+			echo "  WHISPER_LANGUAGE        Language code (default: auto-detect)"
+			echo "  WHISPER_HOST            Whisper server host (default: 127.0.0.1)"
+			echo "  WHISPER_PORT            Whisper server port (default: 8080)"
+			echo "  WHISPER_CPU_THREADS     CPU threads (default: 4, only used on CPU)"
+			echo "  STT_VAD_THRESHOLD       Speech detection sensitivity (default: 0.012)"
 			exit 0
 			;;
 	esac
@@ -161,28 +168,46 @@ if [ "$WITH_STT" = true ]; then
 		pip install -q -r stt-server/requirements.txt
 	fi
 
-	WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
-	WHISPER_CPU_THREADS=${WHISPER_CPU_THREADS:-4}
+	: "${WHISPER_DEVICE:=auto}"
+	: "${WHISPER_BACKEND:=auto}"
+	: "${WHISPER_COMPUTE_TYPE:=auto}"
+	: "${WHISPER_CPU_THREADS:=4}"
+	: "${WHISPER_LANGUAGE:=}"
 
-	echo -e "${GREEN}✅ Starting faster-whisper server on ${WHISPER_HOST}:${WHISPER_PORT} (model=${WHISPER_MODEL}, compute=${WHISPER_COMPUTE_TYPE}, threads=${WHISPER_CPU_THREADS})${NC}"
+	echo -e "${GREEN}✅ Starting STT server on ${WHISPER_HOST}:${WHISPER_PORT} (model=${WHISPER_MODEL})${NC}"
+	echo -e "${GREEN}   Backend auto-detects: Apple Silicon → mlx (GPU), NVIDIA → CUDA, else CPU${NC}"
+	echo -e "${YELLOW}   Model will download on first start (~809MB). Set HF_TOKEN for faster downloads.${NC}"
 	WHISPER_MODEL="$WHISPER_MODEL" \
 	WHISPER_HOST="$WHISPER_HOST" \
 	WHISPER_PORT="$WHISPER_PORT" \
+	WHISPER_DEVICE="$WHISPER_DEVICE" \
+	WHISPER_BACKEND="$WHISPER_BACKEND" \
 	WHISPER_COMPUTE_TYPE="$WHISPER_COMPUTE_TYPE" \
 	WHISPER_CPU_THREADS="$WHISPER_CPU_THREADS" \
+	WHISPER_LANGUAGE="$WHISPER_LANGUAGE" \
 	HF_HOME="${HF_HOME:-./.cache}" \
 	HF_TOKEN="${HF_TOKEN:-}" \
 		python3 stt-server/server.py > "logs/faster-whisper-server.log" 2>&1 &
 	WHISPER_PIDS+=("$!")
 
-	# Wait for whisper server to be ready
-	echo -e "${YELLOW}⏳ Waiting for whisper server to be ready...${NC}"
+	# Wait for whisper server to be ready (can take a while on first start — model download)
+	echo -e "${YELLOW}⏳ Waiting for whisper server to be ready (this may take a few minutes on first start)...${NC}"
 	READY=false
-	for i in {1..60}; do
+	for i in {1..300}; do
 		if curl -fsS "http://${WHISPER_HOST}:${WHISPER_PORT}/health" >/dev/null 2>&1; then
 			echo -e "${GREEN}✅ Whisper server is ready${NC}"
 			READY=true
 			break
+		fi
+		# Print progress every 30s
+		if [ $((i % 30)) -eq 0 ]; then
+			MODEL_CACHE=$(find "${HF_HOME:-./.cache}/hub" -name "*.incomplete" 2>/dev/null | head -1)
+			if [ -n "$MODEL_CACHE" ]; then
+				SIZE=$(du -sh "$MODEL_CACHE" 2>/dev/null | cut -f1)
+				echo -e "${YELLOW}   Still waiting... model download in progress ($SIZE downloaded)${NC}"
+			else
+				echo -e "${YELLOW}   Still waiting... (${i}s elapsed)${NC}"
+			fi
 		fi
 		sleep 1
 	done

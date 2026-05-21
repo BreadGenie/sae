@@ -81,6 +81,5 @@ declare module 'vue' {
     SettingsDialog: typeof import('./src/components/settings/SettingsDialog.vue')['default']
     SettingsLayoutBase: typeof import('./src/components/settings/SettingsLayoutBase.vue')['default']
     Spinner: typeof import('./src/components/Spinner.vue')['default']
-    SubtitleOverlay: typeof import('./src/components/SubtitleOverlay.vue')['default']
   }
 }

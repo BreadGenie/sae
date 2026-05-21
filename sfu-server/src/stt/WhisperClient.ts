@@ -13,6 +13,7 @@ export interface IWhisperClient {
 	transcribe(
 		pcmBuffer: Buffer,
 		sampleRate?: number,
+		onSegment?: (text: string) => void,
 	): Promise<WhisperTranscription>;
 	isAvailable(): boolean;
 }
@@ -32,6 +33,7 @@ export class WhisperClient implements IWhisperClient {
 		pcmBuffer: Buffer;
 		sampleRate: number;
 		createdAt: number;
+		onSegment?: (text: string) => void;
 		resolve: (result: WhisperTranscription) => void;
 		reject: (error: Error) => void;
 	}> = [];
@@ -95,6 +97,7 @@ export class WhisperClient implements IWhisperClient {
 	async transcribe(
 		pcmBuffer: Buffer,
 		sampleRate = 16000,
+		onSegment?: (text: string) => void,
 	): Promise<WhisperTranscription> {
 		return new Promise((resolve, reject) => {
 			// Cap queue length to prevent unbounded backlog
@@ -110,6 +113,7 @@ export class WhisperClient implements IWhisperClient {
 				pcmBuffer,
 				sampleRate,
 				createdAt: Date.now(),
+				onSegment,
 				resolve,
 				reject,
 			});
@@ -142,9 +146,9 @@ export class WhisperClient implements IWhisperClient {
 			return;
 		}
 
-		const { pcmBuffer, resolve, reject } = this.queue.shift()!;
+		const { pcmBuffer, onSegment, resolve, reject } = this.queue.shift()!;
 		try {
-			const result = await this.doTranscribe(pcmBuffer);
+			const result = await this.doTranscribe(pcmBuffer, onSegment);
 			resolve(result);
 		} catch (error) {
 			reject(error as Error);
@@ -154,7 +158,10 @@ export class WhisperClient implements IWhisperClient {
 		}
 	}
 
-	private async doTranscribe(pcmBuffer: Buffer): Promise<WhisperTranscription> {
+	private async doTranscribe(
+		pcmBuffer: Buffer,
+		onSegment?: (text: string) => void,
+	): Promise<WhisperTranscription> {
 		const response = await fetch(`${this.serverUrl}/transcribe-pcm`, {
 			method: 'POST',
 			headers: {
@@ -168,10 +175,46 @@ export class WhisperClient implements IWhisperClient {
 			throw new Error(`STT server error ${response.status}: ${errorText}`);
 		}
 
-		const data = (await response.json()) as Record<string, unknown>;
-		const text = typeof data.text === 'string' ? data.text : '';
-		this.updateContext(text);
-		return { text };
+		// Parse SSE stream: data: {"text": "...", "isFinal": true}
+		const texts: string[] = [];
+		const reader = response.body?.getReader();
+		if (!reader) throw new Error('No response body');
+
+		const decoder = new TextDecoder();
+		let buffer = '';
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split('\n');
+			buffer = lines.pop() || ''; // keep incomplete line in buffer
+
+			for (const line of lines) {
+				if (!line.startsWith('data: ')) continue;
+				const jsonStr = line.slice(6).trim();
+				if (!jsonStr) continue;
+
+				try {
+					const data = JSON.parse(jsonStr) as Record<string, unknown>;
+					const text = typeof data.text === 'string' ? data.text.trim() : '';
+					if (text) {
+						texts.push(text);
+						if (onSegment) onSegment(text);
+					}
+				} catch {
+					// skip malformed JSON
+				}
+			}
+		}
+
+		const fullText = texts.join(' ');
+		this.updateContext(fullText);
+		return {
+			text: fullText,
+			segments: texts.map((t) => ({ text: t, start: 0, end: 0 })),
+		};
 	}
 
 	private updateContext(newText: string): void {
@@ -192,6 +235,7 @@ export class MockWhisperClient implements IWhisperClient {
 	async transcribe(
 		pcmBuffer: Buffer,
 		_sampleRate = 16000,
+		_onSegment?: (text: string) => void,
 	): Promise<WhisperTranscription> {
 		this.callCount++;
 		const duration = pcmBuffer.length / 2 / 16000;
