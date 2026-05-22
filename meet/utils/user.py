@@ -3,6 +3,7 @@
 
 
 import re
+import secrets
 
 import frappe
 from frappe.core.doctype.user.user import User
@@ -103,6 +104,35 @@ def set_guest_session(guest_id: str, session_data: dict, ttl: int = 86400) -> No
 	"""Store guest session data (default 24 hours)."""
 	cache_key = f"guest_session:{guest_id}"
 	frappe.cache.set_value(cache_key, session_data, expires_in_sec=ttl)
+
+
+def generate_guest_secret() -> str:
+	"""Generate a cryptographically random secret for guest session proof-of-possession."""
+	return secrets.token_urlsafe(32)
+
+
+def verify_guest_secret(guest_id: str, guest_secret: str | None) -> bool:
+	"""
+	Verify that the provided guest_secret matches the one stored in the guest session.
+
+	Returns False if:
+	  - guest_secret is missing or empty
+	  - no session exists for guest_id
+	  - the session has no stored secret (migrated / legacy)
+	  - the secret does not match (constant-time compare)
+	"""
+	if not guest_secret:
+		return False
+
+	session_data = get_guest_session(guest_id)
+	if not session_data:
+		return False
+
+	stored_secret = session_data.get("guest_secret")
+	if not stored_secret:
+		return False
+
+	return secrets.compare_digest(guest_secret, stored_secret)
 
 
 def validate_guest_name(guest_name: str) -> tuple[bool, str | None]:

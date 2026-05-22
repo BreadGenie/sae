@@ -4,7 +4,10 @@ const meet_handlers = (socket) => {
 	});
 
 	// guest specific rooms
-	socket.on("guest_subscribe", async (guest_id) => {
+	socket.on("guest_subscribe", async (data) => {
+		const guest_id = typeof data === "string" ? data : data?.guest_id;
+		const guest_secret = typeof data === "string" ? null : data?.guest_secret;
+
 		if (!guest_id || typeof guest_id !== "string") {
 			return;
 		}
@@ -17,6 +20,7 @@ const meet_handlers = (socket) => {
 		socket
 			.frappe_request("/api/method/meet.api.meeting.validate_guest_session", {
 				guest_id: guest_id,
+				guest_secret: guest_secret,
 			})
 			.then((res) => res.json())
 			.then(({ message }) => {

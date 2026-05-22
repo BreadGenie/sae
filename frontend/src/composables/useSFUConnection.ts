@@ -412,7 +412,10 @@ export function useSFUConnection(deps: {
 			return;
 		}
 
-		socket.emit("guest_subscribe", guestId);
+		socket.emit("guest_subscribe", {
+			guest_id: guestId,
+			guest_secret: sessionStorage.getItem("guest_secret"),
+		});
 
 		socket.on("meet:guest_join_approved", handleGuestApproved);
 		socket.on("meet:guest_join_rejected", handleGuestRejected);
@@ -434,6 +437,7 @@ export function useSFUConnection(deps: {
 					params: {
 						meeting_id: meetingId,
 						guest_id: guestId,
+						guest_secret: sessionStorage.getItem("guest_secret"),
 					},
 				});
 
@@ -621,6 +625,13 @@ export function useSFUConnection(deps: {
 			sessionStorage.setItem("guest_name", guestName);
 			sessionStorage.setItem("guest_meeting_id", meetingId);
 			sessionStorage.setItem("guest_status", joinResult.status as string);
+
+			if (joinResult.guest_secret) {
+				sessionStorage.setItem(
+					"guest_secret",
+					joinResult.guest_secret as string,
+				);
+			}
 
 			connectionState.guestId = joinResult.guest_id as string;
 			connectionState.guestAuthToken =

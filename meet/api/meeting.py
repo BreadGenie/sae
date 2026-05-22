@@ -13,10 +13,12 @@ from frappe.rate_limiter import rate_limit
 
 from meet.utils.sfu_config import get_sfu_config
 from meet.utils.user import (
+	generate_guest_secret,
 	get_guest_session,
 	get_user_info,
 	set_guest_session,
 	validate_guest_name,
+	verify_guest_secret,
 )
 
 if TYPE_CHECKING:
@@ -363,9 +365,11 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			# Invalid or expired, generate new
 			guest_id = None
 
+	guest_secret = ""
 	if not guest_id:
 		guest_id = f"guest_{secrets.token_urlsafe(16)}"
 		guest_name_clean = guest_name.strip()
+		guest_secret = generate_guest_secret()
 
 		session_data = {
 			"guest_id": guest_id,
@@ -373,8 +377,12 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			"meeting_id": meeting_id,
 			"ip_address": frappe.local.request_ip,
 			"joined_at": int(time.time()),
+			"guest_secret": guest_secret,
 		}
 		set_guest_session(guest_id, session_data, ttl=24 * 3600)
+	else:
+		session_data = get_guest_session(guest_id)
+		guest_secret = session_data.get("guest_secret", "") if session_data else ""
 
 	if meeting.is_user_banned(guest_id):
 		frappe.throw(_("You are banned from this meeting"))
@@ -402,6 +410,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"status": "joined",
 				"meeting_id": meeting_id,
 				"guest_id": guest_id,
+				"guest_secret": guest_secret,
 				"guest_name": guest_name_clean,
 				"auth_token": auth_token,
 				"sfu_url": sfu_config["sfu_server_url"],
@@ -415,6 +424,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			"status": "waiting_for_approval",
 			"meeting_id": meeting_id,
 			"guest_id": guest_id,
+			"guest_secret": guest_secret,
 			"guest_name": guest_name_clean,
 			"message": "Waiting for host approval",
 		}
@@ -428,6 +438,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		"status": "joined",
 		"meeting_id": meeting_id,
 		"guest_id": guest_id,
+		"guest_secret": guest_secret,
 		"guest_name": guest_name_clean,
 		"auth_token": auth_token,
 		"sfu_url": sfu_config["sfu_server_url"],
@@ -438,11 +449,16 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 
 @frappe.whitelist(allow_guest=True)
 @rate_limit(limit=10, seconds=60 * 60)
-def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dict:
+def get_approved_guest_connection_details(
+	meeting_id: str, guest_id: str, guest_secret: str | None = None
+) -> dict:
 	"""
 	Get SFU connection details for an approved guest.
 	This is called after a guest receives approval notification.
 	"""
+	if not verify_guest_secret(guest_id, guest_secret):
+		frappe.throw(_("Invalid guest credentials"), frappe.AuthenticationError)
+
 	session_data = get_guest_session(guest_id)
 	if not session_data:
 		frappe.throw(_("Guest session not found or expired"))
