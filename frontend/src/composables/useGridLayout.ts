@@ -8,10 +8,10 @@ export interface PinnedTile {
 }
 
 export interface GridLayout {
-	pinnedTile: Ref<PinnedTile | null>;
+	pinnedTiles: Ref<PinnedTile[]>;
 	displayScreenShares: ComputedRef<ScreenShareConsumer[]>;
 	pinTile: (type: PinnedTile["type"], id: string) => void;
-	unpinTile: () => void;
+	unpinTile: (type: PinnedTile["type"], id: string) => void
 	resetGridLayout: () => void;
 }
 
@@ -20,7 +20,7 @@ let instance: GridLayout | null = null;
 export function useGridLayout(mediaState?: MediaState): GridLayout {
 	if (instance) return instance;
 
-	const pinnedTile = ref<PinnedTile | null>(null);
+	const pinnedTiles = ref<PinnedTile[]>([]);
 
 	const displayScreenShares = computed<ScreenShareConsumer[]>(() => {
 		if (!mediaState) return [];
@@ -48,19 +48,24 @@ export function useGridLayout(mediaState?: MediaState): GridLayout {
 	});
 
 	const pinTile = (type: PinnedTile["type"], id: string) => {
-		pinnedTile.value = { type, id };
+		const exists = pinnedTiles.value.some(t=> t.id === id && t.type === type);
+		if(!exists){
+			pinnedTiles.value.push({type,id})
+		}
 	};
 
-	const unpinTile = () => {
-		pinnedTile.value = null;
+	const unpinTile = (type: PinnedTile["type"], id: string) => {
+		pinnedTiles.value = pinnedTiles.value.filter(
+			(t) => !(t.id === id && t.type === type)
+		);
 	};
 
 	const resetGridLayout = () => {
-		pinnedTile.value = null;
+		pinnedTiles.value = [];
 	};
 
 	instance = {
-		pinnedTile,
+		pinnedTiles,
 		displayScreenShares,
 		pinTile,
 		unpinTile,

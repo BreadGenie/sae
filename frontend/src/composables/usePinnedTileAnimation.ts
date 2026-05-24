@@ -1,10 +1,10 @@
 import { nextTick, onUnmounted, type Ref, ref, watch } from "vue";
-import type { PinnedTile } from "./useLayout";
+import type { PinnedTile } from "./useGridLayout";
 
 interface UsePinnedTileAnimationOptions {
 	container: Ref<HTMLElement | null>;
-	pinnedPanel: Ref<HTMLElement | null>;
-	pinnedTile: Ref<PinnedTile | null>;
+	pinnedPanels: Ref<HTMLElement[]>;
+	pinnedTiles: Ref<PinnedTile[]>;
 	visibleTileCount: Ref<number>;
 }
 
@@ -12,12 +12,12 @@ type TileStyle = Record<string, string | number>;
 
 export function usePinnedTileAnimation({
 	container,
-	pinnedPanel,
-	pinnedTile,
+	pinnedPanels,
+	pinnedTiles,
 	visibleTileCount,
 }: UsePinnedTileAnimationOptions) {
 	const isFlipAnimating = ref(false);
-	const pinnedTileStyle = ref<TileStyle>({});
+	const pinnedTileStyles = ref<Record<string, TileStyle>>({});
 
 	let flipCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 	let activeAnimations: Animation[] = [];
@@ -31,20 +31,29 @@ export function usePinnedTileAnimation({
 		});
 
 	const measurePinnedTileStyle = () => {
-		if (!pinnedPanel.value || !container.value || !pinnedTile.value) {
-			pinnedTileStyle.value = {};
+		if (!pinnedPanels.value.length || !container.value || !pinnedTiles.value.length) {
+			pinnedTileStyles.value = {};
 			return;
 		}
 
-		const panelRect = pinnedPanel.value.getBoundingClientRect();
 		const containerRect = container.value.getBoundingClientRect();
-		pinnedTileStyle.value = {
-			position: "absolute",
-			top: `${panelRect.top - containerRect.top}px`,
-			left: `${panelRect.left - containerRect.left}px`,
-			width: `${panelRect.width}px`,
-			height: `${panelRect.height}px`,
-		};
+        const newStyles: Record<string, TileStyle> = {};
+
+        pinnedPanels.value.forEach((panel, index) => {
+            const tile = pinnedTiles.value[index];
+            if (!tile) return;
+
+            const panelRect = panel.getBoundingClientRect();
+            newStyles[tile.id] = {
+                position: "absolute",
+                top: `${panelRect.top - containerRect.top}px`,
+                left: `${panelRect.left - containerRect.left}px`,
+                width: `${panelRect.width}px`,
+                height: `${panelRect.height}px`,
+            };
+        });
+
+        pinnedTileStyles.value = newStyles;
 	};
 
 	const queuePinnedTileMeasurement = () => {
@@ -165,42 +174,43 @@ export function usePinnedTileAnimation({
 	};
 
 	watch(
-		[pinnedPanel, container, pinnedTile],
-		([panelEl, containerEl]) => {
-			if (resizeObserver) {
-				resizeObserver.disconnect();
-				resizeObserver = null;
-			}
+        [() => pinnedPanels.value.length, container, () => pinnedTiles.value.length],
+        () => {
+            if (resizeObserver) {
+                resizeObserver.disconnect();
+                resizeObserver = null;
+            }
 
-			queuePinnedTileMeasurement();
+            queuePinnedTileMeasurement();
 
-			if (panelEl || containerEl) {
-				resizeObserver = new ResizeObserver(() => {
-					queuePinnedTileMeasurement();
-				});
-				if (panelEl) resizeObserver.observe(panelEl);
-				if (containerEl && containerEl !== panelEl) {
-					resizeObserver.observe(containerEl);
-				}
-			}
-		},
-		{ immediate: true },
-	);
+            if (pinnedPanels.value.length || container.value) {
+                resizeObserver = new ResizeObserver(() => {
+                    queuePinnedTileMeasurement();
+                });
+                
+                // Observe every placeholder panel
+                pinnedPanels.value.forEach(panel => {
+                    if (panel) resizeObserver!.observe(panel);
+                });
+                
+                if (container.value) {
+                    resizeObserver.observe(container.value);
+                }
+            }
+        },
+        { immediate: true },
+    );
 
 	watch(visibleTileCount, () => {
 		queuePinnedTileMeasurement();
 	});
 
 	watch(
-		pinnedTile,
-		async (nextPinned, prevPinned) => {
-			if (!prevPinned && !nextPinned) return;
-			if (
-				prevPinned?.id === nextPinned?.id &&
-				prevPinned?.type === nextPinned?.type
-			) {
-				return;
-			}
+		() => [...pinnedTiles.value],
+        async (nextPinned, prevPinned) => {
+            if (JSON.stringify(nextPinned) === JSON.stringify(prevPinned)) {
+                return;
+            }
 
 			if (flipCleanupTimer) clearTimeout(flipCleanupTimer);
 			cancelActiveAnimations();
@@ -242,6 +252,6 @@ export function usePinnedTileAnimation({
 
 	return {
 		isFlipAnimating,
-		pinnedTileStyle,
+		pinnedTileStyles,
 	};
 }

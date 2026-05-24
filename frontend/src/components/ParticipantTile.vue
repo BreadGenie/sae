@@ -227,7 +227,7 @@ const hostControls = inject<{
 const showBlur = ref(props.participant.isLocalScreenShare);
 
 const showScreenShareCopy = computed(() => {
-	return !meetingCtx?.gridLayout.pinnedTile.value || isPinned.value;
+	return !meetingCtx?.gridLayout.pinnedTiles.value.length || isPinned.value;
 });
 
 const { stream } = useAudioStream(props.participant.user_id, {
@@ -296,9 +296,9 @@ watch(isHandRaised, (newValue, oldValue) => {
 });
 
 const isPinned = computed(() => {
-	const pinned = meetingCtx?.gridLayout.pinnedTile.value;
+	const pinnedList = meetingCtx?.gridLayout.pinnedTiles.value || []; 
 	const targetId = props.pinId || props.participant.user_id;
-	return pinned?.type === props.pinType && pinned?.id === targetId;
+	return pinnedList.some((p) => p.type === props.pinType && p.id === targetId);
 });
 
 const canShowPinButton = computed(() => {
@@ -315,7 +315,7 @@ const togglePin = () => {
 	const targetId = props.pinId || props.participant.user_id;
 	if (!targetId || !meetingCtx) return;
 	if (isPinned.value) {
-		meetingCtx.gridLayout.unpinTile();
+		meetingCtx.gridLayout.unpinTile(props.pinType, props.pinId);
 	} else {
 		meetingCtx.gridLayout.pinTile(props.pinType, targetId);
 	}

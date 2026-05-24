@@ -1,16 +1,12 @@
 import { type ComputedRef, computed, type Ref } from "vue";
 import type { Participant } from "../utils/media/ParticipantManager";
 import { useResponsiveGrid } from "./useResponsiveGrid";
+import { PinnedTile } from "./useGridLayout";
 
 interface LayoutDeps {
 	raisedHands: Ref<Record<string, string>>;
 	activeSpeakerIds: Ref<string[]>;
 	stableSpeakerIds: Ref<string[]>;
-}
-
-export interface PinnedTile {
-	type: "screenshare" | "participant";
-	id: string;
 }
 
 interface DisplayParticipantsResult {
@@ -69,7 +65,7 @@ interface UseLayoutReturn {
  */
 export function useLayout(
 	participants: Ref<Record<string, Participant>>,
-	pinnedTile: Ref<PinnedTile | null>,
+	pinnedTiles: Ref<PinnedTile[]>,
 	layoutDeps: LayoutDeps,
 	extraTiles: Ref<number>,
 ): UseLayoutReturn {
@@ -77,7 +73,7 @@ export function useLayout(
 		useResponsiveGrid();
 
 	const mode = computed<"grid" | "sidebar">(() =>
-		pinnedTile.value ? "sidebar" : "grid",
+		pinnedTiles.value.length > 0 ? "sidebar" : "grid",
 	);
 
 	const isMobile = computed(() => windowWidth.value < BREAKPOINTS.md);
@@ -158,14 +154,14 @@ export function useLayout(
 		return 5;
 	};
 
-	const getPinnedParticipantId = (): string | null =>
-		pinnedTile.value?.type === "participant" ? pinnedTile.value.id : null;
+	const getPinnedParticipantId = (): string[] =>
+		pinnedTiles.value.filter(t => t.type === "participant").map(t => t.id);
 
 	const getRemoteCapacity = (
 		remoteCount: number,
-		pinnedParticipantId: string | null,
+		pinnedParticipantIds: string[],
 	): number => {
-		const overlayRemoteCount = pinnedParticipantId ? 1 : 0;
+		const overlayRemoteCount = pinnedParticipantIds.length;
 		const stripRemoteCount = remoteCount - overlayRemoteCount;
 		const reserved = 1 + extraTiles.value;
 		const total = stripRemoteCount + reserved;
@@ -245,31 +241,34 @@ export function useLayout(
 	const ensurePinnedParticipantVisible = (
 		visibleRemotes: Participant[],
 		remotes: Participant[],
-		pinnedParticipantId: string | null,
+		pinnedParticipantIds: string[],
 		remoteCapacity: number,
 	): Participant[] => {
-		if (!pinnedParticipantId || remoteCapacity <= 0) return visibleRemotes;
+		if (pinnedParticipantIds.length === 0 || remoteCapacity <= 0) return visibleRemotes;
 
-		const pinnedParticipant = remotes.find(
-			(participant) => participant.user_id === pinnedParticipantId,
-		);
-		const isPinnedVisible = visibleRemotes.some(
-			(participant) => participant.user_id === pinnedParticipantId,
-		);
+		let newVisible = [...visibleRemotes];
 
-		if (!pinnedParticipant || isPinnedVisible) return visibleRemotes;
+		for (const pinnedId of pinnedParticipantIds) {
+            const isPinnedVisible = newVisible.some(p => p.user_id === pinnedId);
 
-		return [
-			...visibleRemotes.slice(0, Math.max(0, remoteCapacity - 1)),
-			pinnedParticipant,
-		];
+            if (!isPinnedVisible) {
+                const pinnedParticipant = remotes.find(p => p.user_id === pinnedId);
+                if (pinnedParticipant) {
+                    if (newVisible.length >= remoteCapacity) {
+                        newVisible.pop(); 
+                    }
+                    newVisible.unshift(pinnedParticipant);
+                }
+            }
+        }
+        return newVisible;
 	};
 
 	const partitionVisibleAndHidden = (
 		sortedRemotes: Participant[],
 		remoteCapacity: number,
 		remotes: Participant[],
-		pinnedParticipantId: string | null,
+		pinnedParticipantId: string[],
 	): DisplayParticipantsResult => {
 		const visibleRemotes = ensurePinnedParticipantVisible(
 			sortedRemotes.slice(0, remoteCapacity),
@@ -333,10 +332,10 @@ export function useLayout(
 
 	const displayParticipants = computed<DisplayParticipantsResult>(() => {
 		const remotes = Object.values(stripParticipants.value || {});
-		const pinnedParticipantId = getPinnedParticipantId();
+		const pinnedParticipantIds = getPinnedParticipantId();
 		const remoteCapacity = getRemoteCapacity(
 			remotes.length,
-			pinnedParticipantId,
+			pinnedParticipantIds,
 		);
 
 		const stableSpeakers = layoutDeps.stableSpeakerIds.value || [];
@@ -362,7 +361,7 @@ export function useLayout(
 			sortedRemotes,
 			remoteCapacity,
 			remotes,
-			pinnedParticipantId,
+			pinnedParticipantIds,
 		);
 
 		return {
