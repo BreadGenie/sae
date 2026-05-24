@@ -11,7 +11,7 @@ export interface GridLayout {
 	pinnedTiles: Ref<PinnedTile[]>;
 	displayScreenShares: ComputedRef<ScreenShareConsumer[]>;
 	pinTile: (type: PinnedTile["type"], id: string) => void;
-	unpinTile: (type: PinnedTile["type"], id: string) => void
+	unpinTile: (type: PinnedTile["type"], id: string) => void;
 	resetGridLayout: () => void;
 }
 
@@ -48,15 +48,17 @@ export function useGridLayout(mediaState?: MediaState): GridLayout {
 	});
 
 	const pinTile = (type: PinnedTile["type"], id: string) => {
-		const exists = pinnedTiles.value.some(t=> t.id === id && t.type === type);
-		if(!exists){
-			pinnedTiles.value.push({type,id})
+		const exists = pinnedTiles.value.some(
+			(t) => t.id === id && t.type === type,
+		);
+		if (!exists) {
+			pinnedTiles.value.push({ type, id });
 		}
 	};
 
 	const unpinTile = (type: PinnedTile["type"], id: string) => {
 		pinnedTiles.value = pinnedTiles.value.filter(
-			(t) => !(t.id === id && t.type === type)
+			(t) => !(t.id === id && t.type === type),
 		);
 	};
 

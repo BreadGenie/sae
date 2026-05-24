@@ -156,24 +156,24 @@ const displayScreenShares = computed(
 
 // Unpin when the pinned participant leaves
 watch(
-	() => pinnedTiles.value.filter(t => t.type === 'participant'),
+	() => pinnedTiles.value.filter((t) => t.type === "participant"),
 	(pinnedParticipantTiles) => {
-		pinnedParticipantTiles.forEach(pTile => {
+		pinnedParticipantTiles.forEach((pTile) => {
 			if (!participants.value[pTile.id]) {
 				meetingCtx.gridLayout.unpinTile(pTile.type, pTile.id);
 			}
 		});
 	},
-	{ deep: true }
+	{ deep: true },
 );
 
 // ── Pin helpers ───────────────────────────────────────────────────────────────
 
 const isPinnedParticipant = (userId) =>
-	pinnedTiles.value.some(t => t.type === "participant" && t.id === userId);
+	pinnedTiles.value.some((t) => t.type === "participant" && t.id === userId);
 
 const isPinnedScreenShare = (pinId) =>
-	pinnedTiles.value.some(t => t.type === "screenshare" && t.id === pinId);
+	pinnedTiles.value.some((t) => t.type === "screenshare" && t.id === pinId);
 
 const { screenShareTiles: allScreenShareTiles } = useScreenShareTiles({
 	displayScreenShares,
@@ -275,9 +275,10 @@ const localParticipant = computed(() => {
 
 // Number of extra strip tiles (pinned screenshares overlay the main panel instead)
 const extraTileCount = computed(() => {
-	const hasPinnedScreenShare = pinnedTiles.value.some(t => t.type === "screenshare");
-	if (!hasPinnedScreenShare)
-		return allScreenShareTiles.value.length;
+	const hasPinnedScreenShare = pinnedTiles.value.some(
+		(t) => t.type === "screenshare",
+	);
+	if (!hasPinnedScreenShare) return allScreenShareTiles.value.length;
 	return Math.max(0, allScreenShareTiles.value.length - 1);
 });
 

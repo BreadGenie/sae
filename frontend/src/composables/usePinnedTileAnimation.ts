@@ -31,29 +31,33 @@ export function usePinnedTileAnimation({
 		});
 
 	const measurePinnedTileStyle = () => {
-		if (!pinnedPanels.value.length || !container.value || !pinnedTiles.value.length) {
+		if (
+			!pinnedPanels.value.length ||
+			!container.value ||
+			!pinnedTiles.value.length
+		) {
 			pinnedTileStyles.value = {};
 			return;
 		}
 
 		const containerRect = container.value.getBoundingClientRect();
-        const newStyles: Record<string, TileStyle> = {};
+		const newStyles: Record<string, TileStyle> = {};
 
-        pinnedPanels.value.forEach((panel, index) => {
-            const tile = pinnedTiles.value[index];
-            if (!tile) return;
+		pinnedPanels.value.forEach((panel, index) => {
+			const tile = pinnedTiles.value[index];
+			if (!tile) return;
 
-            const panelRect = panel.getBoundingClientRect();
-            newStyles[tile.id] = {
-                position: "absolute",
-                top: `${panelRect.top - containerRect.top}px`,
-                left: `${panelRect.left - containerRect.left}px`,
-                width: `${panelRect.width}px`,
-                height: `${panelRect.height}px`,
-            };
-        });
+			const panelRect = panel.getBoundingClientRect();
+			newStyles[tile.id] = {
+				position: "absolute",
+				top: `${panelRect.top - containerRect.top}px`,
+				left: `${panelRect.left - containerRect.left}px`,
+				width: `${panelRect.width}px`,
+				height: `${panelRect.height}px`,
+			};
+		});
 
-        pinnedTileStyles.value = newStyles;
+		pinnedTileStyles.value = newStyles;
 	};
 
 	const queuePinnedTileMeasurement = () => {
@@ -174,32 +178,36 @@ export function usePinnedTileAnimation({
 	};
 
 	watch(
-        [() => pinnedPanels.value.length, container, () => pinnedTiles.value.length],
-        () => {
-            if (resizeObserver) {
-                resizeObserver.disconnect();
-                resizeObserver = null;
-            }
+		[
+			() => pinnedPanels.value.length,
+			container,
+			() => pinnedTiles.value.length,
+		],
+		() => {
+			if (resizeObserver) {
+				resizeObserver.disconnect();
+				resizeObserver = null;
+			}
 
-            queuePinnedTileMeasurement();
+			queuePinnedTileMeasurement();
 
-            if (pinnedPanels.value.length || container.value) {
-                resizeObserver = new ResizeObserver(() => {
-                    queuePinnedTileMeasurement();
-                });
-                
-                // Observe every placeholder panel
-                pinnedPanels.value.forEach(panel => {
-                    if (panel) resizeObserver!.observe(panel);
-                });
-                
-                if (container.value) {
-                    resizeObserver.observe(container.value);
-                }
-            }
-        },
-        { immediate: true },
-    );
+			if (pinnedPanels.value.length || container.value) {
+				resizeObserver = new ResizeObserver(() => {
+					queuePinnedTileMeasurement();
+				});
+
+				// Observe every placeholder panel
+				pinnedPanels.value.forEach((panel) => {
+					if (panel) resizeObserver!.observe(panel);
+				});
+
+				if (container.value) {
+					resizeObserver.observe(container.value);
+				}
+			}
+		},
+		{ immediate: true },
+	);
 
 	watch(visibleTileCount, () => {
 		queuePinnedTileMeasurement();
@@ -207,10 +215,10 @@ export function usePinnedTileAnimation({
 
 	watch(
 		() => [...pinnedTiles.value],
-        async (nextPinned, prevPinned) => {
-            if (JSON.stringify(nextPinned) === JSON.stringify(prevPinned)) {
-                return;
-            }
+		async (nextPinned, prevPinned) => {
+			if (JSON.stringify(nextPinned) === JSON.stringify(prevPinned)) {
+				return;
+			}
 
 			if (flipCleanupTimer) clearTimeout(flipCleanupTimer);
 			cancelActiveAnimations();

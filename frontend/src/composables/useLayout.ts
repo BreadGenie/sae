@@ -1,7 +1,7 @@
 import { type ComputedRef, computed, type Ref } from "vue";
 import type { Participant } from "../utils/media/ParticipantManager";
+import type { PinnedTile } from "./useGridLayout";
 import { useResponsiveGrid } from "./useResponsiveGrid";
-import { PinnedTile } from "./useGridLayout";
 
 interface LayoutDeps {
 	raisedHands: Ref<Record<string, string>>;
@@ -155,7 +155,7 @@ export function useLayout(
 	};
 
 	const getPinnedParticipantId = (): string[] =>
-		pinnedTiles.value.filter(t => t.type === "participant").map(t => t.id);
+		pinnedTiles.value.filter((t) => t.type === "participant").map((t) => t.id);
 
 	const getRemoteCapacity = (
 		remoteCount: number,
@@ -244,24 +244,25 @@ export function useLayout(
 		pinnedParticipantIds: string[],
 		remoteCapacity: number,
 	): Participant[] => {
-		if (pinnedParticipantIds.length === 0 || remoteCapacity <= 0) return visibleRemotes;
+		if (pinnedParticipantIds.length === 0 || remoteCapacity <= 0)
+			return visibleRemotes;
 
-		let newVisible = [...visibleRemotes];
+		const newVisible = [...visibleRemotes];
 
 		for (const pinnedId of pinnedParticipantIds) {
-            const isPinnedVisible = newVisible.some(p => p.user_id === pinnedId);
+			const isPinnedVisible = newVisible.some((p) => p.user_id === pinnedId);
 
-            if (!isPinnedVisible) {
-                const pinnedParticipant = remotes.find(p => p.user_id === pinnedId);
-                if (pinnedParticipant) {
-                    if (newVisible.length >= remoteCapacity) {
-                        newVisible.pop(); 
-                    }
-                    newVisible.unshift(pinnedParticipant);
-                }
-            }
-        }
-        return newVisible;
+			if (!isPinnedVisible) {
+				const pinnedParticipant = remotes.find((p) => p.user_id === pinnedId);
+				if (pinnedParticipant) {
+					if (newVisible.length >= remoteCapacity) {
+						newVisible.pop();
+					}
+					newVisible.unshift(pinnedParticipant);
+				}
+			}
+		}
+		return newVisible;
 	};
 
 	const partitionVisibleAndHidden = (

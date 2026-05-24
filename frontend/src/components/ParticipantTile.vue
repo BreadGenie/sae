@@ -296,7 +296,7 @@ watch(isHandRaised, (newValue, oldValue) => {
 });
 
 const isPinned = computed(() => {
-	const pinnedList = meetingCtx?.gridLayout.pinnedTiles.value || []; 
+	const pinnedList = meetingCtx?.gridLayout.pinnedTiles.value || [];
 	const targetId = props.pinId || props.participant.user_id;
 	return pinnedList.some((p) => p.type === props.pinType && p.id === targetId);
 });

@@ -1,7 +1,6 @@
 import { computed, type Ref, watch } from "vue";
 import { getInitials } from "../utils/text";
-import type { GridLayout } from "./useGridLayout";
-import type { PinnedTile } from "./useGridLayout";
+import type { GridLayout, PinnedTile } from "./useGridLayout";
 
 interface ScreenShare {
 	consumerId: string;
@@ -48,31 +47,33 @@ export function useScreenShareTiles({
 
 	watch(
 		screenShareSignature,
-        (signature, previousSignature) => {
-            const shares = displayScreenShares.value;
-            const primaryShareId = shares[0]?.consumerId;
+		(signature, previousSignature) => {
+			const shares = displayScreenShares.value;
+			const primaryShareId = shares[0]?.consumerId;
 
-            if (!signature) {
-                const activePinnedShares = pinnedTiles.value.filter(t => t.type === "screenshare");
-                activePinnedShares.forEach(share => {
-                    gridLayout.unpinTile("screenshare", share.id);
-                });
-                return;
-            }
+			if (!signature) {
+				const activePinnedShares = pinnedTiles.value.filter(
+					(t) => t.type === "screenshare",
+				);
+				activePinnedShares.forEach((share) => {
+					gridLayout.unpinTile("screenshare", share.id);
+				});
+				return;
+			}
 
-            const hasNewShare = signature !== previousSignature;
-            
-            const isPrimaryPinned = pinnedTiles.value.some(
-                t => t.type === "screenshare" && t.id === primaryShareId
-            );
+			const hasNewShare = signature !== previousSignature;
 
-            const shouldAutoPin = primaryShareId && (hasNewShare || !isPrimaryPinned);
+			const isPrimaryPinned = pinnedTiles.value.some(
+				(t) => t.type === "screenshare" && t.id === primaryShareId,
+			);
 
-            if (shouldAutoPin) {
-                gridLayout.pinTile("screenshare", primaryShareId);
-            }
-        },
-        { immediate: true },
+			const shouldAutoPin = primaryShareId && (hasNewShare || !isPrimaryPinned);
+
+			if (shouldAutoPin) {
+				gridLayout.pinTile("screenshare", primaryShareId);
+			}
+		},
+		{ immediate: true },
 	);
 
 	const screenShareTiles = computed<ScreenShareTile[]>(() => {
