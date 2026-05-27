@@ -51,15 +51,16 @@ export function useScreenShareTiles({
 			const shares = displayScreenShares.value;
 			const primaryShareId = shares[0]?.consumerId;
 
-			if (!signature) {
-				const activePinnedShares = pinnedTiles.value.filter(
-					(t) => t.type === "screenshare",
-				);
-				activePinnedShares.forEach((share) => {
+			const activePinnedShares = pinnedTiles.value.filter(
+				(t) => t.type === "screenshare",
+			);
+			activePinnedShares.forEach((share) => {
+				if (!shares.some((s) => s.consumerId === share.id)) {
 					gridLayout.unpinTile("screenshare", share.id);
-				});
-				return;
-			}
+				}
+			});
+
+			if (!signature) return;
 
 			const hasNewShare = signature !== previousSignature;
 

@@ -3,7 +3,7 @@ import type { PinnedTile } from "./useGridLayout";
 
 interface UsePinnedTileAnimationOptions {
 	container: Ref<HTMLElement | null>;
-	pinnedPanels: Ref<HTMLElement[]>;
+	pinnedPanelsMap: Ref<Record<string, HTMLElement>>;
 	pinnedTiles: Ref<PinnedTile[]>;
 	visibleTileCount: Ref<number>;
 }
@@ -12,7 +12,7 @@ type TileStyle = Record<string, string | number>;
 
 export function usePinnedTileAnimation({
 	container,
-	pinnedPanels,
+	pinnedPanelsMap,
 	pinnedTiles,
 	visibleTileCount,
 }: UsePinnedTileAnimationOptions) {
@@ -31,11 +31,8 @@ export function usePinnedTileAnimation({
 		});
 
 	const measurePinnedTileStyle = () => {
-		if (
-			!pinnedPanels.value.length ||
-			!container.value ||
-			!pinnedTiles.value.length
-		) {
+		const panels = Object.values(pinnedPanelsMap.value);
+		if (!panels.length || !container.value || !pinnedTiles.value.length) {
 			pinnedTileStyles.value = {};
 			return;
 		}
@@ -43,12 +40,13 @@ export function usePinnedTileAnimation({
 		const containerRect = container.value.getBoundingClientRect();
 		const newStyles: Record<string, TileStyle> = {};
 
-		pinnedPanels.value.forEach((panel, index) => {
-			const tile = pinnedTiles.value[index];
-			if (!tile) return;
+		pinnedTiles.value.forEach((tile) => {
+			const key = `${tile.type}-${tile.id}`;
+			const panel = pinnedPanelsMap.value[key];
+			if (!panel) return;
 
 			const panelRect = panel.getBoundingClientRect();
-			newStyles[tile.id] = {
+			newStyles[key] = {
 				position: "absolute",
 				top: `${panelRect.top - containerRect.top}px`,
 				left: `${panelRect.left - containerRect.left}px`,
@@ -187,12 +185,14 @@ export function usePinnedTileAnimation({
 
 			queuePinnedTileMeasurement();
 
-			if (pinnedPanels.value.length || container.value) {
+			const panels = Object.values(pinnedPanelsMap.value);
+
+			if (panels.length || container.value) {
 				resizeObserver = new ResizeObserver(() => {
 					queuePinnedTileMeasurement();
 				});
 
-				pinnedPanels.value.forEach((panel) => {
+				panels.forEach((panel) => {
 					if (panel) resizeObserver!.observe(panel);
 				});
 

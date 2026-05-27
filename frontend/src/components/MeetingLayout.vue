@@ -16,14 +16,11 @@
         >
             <div
                 v-for="tile in pinnedTiles"
-                :key="tile.id"
-                ref="pinnedPanels"
+                :key="`${tile.type}-${tile.id}`"
+                :ref="(el) => setPinnedPanelRef(el, tile)"
                 class="relative rounded-lg overflow-hidden flex-1 h-full"
             ></div>
         </div>
-
-
-		
 
 		<!-- ── Tile strip / full grid ─────────────────────────────────────── -->
 		<TransitionGroup
@@ -122,7 +119,16 @@ const getParticipantName =
 const { registerTile } = useTileAdaptiveStreaming();
 
 const container = ref<HTMLElement | null>(null);
-const pinnedPanels = ref<HTMLElement[]>([]);
+const pinnedPanelsMap = ref<Record<string, HTMLElement>>({});
+
+const setPinnedPanelRef = (el: unknown, tile: { type: string; id: string }) => {
+	const key = `${tile.type}-${tile.id}`;
+	if (el) {
+		pinnedPanelsMap.value[key] = el as HTMLElement;
+	} else {
+		delete pinnedPanelsMap.value[key];
+	}
+};
 
 // Cache ref handlers to avoid UI flicker
 const videoRefHandlers = new Map<string, (el: unknown) => void>();
@@ -202,7 +208,9 @@ const getScreenShareTileBindings = (shareTile: {
 		videoRef: wrappedVideoRef,
 		tileCount: isPinned ? 1 : visibleTileCount.value,
 		class: isPinned ? "pinned-tile" : undefined,
-		style: isPinned ? pinnedTileStyles.value[shareTile.pinId] : tileStyle.value,
+		style: isPinned
+			? pinnedTileStyles.value[`screenshare-${shareTile.pinId}`]
+			: tileStyle.value,
 		pinType: "screenshare" as const,
 		pinId: shareTile.pinId,
 		labelSize: isPinned ? ("sm" as const) : undefined,
@@ -237,7 +245,7 @@ const getParticipantTileBindings = (
 		tileCount: isPinned ? 1 : visibleTileCount.value,
 		showReaction: pinnedTiles.value.length === 0,
 		style: isPinned
-			? pinnedTileStyles.value[participant.user_id]
+			? pinnedTileStyles.value[`participant-${participant.user_id}`]
 			: participant.isVisible
 				? tileStyle.value
 				: undefined,
@@ -310,7 +318,7 @@ const {
 
 const { isFlipAnimating, pinnedTileStyles } = usePinnedTileAnimation({
 	container,
-	pinnedPanels,
+	pinnedPanelsMap,
 	pinnedTiles,
 	visibleTileCount,
 });
