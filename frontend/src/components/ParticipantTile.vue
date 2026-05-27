@@ -5,7 +5,7 @@
 		:data-testid="`participant-tile-${participant.user_id}`"
 		:data-audio-enabled="String(isAudioEnabled)"
 		:data-video-enabled="String(isVideoEnabled)"
-		:data-tile-id="`${pinType}-${pinId || participant.user_id}`"
+		:data-tile-id="`${pinType}-${tileId}`"
 	>
 		<video
 			:ref="videoRef"
@@ -224,6 +224,8 @@ const hostControls = inject<{
 	kickParticipant: (participantId: string, ban: boolean) => void;
 }>("hostControls", null);
 
+const tileId = computed(() => props.pinId || props.participant.user_id);
+
 const showBlur = ref(props.participant.isLocalScreenShare);
 
 const showScreenShareCopy = computed(() => {
@@ -297,27 +299,26 @@ watch(isHandRaised, (newValue, oldValue) => {
 
 const isPinned = computed(() => {
 	const pinnedList = meetingCtx?.gridLayout.pinnedTiles.value || [];
-	const targetId = props.pinId || props.participant.user_id;
-	return pinnedList.some((p) => p.type === props.pinType && p.id === targetId);
+	return pinnedList.some(
+		(p) => p.type === props.pinType && p.id === tileId.value,
+	);
 });
 
 const canShowPinButton = computed(() => {
-	const targetId = props.pinId || props.participant.user_id;
 	return (
 		!props.isLocal &&
 		props.showPinButton &&
 		!!meetingCtx?.gridLayout.pinTile &&
-		!!targetId
+		!!tileId.value
 	);
 });
 
 const togglePin = () => {
-	const targetId = props.pinId || props.participant.user_id;
-	if (!targetId || !meetingCtx) return;
+	if (!tileId.value || !meetingCtx) return;
 	if (isPinned.value) {
-		meetingCtx.gridLayout.unpinTile(props.pinType, targetId);
+		meetingCtx.gridLayout.unpinTile(props.pinType, tileId.value);
 	} else {
-		meetingCtx.gridLayout.pinTile(props.pinType, targetId);
+		meetingCtx.gridLayout.pinTile(props.pinType, tileId.value);
 	}
 };
 

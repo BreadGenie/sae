@@ -178,11 +178,7 @@ export function usePinnedTileAnimation({
 	};
 
 	watch(
-		[
-			() => pinnedPanels.value.length,
-			container,
-			() => pinnedTiles.value.length,
-		],
+		[pinnedTiles, container],
 		() => {
 			if (resizeObserver) {
 				resizeObserver.disconnect();
@@ -196,7 +192,6 @@ export function usePinnedTileAnimation({
 					queuePinnedTileMeasurement();
 				});
 
-				// Observe every placeholder panel
 				pinnedPanels.value.forEach((panel) => {
 					if (panel) resizeObserver!.observe(panel);
 				});
@@ -206,7 +201,7 @@ export function usePinnedTileAnimation({
 				}
 			}
 		},
-		{ immediate: true },
+		{ immediate: true, deep: true, flush: "post" },
 	);
 
 	watch(visibleTileCount, () => {
