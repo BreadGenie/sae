@@ -315,7 +315,7 @@ const togglePin = () => {
 	const targetId = props.pinId || props.participant.user_id;
 	if (!targetId || !meetingCtx) return;
 	if (isPinned.value) {
-		meetingCtx.gridLayout.unpinTile(props.pinType, props.pinId);
+		meetingCtx.gridLayout.unpinTile(props.pinType, targetId);
 	} else {
 		meetingCtx.gridLayout.pinTile(props.pinType, targetId);
 	}
