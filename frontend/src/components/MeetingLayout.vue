@@ -421,4 +421,5 @@ const floatingReactions = computed(() => {
 	position: absolute;
 	z-index: 0;
 }
+
 </style>
