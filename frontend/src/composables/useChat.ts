@@ -1,4 +1,4 @@
-import { toast } from "frappe-ui";
+import { toast, call } from "frappe-ui";
 import audioNotificationManager from "../utils/audioNotifications";
 import type { SFUClient } from "../utils/SFUClient";
 import type { ChatMessage, ChatStore } from "./useChatStore";
@@ -7,6 +7,7 @@ import type { CurrentUser } from "./useCurrentUser";
 interface ChatAPI {
 	setupChatEvents: (notificationQueue: unknown) => void;
 	onSendChat: (text: string) => void;
+	toggleRestriction: (meetingId: string, enabled: boolean) => Promise<void>;
 }
 
 export function useChat(deps: {
@@ -49,8 +50,25 @@ export function useChat(deps: {
 				audioNotificationManager.playChatNotification();
 			}
 		});
-	};
-
+		sfuClient.on("chat:restriction_updated", (data: any) => {
+            chatStore.hostOnlyChat = data.enabled; 
+        });
+    };
+	const toggleRestriction = async (meetingId: string, enabled: boolean) => {
+        try {
+            sfuClient.sendEvent("chat:toggle_restriction", { enabled });
+            
+            await call("meet.api.meeting.toggle_host_only_chat", {
+                meeting_id: meetingId,
+                is_enabled: enabled
+            });
+            
+            chatStore.hostOnlyChat = enabled;
+        } catch (error) {
+            console.error("Failed to toggle chat setting", error);
+            toast.error("Failed to update chat settings");
+        }
+    };
 	const onSendChat = (text: string) => {
 		try {
 			const message: ChatMessage = {
@@ -79,5 +97,6 @@ export function useChat(deps: {
 	return {
 		setupChatEvents,
 		onSendChat,
+		toggleRestriction
 	};
 }

@@ -20,6 +20,14 @@
 					/>
 				</div>
 
+				<div v-if="isHost" class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+					<span class="text-sm font-medium text-gray-700">Allow only host to message</span>
+					<Switch 
+						:modelValue="hostOnlyChat" 
+						@update:modelValue="(val) => $emit('toggleRestriction', val)" 
+					/>
+				</div>
+
 				<div ref="listEl" class="flex-1 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
 					<div v-for="group in groupedMessages" :key="group.id" class="min-w-0">
 						<div class="text-xs flex items-center gap-2">
@@ -42,24 +50,29 @@
 				</div>
 
 				<form class="p-2 relative" @submit.prevent="handleSend">
-					<div class="flex gap-2">
-						<FormControl
-							size="md"
-							v-model="draft"
-							@keydown="handleKeydown"
-							placeholder="Type a message"
-							class="flex-1"
-							autocomplete="off"
-							data-testid="chat-input"
+					<template v-if="canSendMessages">
+						<div class="flex gap-2">
+							<FormControl
+								size="md"
+								v-model="draft"
+								@keydown="handleKeydown"
+								placeholder="Type a message"
+								class="flex-1"
+								autocomplete="off"
+								data-testid="chat-input"
+							/>
+							<Button size="md" type="submit" variant="outline" data-testid="chat-send"> Send </Button>
+						</div>
+						<EmojiPicker
+							:show="showEmojiPicker"
+							:filtered-emojis="filteredEmojis"
+							:selected-index="selectedEmojiIndex"
+							@select="addEmoji"
 						/>
-						<Button size="md" type="submit" variant="outline" data-testid="chat-send"> Send </Button>
+					</template>
+					<div v-else class="text-center text-sm text-gray-500 py-3 bg-gray-50 rounded border border-gray-200 m-2">
+						The host has restricted chat to hosts only.
 					</div>
-					<EmojiPicker
-						:show="showEmojiPicker"
-						:filtered-emojis="filteredEmojis"
-						:selected-index="selectedEmojiIndex"
-						@select="addEmoji"
-					/>
 				</form>
 			</div>
 		</div>
@@ -69,7 +82,7 @@
 <script setup lang="ts">
 import data from "@emoji-mart/data";
 import { init, SearchIndex } from "emoji-mart";
-import { Button, FormControl } from "frappe-ui";
+import { Button, FormControl, Switch } from "frappe-ui";
 import {
 	computed,
 	nextTick,
@@ -105,11 +118,14 @@ const props = defineProps<{
 	userId?: string;
 	userName?: string;
 	messages?: ChatMessage[] | { value: ChatMessage[] };
+	isHost?: boolean;
+	hostOnlyChat?: boolean;
 }>();
 
 const emit = defineEmits<{
 	close: [];
 	send: [text: string];
+	toggleRestriction: [enabled: boolean];
 }>();
 const listEl = ref<HTMLElement | null>(null);
 const { messages } = toRefs(props) as {
@@ -119,6 +135,11 @@ const draft = ref("");
 const selectedEmojiIndex = ref(0);
 const filteredEmojis = ref<EmojiItem[]>([]);
 const isEmojiDataReady = ref(false);
+
+const canSendMessages = computed(() => {
+	if (!props.hostOnlyChat) return true; 
+	return props.isHost; 
+});
 
 const defaultEmojis: EmojiItem[] = [
 	{ emoji: "😀", keywords: ["smile"] },

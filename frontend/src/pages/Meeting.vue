@@ -99,6 +99,9 @@
 									(currentUser.currentUser.value?.name as string) ||
 									'You'
 								"
+								:isHost="isCurrentUserHost"
+                                :hostOnlyChat="chatStore.hostOnlyChat"
+                                @toggleRestriction="(enabled) => chat.toggleRestriction(meetingId, enabled)"
 								@close="toggleChat"
 								@send="chat.onSendChat"
 							/>
