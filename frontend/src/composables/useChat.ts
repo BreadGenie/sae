@@ -1,4 +1,4 @@
-import { toast, call } from "frappe-ui";
+import { call, toast } from "frappe-ui";
 import audioNotificationManager from "../utils/audioNotifications";
 import type { SFUClient } from "../utils/SFUClient";
 import type { ChatMessage, ChatStore } from "./useChatStore";
@@ -51,24 +51,24 @@ export function useChat(deps: {
 			}
 		});
 		sfuClient.on("chat:restriction_updated", (data: any) => {
-            chatStore.hostOnlyChat = data.enabled; 
-        });
-    };
+			chatStore.hostOnlyChat = data.enabled;
+		});
+	};
 	const toggleRestriction = async (meetingId: string, enabled: boolean) => {
-        try {
-            sfuClient.sendEvent("chat:toggle_restriction", { enabled });
-            
-            await call("meet.api.meeting.toggle_host_only_chat", {
-                meeting_id: meetingId,
-                is_enabled: enabled
-            });
-            
-            chatStore.hostOnlyChat = enabled;
-        } catch (error) {
-            console.error("Failed to toggle chat setting", error);
-            toast.error("Failed to update chat settings");
-        }
-    };
+		try {
+			sfuClient.sendEvent("chat:toggle_restriction", { enabled });
+
+			await call("meet.api.meeting.toggle_host_only_chat", {
+				meeting_id: meetingId,
+				is_enabled: enabled,
+			});
+
+			chatStore.hostOnlyChat = enabled;
+		} catch (error) {
+			console.error("Failed to toggle chat setting", error);
+			toast.error("Failed to update chat settings");
+		}
+	};
 	const onSendChat = (text: string) => {
 		try {
 			const message: ChatMessage = {
@@ -97,6 +97,6 @@ export function useChat(deps: {
 	return {
 		setupChatEvents,
 		onSendChat,
-		toggleRestriction
+		toggleRestriction,
 	};
 }

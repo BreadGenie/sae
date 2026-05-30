@@ -137,8 +137,8 @@ const filteredEmojis = ref<EmojiItem[]>([]);
 const isEmojiDataReady = ref(false);
 
 const canSendMessages = computed(() => {
-	if (!props.hostOnlyChat) return true; 
-	return props.isHost; 
+	if (!props.hostOnlyChat) return true;
+	return props.isHost;
 });
 
 const defaultEmojis: EmojiItem[] = [
