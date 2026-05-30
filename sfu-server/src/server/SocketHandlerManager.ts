@@ -29,6 +29,7 @@ export class SocketHandlerManager {
 	private rateLimiter: RateLimiter;
 	private fullAccessSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
 	private previewSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
+	private hostOnlyChat: Record<string, boolean> = {};
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -207,6 +208,7 @@ export class SocketHandlerManager {
 		this.fullAccessSockets.delete(roomId);
 		this.previewSockets.delete(roomId);
 		delete this.raisedHands[roomId];
+		delete this.hostOnlyChat[roomId];
 		this.mediasoup.closeRoom(roomId);
 	}
 
@@ -1009,6 +1011,25 @@ export class SocketHandlerManager {
 	}
 
 	private setupChatHandlers(socket: Socket): void {
+		socket.on('chat:toggle_restriction', (data)=>{
+			try {
+				this.authManager.ensureFullAccess(socket)
+				const roomId = socket.roomId;
+            
+            if (!roomId || (!socket.isHost && !socket.isCohost)) return;
+			const isRestricted = Boolean(data.enabled);
+			this.hostOnlyChat[roomId] = isRestricted;
+
+			this.emitToFullAccessParticipants(roomId, 'chat:restriction_updated', {
+                enabled: isRestricted
+            });
+			} catch (error) {
+				loggers.socketHandler.warn('chat:toggle failed', error);
+				
+			}
+		})
+
+
 		socket.on('chat:send', (data = {}) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
@@ -1025,6 +1046,11 @@ export class SocketHandlerManager {
 				) {
 					return;
 				}
+
+				if (this.hostOnlyChat[roomId] && !socket.isHost && !socket.isCohost) {
+                socket.emit('sfu_error', { error: 'Only hosts can send messages right now.' });
+                return;
+            }
 
 				const payload: ChatMessage = {
 					roomId,
