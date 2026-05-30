@@ -8,6 +8,7 @@
   "section_break_voms",
   "meeting_type",
   "allow_guest",
+  "host_only_chat",
   "members",
   "co_hosts",
   "waiting_room",
@@ -33,6 +34,12 @@
    "fieldname": "allow_guest",
    "fieldtype": "Check",
    "label": "Allow Guest"
+  },
+  {
+    "default":"0",
+    "fieldname":"host_only_chat",
+    "fieldtype":"Check",
+    "label": "Host Only Chat"
   },
   {
    "fieldname": "members",

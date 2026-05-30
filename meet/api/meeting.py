@@ -21,6 +21,12 @@ from meet.utils.user import (
 
 if TYPE_CHECKING:
 	from meet.meet.doctype.sae_meeting.sae_meeting import SaeMeeting
+ 
+def parse_bool(val):
+		"""Converts frontend booleans, strings, and ints into a strict 1 or 0"""
+		if isinstance(val, str):
+			return 1 if val.lower() in ['true', '1', 'yes', 't'] else 0
+		return 1 if val else 0
 
 
 def _get_codec_strategy() -> str:
@@ -579,3 +585,15 @@ def check_meeting_access(meeting_id: str) -> dict:
 		frappe.throw(_("Meeting not found"))
 	except Exception as e:
 		frappe.throw(str(e))
+  
+@frappe.whitelist()
+def toggle_host_only_chat(meeting_id: str, is_enabled: bool):
+    meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+    
+    if not meeting.is_host_or_cohost(frappe.session.user):
+        frappe.throw(_("Only hosts can change meeting chat settings"))
+    
+    is_enabled = (is_enabled)
+    meeting.db_set("host_only_chat", is_enabled)
+
+    return {"status": "success", "host_only_chat": meeting.host_only_chat}
