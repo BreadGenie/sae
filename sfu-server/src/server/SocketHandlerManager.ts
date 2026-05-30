@@ -1011,24 +1011,22 @@ export class SocketHandlerManager {
 	}
 
 	private setupChatHandlers(socket: Socket): void {
-		socket.on('chat:toggle_restriction', (data)=>{
+		socket.on('chat:toggle_restriction', (data) => {
 			try {
-				this.authManager.ensureFullAccess(socket)
+				this.authManager.ensureFullAccess(socket);
 				const roomId = socket.roomId;
-            
-            if (!roomId || (!socket.isHost && !socket.isCohost)) return;
-			const isRestricted = Boolean(data.enabled);
-			this.hostOnlyChat[roomId] = isRestricted;
 
-			this.emitToFullAccessParticipants(roomId, 'chat:restriction_updated', {
-                enabled: isRestricted
-            });
+				if (!roomId || (!socket.isHost && !socket.isCohost)) return;
+				const isRestricted = Boolean(data.enabled);
+				this.hostOnlyChat[roomId] = isRestricted;
+
+				this.emitToFullAccessParticipants(roomId, 'chat:restriction_updated', {
+					enabled: isRestricted,
+				});
 			} catch (error) {
 				loggers.socketHandler.warn('chat:toggle failed', error);
-				
 			}
-		})
-
+		});
 
 		socket.on('chat:send', (data = {}) => {
 			try {
@@ -1048,9 +1046,11 @@ export class SocketHandlerManager {
 				}
 
 				if (this.hostOnlyChat[roomId] && !socket.isHost && !socket.isCohost) {
-                socket.emit('sfu_error', { error: 'Only hosts can send messages right now.' });
-                return;
-            }
+					socket.emit('sfu_error', {
+						error: 'Only hosts can send messages right now.',
+					});
+					return;
+				}
 
 				const payload: ChatMessage = {
 					roomId,
