@@ -13,13 +13,13 @@ import { getErrorMessage } from "../utils/error";
 import { SocketIOSignalChannel } from "../utils/media/SignalChannel";
 import { SFUClient } from "../utils/SFUClient";
 import { SFUMeetingManager } from "../utils/SFUMeetingManager";
+import { useChatStore } from "./useChatStore";
 import type { ConnectionState } from "./useConnectionState";
 import type { CurrentUser } from "./useCurrentUser";
 import type { GridLayout } from "./useGridLayout";
 import type { LobbyStore } from "./useLobbyStore";
 import type { MediaState } from "./useMediaState";
 import type { ParticipantStore } from "./useParticipantStore";
-import { useChatStore } from "./useChatStore";
 
 interface WaitingRoomResponse {
 	waiting_users: Array<{
@@ -683,9 +683,9 @@ export function useSFUConnection(deps: {
 				(joinResult?.is_cohost || false) as boolean,
 			);
 
-			 if (joinResult?.host_only_chat !== undefined) {
-    chatStore.hostOnlyChat = !!joinResult.host_only_chat;
-}
+			if (joinResult?.host_only_chat !== undefined) {
+				chatStore.hostOnlyChat = !!joinResult.host_only_chat;
+			}
 
 			setupFrappeRealtimeEventListeners();
 			connectionState.isInPreview = false;

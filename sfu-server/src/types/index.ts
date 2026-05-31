@@ -123,7 +123,7 @@ export interface ServerToClientEvents {
 	screen_share_started: (data: ScreenShareStartedEvent) => void;
 	screen_share_stopped: (data: ScreenShareStoppedEvent) => void;
 	'chat:message': (data: ChatMessage) => void;
-	"chat:restriction_updated": (data: { enabled: boolean }) => void;
+	'chat:restriction_updated': (data: { enabled: boolean }) => void;
 	'reaction:message': (data: ReactionMessage) => void;
 	webrtc_offer: (data: WebRTCSignalData) => void;
 	webrtc_answer: (data: WebRTCSignalData) => void;
@@ -209,7 +209,7 @@ export interface ClientToServerEvents {
 	host_control: (data: HostControlRequest) => void;
 	screen_share: (data: ScreenShareRequest) => void;
 	'chat:send': (data: ChatSendRequest) => void;
-	"chat:toggle_restriction": (data: { enabled: boolean }) => void;
+	'chat:toggle_restriction': (data: { enabled: boolean }) => void;
 	'reaction:send': (data: ReactionSendRequest) => void;
 	'consumer:update_preferences': (
 		data: ConsumerUpdatePreferencesRequest,

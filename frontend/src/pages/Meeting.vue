@@ -275,12 +275,12 @@ const meetingDoc = getMeetingDoc(meetingId.value);
 watch(
 	() => meetingDoc.doc?.host_only_chat,
 	(isRestricted) => {
-        if (isRestricted !== undefined) {
-            chatStore.hostOnlyChat = !!isRestricted;
-        }
+		if (isRestricted !== undefined) {
+			chatStore.hostOnlyChat = !!isRestricted;
+		}
 	},
-	{immediate: true}
-)
+	{ immediate: true },
+);
 
 // --- Background effects & noise cancellation ---
 const backgroundEffects = useBackgroundEffects();

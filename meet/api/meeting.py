@@ -105,8 +105,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"avatar": user_avatar,
 		},
 		"expires_in": 3600,
-  "host_only_chat": bool(meeting.host_only_chat)
-  
+		"host_only_chat": bool(meeting.host_only_chat),
 	}
 
 
@@ -166,7 +165,7 @@ def join_meeting(meeting_id: str) -> dict:
 					"message": result.get("message", "Successfully joined meeting"),
 					"is_host": is_host,
 					"is_cohost": is_cohost,
-     "host_only_chat": bool(meeting.host_only_chat)
+					"host_only_chat": bool(meeting.host_only_chat),
 				}
 	else:
 		frappe.throw(_("Access denied"))

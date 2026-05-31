@@ -55,15 +55,14 @@ export function useChat(deps: {
 		});
 
 		sfuClient.on("sfu_error", (data: any) => {
-            if (data?.error?.includes("hosts can send messages")) {
-                toast.error("The host has restricted chat to hosts only.");
-                chatStore.hostOnlyChat = true; 
-            }
-        });
+			if (data?.error?.includes("hosts can send messages")) {
+				toast.error("The host has restricted chat to hosts only.");
+				chatStore.hostOnlyChat = true;
+			}
+		});
 	};
 	const toggleRestriction = async (meetingId: string, enabled: boolean) => {
-
-			chatStore.hostOnlyChat = enabled;
+		chatStore.hostOnlyChat = enabled;
 
 		try {
 			sfuClient.sendEvent("chat:toggle_restriction", { enabled });
@@ -72,7 +71,6 @@ export function useChat(deps: {
 				meeting_id: meetingId,
 				is_enabled: enabled,
 			});
-
 		} catch (error) {
 			chatStore.hostOnlyChat = !enabled;
 			console.error("Failed to toggle chat setting", error);
