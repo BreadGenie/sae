@@ -8,6 +8,7 @@ interface MeetingDocument {
 	owner?: string;
 	title?: string;
 	name?: string;
+	host_only_chat?: boolean;
 	co_hosts?: { user: string }[];
 	banned_users?: { user: string }[];
 }

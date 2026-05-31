@@ -272,6 +272,16 @@ const {
 } = useMeetingDoc();
 const meetingDoc = getMeetingDoc(meetingId.value);
 
+watch(
+	() => meetingDoc.doc?.host_only_chat,
+	(isRestricted) => {
+        if (isRestricted !== undefined) {
+            chatStore.hostOnlyChat = !!isRestricted;
+        }
+	},
+	{immediate: true}
+)
+
 // --- Background effects & noise cancellation ---
 const backgroundEffects = useBackgroundEffects();
 const noiseCancellation = useNoiseCancellation();
@@ -643,6 +653,9 @@ onMounted(async () => {
 					meeting_id: meetingId.value,
 				},
 			});
+			if ((accessData as any).host_only_chat !== undefined) {
+				chatStore.hostOnlyChat = !!(accessData as any).host_only_chat;
+			}
 
 			if (!(accessData as { allow_guest?: boolean }).allow_guest) {
 				router.push({

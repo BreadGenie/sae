@@ -23,13 +23,6 @@ if TYPE_CHECKING:
 	from meet.meet.doctype.sae_meeting.sae_meeting import SaeMeeting
 
 
-def parse_bool(val):
-	"""Converts frontend booleans, strings, and ints into a strict 1 or 0"""
-	if isinstance(val, str):
-		return 1 if val.lower() in ["true", "1", "yes", "t"] else 0
-	return 1 if val else 0
-
-
 def _get_codec_strategy() -> str:
 	return frappe.get_cached_doc("Sae Settings").codec_strategy or "svc"
 
@@ -112,6 +105,8 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 			"avatar": user_avatar,
 		},
 		"expires_in": 3600,
+  "host_only_chat": bool(meeting.host_only_chat)
+  
 	}
 
 
@@ -171,6 +166,7 @@ def join_meeting(meeting_id: str) -> dict:
 					"message": result.get("message", "Successfully joined meeting"),
 					"is_host": is_host,
 					"is_cohost": is_cohost,
+     "host_only_chat": bool(meeting.host_only_chat)
 				}
 	else:
 		frappe.throw(_("Access denied"))
@@ -581,7 +577,7 @@ def check_meeting_access(meeting_id: str) -> dict:
 		settings = frappe.get_cached_doc("Sae Settings")
 		allow_guest = settings.allow_guest and meeting.allow_guest
 
-		return {"allow_guest": allow_guest}
+		return {"allow_guest": allow_guest, "host_only_chat": meeting.host_only_chat}
 	except frappe.DoesNotExistError:
 		frappe.throw(_("Meeting not found"))
 	except Exception as e:
@@ -595,7 +591,6 @@ def toggle_host_only_chat(meeting_id: str, is_enabled: bool):
 	if not meeting.is_host_or_cohost(frappe.session.user):
 		frappe.throw(_("Only hosts can change meeting chat settings"))
 
-	is_enabled = is_enabled
 	meeting.db_set("host_only_chat", is_enabled)
 
 	return {"status": "success", "host_only_chat": meeting.host_only_chat}
