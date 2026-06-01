@@ -1,7 +1,7 @@
 # Copyright (c) 2025, Frappe and Contributors
 # See license.txt
 
-import frappe
+# import frappe
 from frappe.tests import IntegrationTestCase
 
 # On IntegrationTestCase, the doctype test records and all

@@ -20,7 +20,7 @@ add_to_apps_screen = [
 		"logo": "/assets/meet/frontend/meet_logo.png",
 		"title": "Meet",
 		"route": "/meet",
-		"has_permission": "meet.permission.has_app_permission",
+		"has_permission": "meet.api.permission.has_app_permission",
 	}
 ]
 
@@ -123,13 +123,13 @@ after_app_install = "meet.utils.after_app_install"
 # -----------
 # Permissions evaluated in scripted ways
 
-permission_query_conditions = {
-	"Sae Meeting": "meet.permission.get_meeting_permission_query_conditions",
-}
-
-has_permission = {
-	"Sae Meeting": "meet.permission.has_meeting_permission",
-}
+# permission_query_conditions = {
+# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
+# }
+#
+# has_permission = {
+# 	"Event": "frappe.desk.doctype.event.event.has_permission",
+# }
 
 # Document Events
 # ---------------
