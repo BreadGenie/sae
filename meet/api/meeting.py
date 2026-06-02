@@ -581,15 +581,3 @@ def check_meeting_access(meeting_id: str) -> dict:
 		frappe.throw(_("Meeting not found"))
 	except Exception as e:
 		frappe.throw(str(e))
-
-
-@frappe.whitelist()
-def toggle_host_only_chat(meeting_id: str, is_enabled: bool):
-	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
-
-	if not meeting.is_host_or_cohost(frappe.session.user):
-		frappe.throw(_("Only hosts can change meeting chat settings"))
-
-	meeting.db_set("host_only_chat", is_enabled)
-
-	return {"status": "success", "host_only_chat": meeting.host_only_chat}

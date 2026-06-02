@@ -20,14 +20,6 @@
 					/>
 				</div>
 
-				<div v-if="isHost" class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-					<span class="text-sm font-medium text-gray-700">Allow only host to message</span>
-					<Switch 
-						:modelValue="hostOnlyChat" 
-						@update:modelValue="(val) => $emit('toggleRestriction', val)" 
-					/>
-				</div>
-
 				<div ref="listEl" class="flex-1 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
 					<div v-for="group in groupedMessages" :key="group.id" class="min-w-0">
 						<div class="text-xs flex items-center gap-2">
