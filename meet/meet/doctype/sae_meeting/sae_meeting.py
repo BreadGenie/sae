@@ -410,7 +410,6 @@ class SaeMeeting(Document):
 
 		if updated_fields:
 			self.save()
-			self.reload()
 
 
 def generate(segment_length=4, num_segments=3, separator="-"):
