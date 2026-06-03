@@ -74,7 +74,7 @@
 <script setup lang="ts">
 import data from "@emoji-mart/data";
 import { init, SearchIndex } from "emoji-mart";
-import { Button, FormControl, Switch } from "frappe-ui";
+import { Button, FormControl } from "frappe-ui";
 import {
 	computed,
 	nextTick,
@@ -117,7 +117,6 @@ const props = defineProps<{
 const emit = defineEmits<{
 	close: [];
 	send: [text: string];
-	toggleRestriction: [enabled: boolean];
 }>();
 const listEl = ref<HTMLElement | null>(null);
 const { messages } = toRefs(props) as {
@@ -346,6 +345,7 @@ function handleSend() {
 		return;
 	}
 	const text = draft.value.trim();
+	if (!canSendMessages.value) return;
 	if (!text) return;
 	emit("send", text);
 	draft.value = "";

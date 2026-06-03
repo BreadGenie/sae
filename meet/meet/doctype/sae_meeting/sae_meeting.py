@@ -386,6 +386,8 @@ class SaeMeeting(Document):
 		"""
 		Update meeting settings (host or co-host only)
 		"""
+  
+		print("HOST ONLY CHAT =", host_only_chat)
 		if not self.is_host_or_cohost(frappe.session.user):
 			frappe.throw(_("Only the meeting host or co-host can update settings"))
 
@@ -404,12 +406,17 @@ class SaeMeeting(Document):
 			updated_fields["meeting_type"] = self.meeting_type
 
 		if host_only_chat is not None:
+			print("UPDATE_SETTINGS RECEIVED:", host_only_chat)
+			print("BEFORE:", self.host_only_chat)
+   
 			self.host_only_chat = bool(host_only_chat)
+			print("AFTER SET:", self.host_only_chat)
 			updated_fields["host_only_chat"] = self.host_only_chat
 
 		if updated_fields:
 			self.save()
-
+			self.reload()
+			print("AFTER SAVE:", self.host_only_chat)
 
 def generate(segment_length=4, num_segments=3, separator="-"):
 	# Define the character set: only lowercase letters

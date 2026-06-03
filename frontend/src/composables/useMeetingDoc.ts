@@ -48,9 +48,23 @@ const currentMeetingId: Ref<string | null> = ref(null);
 
 export function useMeetingDoc(): UseMeetingDocReturn {
 	const getMeetingDoc = (meetingId: string): DocumentResource => {
-		if (meetingDoc.value) {
+		console.log(
+    "getMeetingDoc",
+    {
+        requested: meetingId,
+        cached: currentMeetingId.value,
+        hasDoc: !!meetingDoc.value,
+    }
+);
+		if (meetingDoc.value && currentMeetingId.value === meetingId) {
+			console.log("RETURNING CACHED DOC");
 			return meetingDoc.value;
 		}
+
+		if (meetingDoc.value && currentMeetingId.value !== meetingId) {
+			clearMeetingDoc();
+		}
+		console.log("CREATING NEW DOC");
 
 		const docResource = createDocumentResource({
 			doctype: "Sae Meeting",

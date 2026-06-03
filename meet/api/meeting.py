@@ -337,7 +337,7 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=True)
-@rate_limit(limit=10, seconds=60 * 60)
+# @rate_limit(limit=10, seconds=60 * 60)
 def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None = None) -> dict:
 	"""
 	Allow guest users to join a meeting without authentication.
@@ -351,6 +351,12 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		frappe.throw(_("Meeting not found"))
 
 	meeting = frappe.get_doc("Sae Meeting", meeting_id)
+	print(
+    "JOIN_AS_GUEST",
+    meeting_id,
+    "host_only_chat=",
+    meeting.host_only_chat,
+)
 
 	global_settings = frappe.get_cached_doc("Sae Settings")
 	if not global_settings.allow_guest or not meeting.allow_guest:
@@ -420,7 +426,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			"guest_id": guest_id,
 			"guest_name": guest_name_clean,
 			"message": "Waiting for host approval",
-			"host_only_chat": bool(meeting.host_only_chat)
+			"host_only_chat": bool(meeting.host_only_chat),
 		}
 
 	# open meeting
@@ -491,7 +497,7 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		"auth_token": auth_token,
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
-  		"host_only_chat": bool(meeting.host_only_chat),
+		"host_only_chat": bool(meeting.host_only_chat),
 		"message": "Successfully joined meeting",
 	}
 
@@ -564,7 +570,7 @@ def promote_to_cohost(meeting_id: str, user_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=True)
-@rate_limit(limit=10, seconds=5 * 60)
+# @rate_limit(limit=10, seconds=5 * 60)
 def check_meeting_access(meeting_id: str) -> dict:
 	"""
 	Check if a meeting allows guest access without authentication
@@ -577,6 +583,12 @@ def check_meeting_access(meeting_id: str) -> dict:
 	"""
 	try:
 		meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+		print(
+    "CHECK_ACCESS",
+    meeting_id,
+    "host_only_chat=",
+    meeting.host_only_chat,
+)
 		settings = frappe.get_cached_doc("Sae Settings")
 		allow_guest = settings.allow_guest and meeting.allow_guest
 

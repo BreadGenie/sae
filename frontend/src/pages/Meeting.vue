@@ -101,7 +101,6 @@
 								"
 								:isHost="isCurrentUserHost"
                                 :hostOnlyChat="chatStore.hostOnlyChat"
-                                @toggleRestriction="(enabled) => chat.toggleRestriction(meetingId, enabled)"
 								@close="toggleChat"
 								@send="chat.onSendChat"
 							/>
@@ -272,16 +271,6 @@ const {
 } = useMeetingDoc();
 const meetingDoc = getMeetingDoc(meetingId.value);
 
-watch(
-	() => meetingDoc.doc?.host_only_chat,
-	(isRestricted) => {
-		if (isRestricted !== undefined) {
-			chatStore.hostOnlyChat = !!isRestricted;
-		}
-	},
-	{ immediate: true },
-);
-
 // --- Background effects & noise cancellation ---
 const backgroundEffects = useBackgroundEffects();
 const noiseCancellation = useNoiseCancellation();
@@ -425,6 +414,8 @@ const lobby = useLobby({
 	lobbyStore,
 	meetingId: meetingId.value as string,
 });
+
+type AccessData = { allow_guest?: boolean; host_only_chat?: number };
 
 // --- Keyboard Shortcuts ---
 const keyboardShortcuts = useKeyboardShortcuts({
@@ -653,10 +644,10 @@ onMounted(async () => {
 					meeting_id: meetingId.value,
 				},
 			});
-			if ((accessData as any).host_only_chat !== undefined) {
-				chatStore.hostOnlyChat = !!(accessData as any).host_only_chat;
-			}
 
+			if ((accessData as AccessData).host_only_chat !== undefined) {
+				chatStore.hostOnlyChat = !!(accessData as AccessData).host_only_chat;
+			}
 			if (!(accessData as { allow_guest?: boolean }).allow_guest) {
 				router.push({
 					name: "Login",
@@ -789,5 +780,19 @@ watch(
 		}
 	},
 	{ immediate: true },
+);
+
+watch(
+	() => chatStore.hostOnlyChat,
+	(isRestricted, oldValue) => {
+		// The moment the settings tab changes this store value, call the toggle function!
+		if (
+			isRestricted !== oldValue &&
+			isCurrentUserHost.value &&
+			sfuConnection.sfuClient?.isConnected()
+		) {
+			chat.toggleRestriction(isRestricted);
+		}
+	},
 );
 </script>

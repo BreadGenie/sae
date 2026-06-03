@@ -65,6 +65,8 @@ const props = defineProps({
 	},
 });
 
+console.log("SETTINGS TAB MEETING ID", props.meetingId);
+
 const {
 	getMeetingDoc,
 	allowGuest: globalAllowGuest,
@@ -94,7 +96,26 @@ onMounted(async () => {
 const saveSettings = debounce(async () => {
 	if (meetingDoc.updateSettings.loading) return;
 
+	console.log("SAVE SETTINGS CALLED");
+	console.log("loading", meetingDoc.updateSettings.loading);
+	console.log(hostOnlyChat.value);
+
+	console.log("sending", {
+		host_only_chat: hostOnlyChat.value ? 1 : 0,
+	});
+
 	try {
+		console.log(
+	"UPDATING MEETING",
+	props.meetingId,
+	"hostOnlyChat:",
+	hostOnlyChat.value
+);
+
+console.log(
+	"meetingDoc name:",
+	meetingDoc.doc?.name
+);
 		await meetingDoc.updateSettings.submit({
 			allow_guest: allowGuest.value,
 			meeting_type: meetingType.value,
@@ -108,20 +129,18 @@ const saveSettings = debounce(async () => {
 
 		if (meetingDoc.doc?.host_only_chat !== undefined) {
 			hostOnlyChat.value = !!meetingDoc.doc.host_only_chat;
-			chatStore.hostOnlyChat = hostOnlyChat.value;
-			window.dispatchEvent(new CustomEvent("sfu:toggle_chat", { detail: hostOnlyChat.value }));
 		}
 	}
-}, 3000);
+}, 300);
 
 watch(hostOnlyChat, (newValue) => {
-    window.dispatchEvent(new CustomEvent("sfu:toggle_chat", { detail: newValue }));
-    chatStore.hostOnlyChat = newValue;
+	console.log("HOST ONLY CHAT =", newValue);
+	chatStore.hostOnlyChat = newValue; // Updates the local UI instantly
 });
-
 watch([allowGuest, meetingType, hostOnlyChat], () => {
-    if (!meetingDoc.get.loading) {
-        saveSettings();
-    }
+	console.log("WATCH FIRED");
+	if (!meetingDoc.get.loading) {
+		saveSettings();
+	}
 });
 </script>
