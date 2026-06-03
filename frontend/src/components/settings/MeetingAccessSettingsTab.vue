@@ -65,7 +65,6 @@ const props = defineProps({
 	},
 });
 
-console.log("SETTINGS TAB MEETING ID", props.meetingId);
 
 const {
 	getMeetingDoc,
@@ -96,26 +95,8 @@ onMounted(async () => {
 const saveSettings = debounce(async () => {
 	if (meetingDoc.updateSettings.loading) return;
 
-	console.log("SAVE SETTINGS CALLED");
-	console.log("loading", meetingDoc.updateSettings.loading);
-	console.log(hostOnlyChat.value);
-
-	console.log("sending", {
-		host_only_chat: hostOnlyChat.value ? 1 : 0,
-	});
-
 	try {
-		console.log(
-	"UPDATING MEETING",
-	props.meetingId,
-	"hostOnlyChat:",
-	hostOnlyChat.value
-);
-
-console.log(
-	"meetingDoc name:",
-	meetingDoc.doc?.name
-);
+		
 		await meetingDoc.updateSettings.submit({
 			allow_guest: allowGuest.value,
 			meeting_type: meetingType.value,
@@ -134,11 +115,9 @@ console.log(
 }, 300);
 
 watch(hostOnlyChat, (newValue) => {
-	console.log("HOST ONLY CHAT =", newValue);
-	chatStore.hostOnlyChat = newValue; // Updates the local UI instantly
+	chatStore.hostOnlyChat = newValue; 
 });
 watch([allowGuest, meetingType, hostOnlyChat], () => {
-	console.log("WATCH FIRED");
 	if (!meetingDoc.get.loading) {
 		saveSettings();
 	}

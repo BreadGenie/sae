@@ -351,12 +351,6 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		frappe.throw(_("Meeting not found"))
 
 	meeting = frappe.get_doc("Sae Meeting", meeting_id)
-	print(
-    "JOIN_AS_GUEST",
-    meeting_id,
-    "host_only_chat=",
-    meeting.host_only_chat,
-)
 
 	global_settings = frappe.get_cached_doc("Sae Settings")
 	if not global_settings.allow_guest or not meeting.allow_guest:
@@ -583,12 +577,6 @@ def check_meeting_access(meeting_id: str) -> dict:
 	"""
 	try:
 		meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
-		print(
-    "CHECK_ACCESS",
-    meeting_id,
-    "host_only_chat=",
-    meeting.host_only_chat,
-)
 		settings = frappe.get_cached_doc("Sae Settings")
 		allow_guest = settings.allow_guest and meeting.allow_guest
 

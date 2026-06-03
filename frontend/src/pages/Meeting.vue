@@ -785,7 +785,6 @@ watch(
 watch(
 	() => chatStore.hostOnlyChat,
 	(isRestricted, oldValue) => {
-		// The moment the settings tab changes this store value, call the toggle function!
 		if (
 			isRestricted !== oldValue &&
 			isCurrentUserHost.value &&
