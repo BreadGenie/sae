@@ -65,7 +65,6 @@ const props = defineProps({
 	},
 });
 
-
 const {
 	getMeetingDoc,
 	allowGuest: globalAllowGuest,
@@ -96,7 +95,6 @@ const saveSettings = debounce(async () => {
 	if (meetingDoc.updateSettings.loading) return;
 
 	try {
-		
 		await meetingDoc.updateSettings.submit({
 			allow_guest: allowGuest.value,
 			meeting_type: meetingType.value,
@@ -115,7 +113,7 @@ const saveSettings = debounce(async () => {
 }, 300);
 
 watch(hostOnlyChat, (newValue) => {
-	chatStore.hostOnlyChat = newValue; 
+	chatStore.hostOnlyChat = newValue;
 });
 watch([allowGuest, meetingType, hostOnlyChat], () => {
 	if (!meetingDoc.get.loading) {
