@@ -337,7 +337,7 @@ def get_sfu_presence_preview_token(meeting_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=True)
-# @rate_limit(limit=10, seconds=60 * 60)
+@rate_limit(limit=10, seconds=60 * 60)
 def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None = None) -> dict:
 	"""
 	Allow guest users to join a meeting without authentication.
@@ -564,7 +564,7 @@ def promote_to_cohost(meeting_id: str, user_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=True)
-# @rate_limit(limit=10, seconds=5 * 60)
+@rate_limit(limit=10, seconds=5 * 60)
 def check_meeting_access(meeting_id: str) -> dict:
 	"""
 	Check if a meeting allows guest access without authentication
