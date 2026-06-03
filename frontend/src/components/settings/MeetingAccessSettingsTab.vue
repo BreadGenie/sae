@@ -101,12 +101,6 @@ const saveSettings = debounce(async () => {
 			host_only_chat: hostOnlyChat.value ? 1 : 0,
 		});
 
-		window.dispatchEvent(
-			new CustomEvent("sfu:toggle_chat", { detail: hostOnlyChat.value }),
-		);
-
-		chatStore.hostOnlyChat = hostOnlyChat.value;
-
 		await meetingDoc.reload();
 	} catch (error) {
 		console.error("Failed to update meeting settings:", error);
@@ -115,13 +109,19 @@ const saveSettings = debounce(async () => {
 		if (meetingDoc.doc?.host_only_chat !== undefined) {
 			hostOnlyChat.value = !!meetingDoc.doc.host_only_chat;
 			chatStore.hostOnlyChat = hostOnlyChat.value;
+			window.dispatchEvent(new CustomEvent("sfu:toggle_chat", { detail: hostOnlyChat.value }));
 		}
 	}
 }, 3000);
 
+watch(hostOnlyChat, (newValue) => {
+    window.dispatchEvent(new CustomEvent("sfu:toggle_chat", { detail: newValue }));
+    chatStore.hostOnlyChat = newValue;
+});
+
 watch([allowGuest, meetingType, hostOnlyChat], () => {
-	if (!meetingDoc.get.loading) {
-		saveSettings();
-	}
+    if (!meetingDoc.get.loading) {
+        saveSettings();
+    }
 });
 </script>

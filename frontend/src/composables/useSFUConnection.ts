@@ -444,6 +444,11 @@ export function useSFUConnection(deps: {
 					(response as Record<string, unknown>)?.status === "joined" &&
 					(response as Record<string, unknown>).auth_token
 				) {
+
+					if ((response as Record<string, unknown>).host_only_chat !== undefined) {
+                        chatStore.hostOnlyChat = !!(response as Record<string, unknown>).host_only_chat;
+                    }
+					
 					connectionState.guestAuthToken = (response as Record<string, unknown>)
 						.auth_token as string;
 					connectionState.guestSfuUrl =
@@ -630,6 +635,10 @@ export function useSFUConnection(deps: {
 				(joinResult.auth_token as string) || null;
 			connectionState.guestSfuUrl = (joinResult.sfu_url as string) || null;
 			connectionState.guestSfuPort = (joinResult.sfu_port as string) || null;
+
+			if (joinResult.host_only_chat !== undefined) {
+                chatStore.hostOnlyChat = !!joinResult.host_only_chat;
+            }
 
 			if (joinResult.status === "waiting_for_approval") {
 				lobbyStore.isWaitingForApproval = true;

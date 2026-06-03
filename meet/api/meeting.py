@@ -408,6 +408,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"auth_token": auth_token,
 				"sfu_url": sfu_config["sfu_server_url"],
 				"sfu_port": sfu_config["sfu_server_port"],
+				"host_only_chat": bool(meeting.host_only_chat),
 				"message": "Successfully joined meeting",
 			}
 		elif guest_id not in meeting.get_waiting_room():
@@ -419,6 +420,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 			"guest_id": guest_id,
 			"guest_name": guest_name_clean,
 			"message": "Waiting for host approval",
+			"host_only_chat": bool(meeting.host_only_chat)
 		}
 
 	# open meeting
@@ -434,6 +436,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		"auth_token": auth_token,
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
+		"host_only_chat": bool(meeting.host_only_chat),
 		"message": "Successfully joined meeting",
 	}
 
@@ -488,6 +491,7 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		"auth_token": auth_token,
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
+  		"host_only_chat": bool(meeting.host_only_chat),
 		"message": "Successfully joined meeting",
 	}
 
