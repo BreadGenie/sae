@@ -175,6 +175,7 @@ export interface E2EESessionMetadata {
 	keyVersion?: string;
 	keyProof?: string;
 	capability: E2EECapability;
+	ecdhPublicKey?: string;
 }
 
 export interface JoinRoomRequest {

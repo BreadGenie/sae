@@ -1,13 +1,17 @@
 # Copyright (c) 2025, Frappe and contributors
 # For license information, please see license.txt
 
+import base64
 import hashlib
+import json
 import secrets
 import time
 from typing import TYPE_CHECKING
 
 import frappe
 import jwt
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
@@ -56,8 +60,30 @@ def _is_e2ee_enabled(meeting_id: str) -> bool:
 	return bool(frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_enabled"))
 
 
-def _is_valid_e2ee_proof(proof: str) -> bool:
-	return bool(proof) and len(proof) == 64 and all(c in "0123456789abcdef" for c in proof.lower())
+def _is_valid_e2ee_proof(proof: str | None) -> bool:
+	"""v2: `e2ee_key_proof` is an ed25519 signature (64 bytes, base64).
+
+	Shape verification only; signature validity is checked against the
+	host's device's ed25519 public key by `_verify_e2ee_proof_signature`.
+	"""
+	if not proof:
+		return False
+	try:
+		raw = base64.b64decode(proof, validate=True)
+	except Exception:
+		return False
+	return len(raw) == 64
+
+
+def _is_valid_e2ee_host_public_key(pub: str | None) -> bool:
+	"""v2: host's X25519 public key (32 bytes, base64)."""
+	if not pub:
+		return False
+	try:
+		raw = base64.b64decode(pub, validate=True)
+	except Exception:
+		return False
+	return len(raw) == 32
 
 
 def _is_valid_e2ee_version(version: str) -> bool:
@@ -72,6 +98,60 @@ def _is_valid_e2ee_version(version: str) -> bool:
 	return len(suffix) == 8 and all(c in "0123456789abcdef" for c in suffix.lower())
 
 
+def _is_valid_e2ee_device_id(device_id: str | None) -> bool:
+	"""A device id is a short opaque client-chosen string (max 64 chars)."""
+	if not device_id or not isinstance(device_id, str):
+		return False
+	return 1 <= len(device_id) <= 64 and all(c.isalnum() or c in "-_." for c in device_id)
+
+
+def _verify_e2ee_proof_signature(
+	proof: str, host_public_key: str, key_version: str, device_id: str, user: str
+) -> bool:
+	"""Verify the ed25519 signature in `e2ee_key_proof`.
+
+	Signature input (host-side): bytes(host_x25519_pub_32) || bytes(key_version_ascii)
+	Signed by: the host's device ed25519 auth key (looked up in tabUser.device_keys)
+	"""
+	try:
+		signature = base64.b64decode(proof, validate=True)
+		host_pub_raw = base64.b64decode(host_public_key, validate=True)
+	except Exception:
+		return False
+
+	device_keys_json = frappe.db.get_value("User", user, "device_keys")
+	if not device_keys_json:
+		return False
+	try:
+		device_keys = json.loads(device_keys_json) if isinstance(device_keys_json, str) else device_keys_json
+	except (TypeError, ValueError):
+		return False
+	if not isinstance(device_keys, dict):
+		return False
+
+	entry = device_keys.get(device_id)
+	if not isinstance(entry, dict):
+		return False
+	auth_pub_b64 = entry.get("ed25519_pub")
+	if not auth_pub_b64 or not isinstance(auth_pub_b64, str):
+		return False
+
+	try:
+		auth_pub_raw = base64.b64decode(auth_pub_b64, validate=True)
+		auth_pub = Ed25519PublicKey.from_public_bytes(auth_pub_raw)
+	except Exception:
+		return False
+
+	message = host_pub_raw + key_version.encode("utf-8")
+	try:
+		auth_pub.verify(signature, message)
+		return True
+	except InvalidSignature:
+		return False
+	except Exception:
+		return False
+
+
 def _get_e2ee_key_version(meeting_id: str) -> str | None:
 	if not _is_e2ee_enabled(meeting_id):
 		return None
@@ -79,7 +159,18 @@ def _get_e2ee_key_version(meeting_id: str) -> str | None:
 	return str(version) if version else None
 
 
+def _get_e2ee_host_public_key(meeting_id: str) -> str | None:
+	if not _is_e2ee_enabled(meeting_id):
+		return None
+	pk = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_host_public_key")
+	return str(pk) if pk else None
+
+
 def _get_e2ee_salt(meeting_id: str) -> str:
+	"""v1-only: deterministic salt for chat E2EE key derivation.
+	Still exposed in the API response so v1 chat E2EE continues to work
+	while v2 media E2EE is incrementally rolled out.
+	"""
 	return hashlib.sha256(f"meet-e2ee:{meeting_id}".encode()).hexdigest()
 
 
@@ -94,6 +185,7 @@ def _get_e2ee_metadata(meeting_id: str) -> dict:
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_key_proof": _get_e2ee_key_proof(meeting_id),
+		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
 
@@ -168,6 +260,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_salt": _get_e2ee_salt(meeting_id),
+		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"user_data": {
 			"name": user_fullname,
 			"email": user,
@@ -331,6 +424,7 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_salt": _get_e2ee_salt(meeting_id),
+		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
 
@@ -444,6 +538,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"e2ee_required": _is_e2ee_enabled(meeting_id),
 				"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 				"e2ee_salt": _get_e2ee_salt(meeting_id),
+				"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 				"message": "Successfully joined meeting",
 			}
 		elif guest_id not in meeting.get_waiting_room():
@@ -483,6 +578,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_salt": _get_e2ee_salt(meeting_id),
+		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"message": "Successfully joined meeting",
 	}
 
@@ -535,6 +631,7 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_salt": _get_e2ee_salt(meeting_id),
+		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"message": "Successfully joined meeting",
 	}
 
@@ -573,6 +670,7 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_salt": _get_e2ee_salt(meeting_id),
+		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
 
@@ -637,8 +735,9 @@ def check_meeting_access(meeting_id: str) -> dict:
 def get_meeting_e2ee_details(meeting_id: str) -> dict:
 	"""Return E2EE status for hosts/co-hosts.
 
-	The key itself is never stored server-side, so the host must obtain it
-	from their own session (URL share link or browser local storage).
+	Hosts see the full key proof + host X25519 pubkey so they can recover
+	their own identity on a different device only if they still have the
+	signing device (per-device ed25519 keys; see ADR 0003).
 	"""
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
@@ -648,6 +747,7 @@ def get_meeting_e2ee_details(meeting_id: str) -> dict:
 	return {
 		"e2ee_enabled": bool(getattr(meeting, "e2ee_enabled", False)),
 		"e2ee_key_version": getattr(meeting, "e2ee_key_version", None) or None,
+		"e2ee_host_public_key": getattr(meeting, "e2ee_host_public_key", None) or None,
 	}
 
 
@@ -656,33 +756,62 @@ def convert_meeting_to_e2ee(
 	meeting_id: str,
 	e2ee_key_proof: str | None = None,
 	e2ee_key_version: str | None = None,
+	e2ee_host_public_key: str | None = None,
+	e2ee_device_id: str | None = None,
 ) -> dict:
-	"""Enable E2EE for a meeting.
+	"""Enable E2EE for a meeting (v2).
 
-	The E2EE key is generated on the host's device. The client sends the
-	SHA-256 proof of the key plus a version string so the server can
-	verify joining clients without ever holding the key.
+	The host's device generates a fresh X25519 keypair and an ed25519
+	auth keypair. The X25519 public key is the meeting's anchor; it is
+	stored on the meeting and broadcast to joiners so they can ECDH a
+	per-joiner envelope. The ed25519 public key lives in
+	`tabUser.device_keys[device_id]` and is used to verify the host's
+	signature over (X25519_pub || key_version).
 	"""
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
 	if not meeting.is_host_or_cohost(frappe.session.user):
 		frappe.throw(_("Only hosts and co-hosts can convert meetings to E2EE"), frappe.PermissionError)
 
-	if not e2ee_key_proof or not e2ee_key_version:
+	if not e2ee_key_proof or not e2ee_key_version or not e2ee_host_public_key or not e2ee_device_id:
 		frappe.throw(
-			_("E2EE key proof and version are required"),
+			_("E2EE key proof, key version, host public key, and device id are required"),
 			frappe.ValidationError,
 		)
 
 	if not _is_valid_e2ee_proof(e2ee_key_proof):
 		frappe.throw(
-			_("E2EE key proof must be a 64-character hex string (SHA-256)"),
+			_("E2EE key proof must be a 64-byte ed25519 signature (base64)"),
 			frappe.ValidationError,
 		)
 
 	if not _is_valid_e2ee_version(e2ee_key_version):
 		frappe.throw(
 			_("E2EE key version must match the v<n>-<8 hex> format"),
+			frappe.ValidationError,
+		)
+
+	if not _is_valid_e2ee_host_public_key(e2ee_host_public_key):
+		frappe.throw(
+			_("E2EE host public key must be a 32-byte X25519 key (base64)"),
+			frappe.ValidationError,
+		)
+
+	if not _is_valid_e2ee_device_id(e2ee_device_id):
+		frappe.throw(
+			_("E2EE device id must be 1-64 chars of [a-zA-Z0-9._-]"),
+			frappe.ValidationError,
+		)
+
+	if not _verify_e2ee_proof_signature(
+		e2ee_key_proof,
+		e2ee_host_public_key,
+		e2ee_key_version,
+		e2ee_device_id,
+		frappe.session.user,
+	):
+		frappe.throw(
+			_("E2EE key proof signature is invalid for this device"),
 			frappe.ValidationError,
 		)
 
@@ -695,26 +824,34 @@ def convert_meeting_to_e2ee(
 	meeting.enable_e2ee(
 		e2ee_key_proof=e2ee_key_proof,
 		e2ee_key_version=e2ee_key_version,
+		e2ee_host_public_key=e2ee_host_public_key,
 	)
 
-	# Notify all current participants that E2EE has been enabled
+	# Notify all current participants that E2EE has been enabled.
+	# The broadcast carries the host's X25519 pubkey so joiners can
+	# derive the ECDH envelope without polling.
 	users_notified = set()
 	for member in meeting.members:
 		user = member.user
 		if not user or user in users_notified:
 			continue
 		users_notified.add(user)
+		payload = {
+			"meeting_id": meeting_id,
+			"e2ee_host_public_key": e2ee_host_public_key,
+			"e2ee_key_version": e2ee_key_version,
+		}
 		if user.startswith("guest_"):
 			frappe.publish_realtime(
 				"meeting:e2ee_enabled",
-				{"meeting_id": meeting_id},
+				payload,
 				room=f"guest:{user}",
 				after_commit=True,
 			)
 		else:
 			frappe.publish_realtime(
 				"meeting:e2ee_enabled",
-				{"meeting_id": meeting_id},
+				payload,
 				user=user,
 				after_commit=True,
 			)
@@ -722,4 +859,5 @@ def convert_meeting_to_e2ee(
 	return {
 		"e2ee_enabled": bool(getattr(meeting, "e2ee_enabled", False)),
 		"e2ee_key_version": getattr(meeting, "e2ee_key_version", None),
+		"e2ee_host_public_key": getattr(meeting, "e2ee_host_public_key", None),
 	}

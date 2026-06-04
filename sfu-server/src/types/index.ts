@@ -129,6 +129,7 @@ export interface ServerToClientEvents {
 	hand_raised: (data: HandRaisedEvent) => void;
 	existing_raised_hands: (data: ExistingRaisedHandsEvent) => void;
 	network_quality_update: (data: NetworkQualityUpdateEvent) => void;
+	'e2ee:handshake': (data: E2eeHandshakeEnvelope) => void;
 }
 
 export interface ClientToServerEvents {
@@ -392,6 +393,7 @@ export interface JWTPayload {
 	e2ee_key_version?: string;
 	e2ee_salt?: string;
 	e2ee_key_proof?: string;
+	e2ee_host_public_key?: string;
 	session_id?: string;
 	exp?: number;
 	iat?: number;
@@ -411,6 +413,15 @@ export interface HealthStats {
 	peers: number;
 }
 
+export type E2eeHandshakeEnvelope = {
+	fromParticipantId: string;
+	fromSenderId: number;
+	toParticipantId?: string;
+	toSenderId?: number;
+	x25519PublicKey?: string;
+	envelope?: string;
+};
+
 // Socket.IO module augmentation
 declare module 'socket.io' {
 	interface Socket {
@@ -421,6 +432,8 @@ declare module 'socket.io' {
 		isCohost: boolean;
 		roomId?: string;
 		participantId?: string;
+		senderId?: number;
+		x25519PublicKey?: string;
 		currentToken?: string;
 		tokenExpiresAt?: number;
 		tokenExpiryTimer?: NodeJS.Timeout;
@@ -430,6 +443,7 @@ declare module 'socket.io' {
 		e2eeSalt?: string;
 		e2eeExpectedKeyProof?: string;
 		e2eeValidatedKeyProof?: string;
+		e2eeHostPublicKey?: string;
 		e2eeReady?: boolean;
 	}
 }

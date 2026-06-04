@@ -30,6 +30,8 @@ export class SocketHandlerManager {
 	private fullAccessSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
 	private previewSockets: Map<string, Set<string>> = new Map(); // roomId -> Set<socketId>
 	private hostOnlyChat: Record<string, boolean> = {};
+	private nextSenderIdByRoom: Map<string, number> = new Map(); // roomId -> next senderId
+	private participantToSender: Map<string, Map<string, number>> = new Map(); // roomId -> (participantId -> senderId)
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -209,7 +211,92 @@ export class SocketHandlerManager {
 		this.previewSockets.delete(roomId);
 		delete this.raisedHands[roomId];
 		delete this.hostOnlyChat[roomId];
+		this.nextSenderIdByRoom.delete(roomId);
+		this.participantToSender.delete(roomId);
 		this.mediasoup.closeRoom(roomId);
+	}
+
+	private assignSenderId(roomId: string, participantId: string): number {
+		const map = this.participantToSender.get(roomId) || new Map();
+		const existing = map.get(participantId);
+		if (existing !== undefined) {
+			return existing;
+		}
+		const next = this.nextSenderIdByRoom.get(roomId) || 1;
+		this.nextSenderIdByRoom.set(roomId, next + 1);
+		map.set(participantId, next);
+		this.participantToSender.set(roomId, map);
+		return next;
+	}
+
+	private resolveParticipantBySenderId(
+		roomId: string,
+		senderId: number,
+	): string | undefined {
+		const map = this.participantToSender.get(roomId);
+		if (!map) return undefined;
+		for (const [participantId, sid] of map.entries()) {
+			if (sid === senderId) return participantId;
+		}
+		return undefined;
+	}
+
+	private setupE2eeHandshakeHandler(socket: Socket): void {
+		socket.on(
+			'e2ee:handshake',
+			(payload: {
+				fromParticipantId?: string;
+				fromSenderId?: number;
+				toParticipantId?: string;
+				toSenderId?: number;
+				x25519PublicKey?: string;
+				envelope?: string;
+			}) => {
+				try {
+					if (socket.scope !== 'full') {
+						return;
+					}
+					if (!socket.roomId) return;
+					const roomId = socket.roomId;
+					const fromParticipantId = payload.fromParticipantId;
+					const fromSenderId = payload.fromSenderId;
+					const x25519PublicKey = payload.x25519PublicKey;
+					const envelope = payload.envelope;
+
+					if (!fromParticipantId || fromSenderId === undefined) return;
+
+					if (x25519PublicKey && !envelope) {
+						this.emitToFullAccessParticipants(roomId, 'e2ee:handshake', {
+							fromParticipantId,
+							fromSenderId,
+							x25519PublicKey,
+						});
+						return;
+					}
+
+					if (envelope && payload.toSenderId !== undefined) {
+						const targetParticipant = this.resolveParticipantBySenderId(
+							roomId,
+							payload.toSenderId,
+						);
+						if (!targetParticipant) return;
+						this.emitToFullAccessParticipants(roomId, 'e2ee:handshake', {
+							fromParticipantId,
+							fromSenderId,
+							toParticipantId: targetParticipant,
+							toSenderId: payload.toSenderId,
+							envelope,
+						});
+						return;
+					}
+				} catch (error) {
+					loggers.socketHandler.warn(
+						'e2ee:handshake relay failed: %s',
+						(error as Error).message,
+					);
+				}
+			},
+		);
 	}
 
 	setupSocketHandlers(): void {
@@ -247,6 +334,7 @@ export class SocketHandlerManager {
 			this.setupChatHandlers(socket);
 			this.setupReactionHandlers(socket);
 			this.setupRaiseHandHandlers(socket);
+			this.setupE2eeHandshakeHandler(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);
 		});
@@ -468,6 +556,7 @@ export class SocketHandlerManager {
 				capability?: {
 					supported?: boolean;
 				};
+				ecdhPublicKey?: string;
 			};
 		},
 	): Promise<void> {
@@ -498,6 +587,12 @@ export class SocketHandlerManager {
 			}
 			socket.roomId = roomId;
 			socket.participantId = participantId;
+
+			const senderId = this.assignSenderId(roomId, participantId);
+			socket.senderId = senderId;
+			if (e2ee?.ecdhPublicKey) {
+				socket.x25519PublicKey = e2ee.ecdhPublicKey;
+			}
 
 			// Track socket by scope
 			if (socket.scope === 'full') {
@@ -837,6 +932,7 @@ export class SocketHandlerManager {
 			keyVersion?: string;
 			keyProof?: string;
 			capability?: { supported?: boolean };
+			ecdhPublicKey?: string;
 		},
 	): void {
 		if (!socket.e2eeRequired) {
@@ -869,6 +965,15 @@ export class SocketHandlerManager {
 
 		if (socket.e2eeKeyVersion && e2ee.keyVersion !== socket.e2eeKeyVersion) {
 			throw new Error('E2EE key version mismatch');
+		}
+
+		if (e2ee.ecdhPublicKey) {
+			if (
+				typeof e2ee.ecdhPublicKey !== 'string' ||
+				e2ee.ecdhPublicKey.length < 16
+			) {
+				throw new Error('Invalid E2EE ECDH public key in join request');
+			}
 		}
 
 		socket.e2eeValidatedKeyProof = socket.e2eeExpectedKeyProof;
@@ -1279,6 +1384,7 @@ export class SocketHandlerManager {
 
 					// Only remove peer if full access
 					if (socket.scope === 'full') {
+						this.participantToSender.get(roomId)?.delete(participantId);
 						await this.mediasoup.removePeer(roomId, participantId);
 
 						if (this.isRealParticipant(participantId)) {

@@ -81,6 +81,7 @@ export class AuthManager {
 			socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
 			socket.e2eeSalt = decoded.e2ee_salt || undefined;
 			socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
+			socket.e2eeHostPublicKey = decoded.e2ee_host_public_key || undefined;
 			socket.e2eeValidatedKeyProof = undefined;
 			socket.e2eeReady = this.computeE2EEReady(socket);
 			socket.currentToken = token;
@@ -128,6 +129,7 @@ export class AuthManager {
 		socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
 		socket.e2eeSalt = decoded.e2ee_salt || undefined;
 		socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
+		socket.e2eeHostPublicKey = decoded.e2ee_host_public_key || undefined;
 		socket.e2eeReady = this.computeE2EEReady(socket);
 
 		if (socket.handshake?.auth) {
@@ -200,7 +202,9 @@ export class AuthManager {
 		socket.e2eeKeyVersion = undefined;
 		socket.e2eeSalt = undefined;
 		socket.e2eeExpectedKeyProof = undefined;
+		socket.e2eeHostPublicKey = undefined;
 		socket.e2eeValidatedKeyProof = undefined;
+		socket.x25519PublicKey = undefined;
 	}
 
 	private scheduleTokenExpiry(socket: Socket): void {

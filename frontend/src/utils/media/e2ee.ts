@@ -46,6 +46,233 @@ export function setE2EEErrorHandler(handler: E2EEErrorHandler | null): void {
 	e2eeErrorHandler = handler;
 }
 
+function getSubtle(): SubtleCrypto {
+	const subtle = globalThis.crypto?.subtle;
+	if (!subtle) {
+		throw new Error("SubtleCrypto not available");
+	}
+	return subtle;
+}
+
+function bufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+	const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+	let binary = "";
+	for (let i = 0; i < bytes.byteLength; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	return btoa(binary);
+}
+
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+	const binary = atob(b64);
+	const buffer = new ArrayBuffer(binary.length);
+	const bytes = new Uint8Array(buffer);
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] = binary.charCodeAt(i);
+	}
+	return bytes;
+}
+
+function encodeInfo(s: string): Uint8Array<ArrayBuffer> {
+	const src = new TextEncoder().encode(s);
+	const out = new Uint8Array(src.length);
+	out.set(src);
+	return out;
+}
+
+export async function x25519KeyPair(): Promise<CryptoKeyPair> {
+	return getSubtle().generateKey("X25519", true, ["deriveBits"]);
+}
+
+export async function exportPublicKey(key: CryptoKey): Promise<string> {
+	const raw = await getSubtle().exportKey("raw", key);
+	return bufferToBase64(raw);
+}
+
+export async function importPublicKey(b64: string): Promise<CryptoKey> {
+	return getSubtle().importKey("raw", base64ToBytes(b64), "X25519", true, []);
+}
+
+export async function exportEd25519PublicKey(key: CryptoKey): Promise<string> {
+	const raw = await getSubtle().exportKey("raw", key);
+	return bufferToBase64(raw);
+}
+
+export async function importEd25519PublicKey(b64: string): Promise<CryptoKey> {
+	return getSubtle().importKey(
+		"raw",
+		base64ToBytes(b64),
+		{ name: "Ed25519" },
+		true,
+		["verify"],
+	);
+}
+
+export async function ed25519KeyPair(): Promise<CryptoKeyPair> {
+	return getSubtle().generateKey("Ed25519", true, ["sign", "verify"]);
+}
+
+export async function signProof(
+	privateKey: CryptoKey,
+	payload: Uint8Array<ArrayBuffer>,
+): Promise<string> {
+	const sig = await getSubtle().sign({ name: "Ed25519" }, privateKey, payload);
+	return bufferToBase64(sig);
+}
+
+export async function verifyProof(
+	publicKey: CryptoKey,
+	payload: Uint8Array<ArrayBuffer>,
+	signatureB64: string,
+): Promise<boolean> {
+	return getSubtle().verify(
+		{ name: "Ed25519" },
+		publicKey,
+		base64ToBytes(signatureB64),
+		payload,
+	);
+}
+
+export async function ecdhKeyAgreement(
+	localPrivate: CryptoKey,
+	remotePublic: CryptoKey,
+): Promise<Uint8Array<ArrayBuffer>> {
+	const bits = await getSubtle().deriveBits(
+		{ name: "X25519", public: remotePublic },
+		localPrivate,
+		256,
+	);
+	const out = new Uint8Array(32);
+	out.set(new Uint8Array(bits));
+	return out;
+}
+
+async function hkdfBits(
+	ikm: Uint8Array<ArrayBuffer>,
+	info: Uint8Array<ArrayBuffer>,
+	length = 32,
+): Promise<Uint8Array<ArrayBuffer>> {
+	const subtle = getSubtle();
+	const baseKey = await subtle.importKey("raw", ikm, "HKDF", false, [
+		"deriveBits",
+	]);
+	const bits = await subtle.deriveBits(
+		{ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info },
+		baseKey,
+		length * 8,
+	);
+	const out = new Uint8Array(length);
+	out.set(new Uint8Array(bits));
+	return out;
+}
+
+async function hkdfToAESKey(
+	ikm: Uint8Array<ArrayBuffer>,
+	info: Uint8Array<ArrayBuffer>,
+): Promise<CryptoKey> {
+	const subtle = getSubtle();
+	const baseKey = await subtle.importKey("raw", ikm, "HKDF", false, [
+		"deriveKey",
+	]);
+	return subtle.deriveKey(
+		{
+			name: "HKDF",
+			hash: "SHA-256",
+			salt: new Uint8Array(0),
+			info,
+		},
+		baseKey,
+		{ name: "AES-GCM", length: 256 },
+		false,
+		["encrypt", "decrypt"],
+	);
+}
+
+export async function generateMeetingSecret(): Promise<
+	Uint8Array<ArrayBuffer>
+> {
+	return globalThis.crypto.getRandomValues(new Uint8Array(32));
+}
+
+export async function initSenderChain(
+	meetingSecret: Uint8Array<ArrayBuffer>,
+	senderId: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+	return hkdfBits(meetingSecret, encodeInfo(`meet-e2ee-v2|sender|${senderId}`));
+}
+
+export async function advanceChain(
+	chainTip: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
+	return hkdfBits(chainTip, encodeInfo("meet-e2ee-v2|frame"));
+}
+
+export async function chainTipToAESKey(
+	chainTip: Uint8Array<ArrayBuffer>,
+): Promise<CryptoKey> {
+	return hkdfToAESKey(chainTip, encodeInfo("meet-e2ee-v2|aes"));
+}
+
+export async function createEnvelope(
+	hostPriv: CryptoKey,
+	joinerPub: CryptoKey,
+	meetingSecret: Uint8Array<ArrayBuffer>,
+	context: { meetingId: string; keyVersion: number },
+): Promise<Uint8Array<ArrayBuffer>> {
+	const shared = await ecdhKeyAgreement(hostPriv, joinerPub);
+	const info = encodeInfo(
+		`meet-e2ee-v2|envelope|${context.meetingId}|${context.keyVersion}`,
+	);
+	const aesKey = await hkdfToAESKey(shared, info);
+	const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+	const ciphertext = await getSubtle().encrypt(
+		{ name: "AES-GCM", iv },
+		aesKey,
+		meetingSecret,
+	);
+	const result = new Uint8Array(iv.length + ciphertext.byteLength);
+	result.set(iv, 0);
+	result.set(new Uint8Array(ciphertext), iv.length);
+	return result;
+}
+
+export async function openEnvelope(
+	joinerPriv: CryptoKey,
+	hostPub: CryptoKey,
+	envelope: Uint8Array<ArrayBuffer>,
+	context: { meetingId: string; keyVersion: number },
+): Promise<Uint8Array<ArrayBuffer>> {
+	const shared = await ecdhKeyAgreement(joinerPriv, hostPub);
+	const info = encodeInfo(
+		`meet-e2ee-v2|envelope|${context.meetingId}|${context.keyVersion}`,
+	);
+	const aesKey = await hkdfToAESKey(shared, info);
+	const iv = envelope.slice(0, 12);
+	const ciphertext = envelope.slice(12);
+	const meetingSecret = await getSubtle().decrypt(
+		{ name: "AES-GCM", iv },
+		aesKey,
+		ciphertext,
+	);
+	const out = new Uint8Array(meetingSecret.byteLength);
+	out.set(new Uint8Array(meetingSecret));
+	return out;
+}
+
+export function featureDetectX25519(): boolean {
+	if (typeof globalThis.crypto?.subtle === "undefined") {
+		return false;
+	}
+	try {
+		const subtle = globalThis.crypto.subtle;
+		const test = new Uint8Array(32);
+		subtle.importKey("raw", test, "X25519", true, []);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function hasInsertableStreamSupport(): boolean {
 	if (typeof window === "undefined") {
 		return false;
@@ -153,6 +380,185 @@ export function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
 	const sequenceNumber = seqView.getUint32(0, true);
 
 	return { keyVersion: version, sequenceNumber };
+}
+
+type E2EEFrameHeaderV2 = {
+	senderId: number;
+	generation: number;
+	keyVersion: number;
+	iv: Uint8Array<ArrayBuffer>;
+};
+
+export function encodeFrameHeaderV2(header: E2EEFrameHeaderV2): Uint8Array {
+	const encoded = new Uint8Array(24);
+	const view = new DataView(encoded.buffer);
+	view.setUint32(0, header.senderId, true);
+	view.setUint32(4, header.generation, true);
+	view.setUint32(8, header.keyVersion, true);
+	encoded.set(header.iv.subarray(0, 12), 12);
+	return encoded;
+}
+
+export function decodeFrameHeaderV2(
+	data: Uint8Array,
+): E2EEFrameHeaderV2 | null {
+	if (data.length < 24) {
+		return null;
+	}
+	const view = new DataView(data.buffer, data.byteOffset, 24);
+	const iv = new Uint8Array(12);
+	iv.set(data.subarray(12, 24));
+	return {
+		senderId: view.getUint32(0, true),
+		generation: view.getUint32(4, true),
+		keyVersion: view.getUint32(8, true),
+		iv,
+	};
+}
+
+export class SenderChainState {
+	readonly senderId: number;
+	private readonly meetingSecret: Uint8Array<ArrayBuffer>;
+	private chainTip: Uint8Array<ArrayBuffer> | null = null;
+	private currentGeneration = 0;
+
+	constructor(meetingSecret: Uint8Array<ArrayBuffer>, senderId: number) {
+		this.meetingSecret = meetingSecret;
+		this.senderId = senderId;
+	}
+
+	private async ensureChainTip(): Promise<Uint8Array<ArrayBuffer>> {
+		if (this.chainTip === null) {
+			this.chainTip = await initSenderChain(this.meetingSecret, this.senderId);
+		}
+		return this.chainTip;
+	}
+
+	async nextFrameKey(): Promise<{ key: CryptoKey; generation: number }> {
+		const tip = await this.ensureChainTip();
+		const key = await chainTipToAESKey(tip);
+		const generation = this.currentGeneration++;
+		this.chainTip = await advanceChain(tip);
+		return { key, generation };
+	}
+
+	wipe(): void {
+		this.chainTip = null;
+		this.currentGeneration = 0;
+	}
+}
+
+export class ReceiverChainState {
+	private readonly meetingSecret: Uint8Array<ArrayBuffer>;
+	private readonly chainTips = new Map<
+		number,
+		{ tip: Uint8Array<ArrayBuffer>; expectedGeneration: number }
+	>();
+
+	constructor(meetingSecret: Uint8Array<ArrayBuffer>) {
+		this.meetingSecret = meetingSecret;
+	}
+
+	async getKeyForFrame(
+		senderId: number,
+		generation: number,
+	): Promise<{ key: CryptoKey } | { error: "gap" | "replay" | "unknown" }> {
+		let entry = this.chainTips.get(senderId);
+		if (!entry) {
+			const tip = await initSenderChain(this.meetingSecret, senderId);
+			entry = { tip, expectedGeneration: 0 };
+			this.chainTips.set(senderId, entry);
+		}
+		if (generation < entry.expectedGeneration) {
+			return { error: "replay" };
+		}
+		if (generation > entry.expectedGeneration) {
+			return { error: "gap" };
+		}
+		const key = await chainTipToAESKey(entry.tip);
+		entry.tip = await advanceChain(entry.tip);
+		entry.expectedGeneration++;
+		return { key };
+	}
+
+	wipe(): void {
+		this.chainTips.clear();
+	}
+}
+
+export function createEncryptionTransformStreamV2(
+	chainState: SenderChainState,
+	keyVersion: number,
+): TransformStream {
+	return new TransformStream({
+		async transform(encodedFrame, controller) {
+			const subtle = getSubtle();
+			try {
+				const { key, generation } = await chainState.nextFrameKey();
+				const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+				const encrypted = await subtle.encrypt(
+					{ name: "AES-GCM", iv },
+					key,
+					encodedFrame.data,
+				);
+				const header = encodeFrameHeaderV2({
+					senderId: chainState.senderId,
+					generation,
+					keyVersion,
+					iv,
+				});
+				const newData = new Uint8Array(header.length + encrypted.byteLength);
+				newData.set(header, 0);
+				newData.set(new Uint8Array(encrypted), header.length);
+				encodedFrame.data = newData.buffer;
+				controller.enqueue(encodedFrame);
+			} catch (error) {
+				console.warn("E2EE v2: encryption failed, dropping frame:", error);
+			}
+		},
+	});
+}
+
+export function createDecryptionTransformStreamV2(
+	chainState: ReceiverChainState,
+	expectedKeyVersion: number,
+	receiver?: RTCRtpReceiver,
+): TransformStream {
+	return new TransformStream({
+		async transform(encodedFrame, controller) {
+			const subtle = getSubtle();
+			if (encodedFrame.data.byteLength < 40) {
+				return;
+			}
+			const data = new Uint8Array(encodedFrame.data);
+			const header = decodeFrameHeaderV2(data);
+			if (!header) {
+				return;
+			}
+			if (header.keyVersion !== expectedKeyVersion) {
+				return;
+			}
+			const result = await chainState.getKeyForFrame(
+				header.senderId,
+				header.generation,
+			);
+			if ("error" in result) {
+				return;
+			}
+			const ciphertext = data.slice(24);
+			try {
+				const decrypted = await subtle.decrypt(
+					{ name: "AES-GCM", iv: header.iv },
+					result.key,
+					ciphertext,
+				);
+				encodedFrame.data = decrypted;
+				controller.enqueue(encodedFrame);
+			} catch (error) {
+				console.warn("E2EE v2: decrypt failed, dropping frame:", error);
+			}
+		},
+	});
 }
 
 function createEncryptionTransformStream(

@@ -32,6 +32,7 @@ class SaeMeeting(Document):
 		e2ee_enabled: DF.Check
 		e2ee_key_proof: DF.Data | None
 		e2ee_key_version: DF.Data | None
+		e2ee_host_public_key: DF.Data | None
 		meeting_type: DF.Literal["open", "restricted"]
 		members: DF.Table[SaeMeetingUser]
 		waiting_room: DF.Table[SaeMeetingUser]
@@ -383,12 +384,15 @@ class SaeMeeting(Document):
 		self,
 		e2ee_key_proof: str | None = None,
 		e2ee_key_version: str | None = None,
+		e2ee_host_public_key: str | None = None,
 	) -> bool:
-		"""Enable meeting E2EE.
+		"""Enable meeting E2EE (v2).
 
-		The E2EE key is generated client-side. The client sends the SHA-256
-		proof of the key (and a version string) so the server can verify
-		joining clients without ever holding the key itself.
+		The host's device generates an X25519 keypair (the meeting anchor)
+		and an ed25519 auth keypair. `e2ee_host_public_key` is the X25519
+		pubkey (base64). `e2ee_key_proof` is the ed25519 signature of
+		(x25519_pub || key_version) and is verified server-side in
+		`meeting.py._verify_e2ee_proof_signature` before this is called.
 		"""
 		if self.e2ee_enabled:
 			return False
@@ -398,6 +402,8 @@ class SaeMeeting(Document):
 			self.e2ee_key_proof = e2ee_key_proof
 		if e2ee_key_version is not None:
 			self.e2ee_key_version = e2ee_key_version
+		if e2ee_host_public_key is not None:
+			self.e2ee_host_public_key = e2ee_host_public_key
 		self.save()
 		return True
 
