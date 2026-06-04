@@ -15,6 +15,8 @@ import {
 	importPublicKey,
 	openEnvelope,
 	setE2EEErrorHandler,
+	setV2MeetingContext,
+	wipeV2MeetingContext,
 	x25519KeyPair,
 } from "../utils/media/e2ee";
 import { SocketIOSignalChannel } from "../utils/media/SignalChannel";
@@ -811,6 +813,24 @@ export function useSFUConnection(deps: {
 
 	document.addEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
 
+	const handleV2HandshakeComplete = (event: Event) => {
+		const detail = (event as CustomEvent).detail;
+		if (!detail?.meetingSecret || detail?.keyVersion == null) {
+			return;
+		}
+		if (detail.meetingId && detail.meetingId !== meetingId) {
+			return;
+		}
+		setV2MeetingContext(
+			detail.meetingSecret as Uint8Array<ArrayBuffer>,
+			Number(detail.keyVersion),
+		);
+	};
+	document.addEventListener(
+		"meet:e2ee-handshake-complete",
+		handleV2HandshakeComplete,
+	);
+
 	const handleMeetingE2EEEnabled = async (data: {
 		meeting_id?: string;
 		e2ee_host_public_key?: string;
@@ -945,6 +965,10 @@ export function useSFUConnection(deps: {
 		sfuClient.signalChannel.off("e2ee:handshake", handleV2HandshakeMessage);
 
 		document.removeEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
+		document.removeEventListener(
+			"meet:e2ee-handshake-complete",
+			handleV2HandshakeComplete,
+		);
 
 		// Wipe v2 chain state on disconnect so the next join starts fresh
 		// (see docs/adr/0006-chain-tips-wiped-on-pagehide.md).
@@ -955,6 +979,7 @@ export function useSFUConnection(deps: {
 		hostX25519PubB64.value = null;
 		joinerPubBySenderId.clear();
 		v2KeyVersion.value = null;
+		wipeV2MeetingContext();
 	};
 
 	const handleGuestJoinResult = async (
@@ -1115,6 +1140,7 @@ export function useSFUConnection(deps: {
 			hostX25519PubB64.value = null;
 			joinerPubBySenderId.clear();
 			v2KeyVersion.value = null;
+			wipeV2MeetingContext();
 		};
 		window.addEventListener("pagehide", onPageHide);
 		onUnmounted(() => window.removeEventListener("pagehide", onPageHide));

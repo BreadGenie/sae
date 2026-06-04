@@ -17,6 +17,7 @@ interface ConnectionDetails {
 	e2eeRequired: boolean;
 	e2eeKeyVersion: string | null;
 	e2eeSalt: string | null;
+	e2eeHostPublicKey: string | null;
 	userData?: Record<string, unknown>;
 }
 
@@ -45,6 +46,7 @@ interface SFUConnectionDetailsResponse {
 	e2ee_required?: boolean;
 	e2ee_key_version?: string;
 	e2ee_salt?: string;
+	e2ee_host_public_key?: string;
 }
 
 interface SFUGuestConnectionDetailsResponse {
@@ -54,6 +56,7 @@ interface SFUGuestConnectionDetailsResponse {
 	e2ee_required?: boolean;
 	e2ee_key_version?: string;
 	e2ee_salt?: string;
+	e2ee_host_public_key?: string;
 }
 
 interface SFUTokenRefreshResponse {
@@ -131,6 +134,7 @@ export class SFUClient {
 			e2eeRequired: false,
 			e2eeKeyVersion: null,
 			e2eeSalt: null,
+			e2eeHostPublicKey: null,
 		};
 		this.eventHandlers = new Map();
 		this.isRefreshingToken = false;
@@ -220,6 +224,7 @@ export class SFUClient {
 					e2eeRequired: Boolean(response.e2ee_required),
 					e2eeKeyVersion: response.e2ee_key_version || null,
 					e2eeSalt: response.e2ee_salt || null,
+					e2eeHostPublicKey: response.e2ee_host_public_key || null,
 				};
 			} catch (error) {
 				console.error("Failed to get guest SFU connection details:", error);
@@ -248,6 +253,7 @@ export class SFUClient {
 			e2eeRequired: Boolean(response.e2ee_required),
 			e2eeKeyVersion: response.e2ee_key_version || null,
 			e2eeSalt: response.e2ee_salt || null,
+			e2eeHostPublicKey: response.e2ee_host_public_key || null,
 		};
 	}
 
@@ -288,6 +294,7 @@ export class SFUClient {
 			e2eeRequired: false,
 			e2eeKeyVersion: null,
 			e2eeSalt: null,
+			e2eeHostPublicKey: null,
 		};
 		this.isRefreshingToken = false;
 		this.e2eePassphrase = null;
@@ -679,6 +686,10 @@ export class SFUClient {
 		}
 
 		return Boolean(this.e2eePassphrase) && this.isInsertableStreamsSupported();
+	}
+
+	isV2E2EERequired(): boolean {
+		return Boolean(this.connectionDetails.e2eeHostPublicKey);
 	}
 
 	setE2EEPassphrase(passphrase: string): void {

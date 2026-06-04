@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
 	const buffer = new ArrayBuffer(hex.length / 2);
@@ -693,3 +693,65 @@ describe("Transform streams v2 (T1.5 + T1.6)", () => {
 		expect("key" in r2).toBe(true);
 	});
 });
+
+describe("E2EE v2 chain registry", () => {
+	beforeEach(async () => {
+		const { wipeV2MeetingContext } = await import("../e2ee");
+		wipeV2MeetingContext();
+	});
+
+	it("hasV2MeetingContext() reflects setV2MeetingContext/wipeV2MeetingContext", async () => {
+		const e2ee = await import("../e2ee");
+		expect(e2ee.hasV2MeetingContext()).toBe(false);
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setV2MeetingContext(secret, 1);
+		expect(e2ee.hasV2MeetingContext()).toBe(true);
+		e2ee.wipeV2MeetingContext();
+		expect(e2ee.hasV2MeetingContext()).toBe(false);
+	});
+
+	it("setV2MeetingContext creates per-sender chain on demand", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setV2MeetingContext(secret, 7);
+		const sender = makeMockSender();
+		const ok = await e2ee.setupSenderTransformV2(sender, 42);
+		expect(ok).toBe(true);
+	});
+
+	it("setupSenderTransformV2 returns false when no meeting context", async () => {
+		const e2ee = await import("../e2ee");
+		const sender = makeMockSender();
+		const ok = await e2ee.setupSenderTransformV2(sender, 1);
+		expect(ok).toBe(false);
+	});
+
+	it("setupSenderTransformV2 deduplicates by sender", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setV2MeetingContext(secret, 1);
+		const sender = makeMockSender();
+		expect(await e2ee.setupSenderTransformV2(sender, 5)).toBe(true);
+		expect(await e2ee.setupSenderTransformV2(sender, 5)).toBe(false);
+	});
+});
+
+function makeMockSender(): RTCRtpSender {
+	const readable = new ReadableStream<{ data: ArrayBuffer }>({
+		start(c) {
+			c.close();
+		},
+	});
+	const writable = new WritableStream<{ data: ArrayBuffer }>({
+		write() {},
+	});
+	const sender = {
+		createEncodedStreams: () => ({ readable, writable }),
+	} as unknown as RTCRtpSender;
+	(
+		RTCRtpSender.prototype as unknown as {
+			createEncodedStreams?: () => unknown;
+		}
+	).createEncodedStreams = () => ({ readable, writable });
+	return sender;
+}

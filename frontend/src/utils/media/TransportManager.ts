@@ -6,7 +6,13 @@
 import type { Consumer, Producer } from "mediasoup-client/types";
 import type { SFUClient } from "../SFUClient";
 import { resolveCodecStrategy } from "./codecStrategy";
-import { setupReceiverTransform, setupSenderTransform } from "./e2ee";
+import {
+	hasV2MeetingContext,
+	setupReceiverTransform,
+	setupReceiverTransformV2,
+	setupSenderTransform,
+	setupSenderTransformV2,
+} from "./e2ee";
 import {
 	audioCodecOptions,
 	screenEncodings,
@@ -186,6 +192,12 @@ export class TransportManager {
 
 	private shouldEnableE2EETransforms(): boolean {
 		return Boolean(this.sfuClient?.isE2EEReadyForMedia?.());
+	}
+
+	private shouldEnableV2E2EETransforms(): boolean {
+		return (
+			Boolean(this.sfuClient?.isV2E2EERequired?.()) && hasV2MeetingContext()
+		);
 	}
 
 	private extractRouterRtpCapabilities(response: unknown): RouterCapabilities {
@@ -442,6 +454,14 @@ export class TransportManager {
 				console.warn("Failed to setup E2EE sender transform:", error);
 			}
 		}
+		if (this.shouldEnableV2E2EETransforms() && producer.rtpSender) {
+			try {
+				const senderId = this.sfuClient?.getOwnSenderId?.() ?? 0;
+				await setupSenderTransformV2(producer.rtpSender, senderId);
+			} catch (error) {
+				console.warn("Failed to setup E2EE v2 sender transform:", error);
+			}
+		}
 
 		if (safeAppData.type === "screen") {
 			try {
@@ -510,6 +530,17 @@ export class TransportManager {
 				);
 			} catch (error) {
 				console.warn("Failed to setup E2EE receiver transform:", error);
+			}
+		}
+		if (
+			consumer &&
+			this.shouldEnableV2E2EETransforms() &&
+			consumer.rtpReceiver
+		) {
+			try {
+				await setupReceiverTransformV2(consumer.rtpReceiver);
+			} catch (error) {
+				console.warn("Failed to setup E2EE v2 receiver transform:", error);
 			}
 		}
 		return consumer;

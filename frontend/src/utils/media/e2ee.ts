@@ -549,6 +549,194 @@ export function createDecryptionTransformStreamV2(
 	});
 }
 
+// ---------------------------------------------------------------------------
+// E2EE v2 chain registry
+//
+// Module-level singleton that tracks the meeting_sharing meeting_secret
+// (populated when the v2 handshake completes via
+// `meet:e2ee-handshake-complete`) and the per-sender chain state.
+//
+// Producers/consumers register themselves with the registry at
+// `createProducer` / consumer-creation time. The transform isn't
+// actually installed until the meeting_secret is available; this is
+// the same lazy-activation pattern v1 used with e2eePassphrase.
+// ---------------------------------------------------------------------------
+
+interface PendingSender {
+	sender: RTCRtpSender;
+	senderId: number;
+}
+
+interface PendingReceiver {
+	receiver: RTCRtpReceiver;
+}
+
+let v2MeetingSecret: Uint8Array<ArrayBuffer> | null = null;
+let v2KeyVersion: number | null = null;
+const v2SenderChains = new Map<number, SenderChainState>();
+let v2ReceiverChain: ReceiverChainState | null = null;
+const v2PendingSenders = new Set<PendingSender>();
+const v2PendingReceivers = new Set<PendingReceiver>();
+const v2ActiveSenderTransforms = new WeakSet<RTCRtpSender>();
+const v2ActiveReceiverTransforms = new WeakSet<RTCRtpReceiver>();
+
+export function setV2MeetingContext(
+	meetingSecret: Uint8Array<ArrayBuffer>,
+	keyVersion: number,
+): void {
+	v2MeetingSecret = meetingSecret;
+	v2KeyVersion = keyVersion;
+	v2SenderChains.clear();
+	v2ReceiverChain = null;
+	void setupPendingV2Transforms();
+}
+
+function getV2KeyVersion(): number | null {
+	return v2KeyVersion;
+}
+
+export function hasV2MeetingContext(): boolean {
+	return v2MeetingSecret !== null && v2KeyVersion !== null;
+}
+
+export function wipeV2MeetingContext(): void {
+	v2MeetingSecret = null;
+	v2KeyVersion = null;
+	for (const chain of v2SenderChains.values()) {
+		chain.wipe();
+	}
+	v2SenderChains.clear();
+	if (v2ReceiverChain) {
+		v2ReceiverChain.wipe();
+		v2ReceiverChain = null;
+	}
+	v2PendingSenders.clear();
+	v2PendingReceivers.clear();
+}
+
+function getOrCreateSenderChain(senderId: number): SenderChainState | null {
+	if (!v2MeetingSecret) {
+		return null;
+	}
+	let chain = v2SenderChains.get(senderId);
+	if (!chain) {
+		chain = new SenderChainState(v2MeetingSecret, senderId);
+		v2SenderChains.set(senderId, chain);
+	}
+	return chain;
+}
+
+function getOrCreateReceiverChain(): ReceiverChainState | null {
+	if (!v2MeetingSecret) {
+		return null;
+	}
+	if (!v2ReceiverChain) {
+		v2ReceiverChain = new ReceiverChainState(v2MeetingSecret);
+	}
+	return v2ReceiverChain;
+}
+
+function hasInsertableStreamSupportV2(): boolean {
+	if (typeof globalThis.RTCRtpSender === "undefined") return false;
+	if (typeof globalThis.RTCRtpReceiver === "undefined") return false;
+	try {
+		const proto = globalThis.RTCRtpSender.prototype as unknown as {
+			createEncodedStreams?: () => unknown;
+		};
+		return typeof proto.createEncodedStreams === "function";
+	} catch {
+		return false;
+	}
+}
+
+export async function setupSenderTransformV2(
+	sender: RTCRtpSender | undefined,
+	senderId: number,
+): Promise<boolean> {
+	if (!sender || v2ActiveSenderTransforms.has(sender)) {
+		return false;
+	}
+	if (!hasInsertableStreamSupportV2()) {
+		return false;
+	}
+	if (!hasV2MeetingContext()) {
+		v2PendingSenders.add({ sender, senderId });
+		return false;
+	}
+	const chain = getOrCreateSenderChain(senderId);
+	if (!chain) {
+		return false;
+	}
+	const streams = (
+		sender as SenderWithInsertableStreams
+	).createEncodedStreams?.();
+	if (!streams) return false;
+	const readable = streams.readable || streams.readableStream;
+	const writable = streams.writable || streams.writableStream;
+	if (!readable || !writable) return false;
+	try {
+		readable
+			.pipeThrough(createEncryptionTransformStreamV2(chain, v2KeyVersion!))
+			.pipeTo(writable)
+			.catch((error: unknown) => {
+				console.warn("E2EE v2 sender transform pipeline failed:", error);
+			});
+		v2ActiveSenderTransforms.add(sender);
+		return true;
+	} catch (error) {
+		console.error("E2EE v2: Failed to setup sender transform:", error);
+		return false;
+	}
+}
+
+export async function setupReceiverTransformV2(
+	receiver: RTCRtpReceiver | undefined,
+): Promise<boolean> {
+	if (!receiver || v2ActiveReceiverTransforms.has(receiver)) {
+		return false;
+	}
+	if (!hasInsertableStreamSupportV2()) {
+		return false;
+	}
+	if (!hasV2MeetingContext()) {
+		v2PendingReceivers.add({ receiver });
+		return false;
+	}
+	const chain = getOrCreateReceiverChain();
+	if (!chain) return false;
+	const streams = (
+		receiver as ReceiverWithInsertableStreams
+	).createEncodedStreams?.();
+	if (!streams) return false;
+	const readable = streams.readable || streams.readableStream;
+	const writable = streams.writable || streams.writableStream;
+	if (!readable || !writable) return false;
+	try {
+		readable
+			.pipeThrough(createDecryptionTransformStreamV2(chain, v2KeyVersion!))
+			.pipeTo(writable)
+			.catch((error: unknown) => {
+				console.warn("E2EE v2 receiver transform pipeline failed:", error);
+			});
+		v2ActiveReceiverTransforms.add(receiver);
+		return true;
+	} catch (error) {
+		console.error("E2EE v2: Failed to setup receiver transform:", error);
+		return false;
+	}
+}
+
+async function setupPendingV2Transforms(): Promise<void> {
+	for (const pending of Array.from(v2PendingSenders)) {
+		const ok = await setupSenderTransformV2(pending.sender, pending.senderId);
+		if (ok) v2PendingSenders.delete(pending);
+	}
+	for (const pending of Array.from(v2PendingReceivers)) {
+		const ok = await setupReceiverTransformV2(pending.receiver);
+		if (ok) v2PendingReceivers.delete(pending);
+	}
+}
+
 function createEncryptionTransformStream(
 	cryptoKey: CryptoKey,
 	keyVersion: string,
