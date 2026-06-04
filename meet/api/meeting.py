@@ -56,6 +56,22 @@ def _is_e2ee_enabled(meeting_id: str) -> bool:
 	return bool(frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_enabled"))
 
 
+def _is_valid_e2ee_proof(proof: str) -> bool:
+	return bool(proof) and len(proof) == 64 and all(c in "0123456789abcdef" for c in proof.lower())
+
+
+def _is_valid_e2ee_version(version: str) -> bool:
+	# Matches the v<n>-<8 hex> shape produced by the client's generateE2EEKeyVersion()
+	if not version or len(version) > 32:
+		return False
+	if "-" not in version:
+		return False
+	prefix, _, suffix = version.partition("-")
+	if not prefix.startswith("v") or not prefix[1:].isdigit() or int(prefix[1:]) < 1:
+		return False
+	return len(suffix) == 8 and all(c in "0123456789abcdef" for c in suffix.lower())
+
+
 def _get_e2ee_key_version(meeting_id: str) -> str | None:
 	if not _is_e2ee_enabled(meeting_id):
 		return None
@@ -655,6 +671,24 @@ def convert_meeting_to_e2ee(
 	if not e2ee_key_proof or not e2ee_key_version:
 		frappe.throw(
 			_("E2EE key proof and version are required"),
+			frappe.ValidationError,
+		)
+
+	if not _is_valid_e2ee_proof(e2ee_key_proof):
+		frappe.throw(
+			_("E2EE key proof must be a 64-character hex string (SHA-256)"),
+			frappe.ValidationError,
+		)
+
+	if not _is_valid_e2ee_version(e2ee_key_version):
+		frappe.throw(
+			_("E2EE key version must match the v<n>-<8 hex> format"),
+			frappe.ValidationError,
+		)
+
+	if getattr(meeting, "e2ee_enabled", False):
+		frappe.throw(
+			_("This meeting is already E2EE-enabled"),
 			frappe.ValidationError,
 		)
 

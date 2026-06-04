@@ -1,15 +1,11 @@
 <template>
 	<Dialog
 		v-model="show"
+		@close="emit('cancel')"
 		:options="{
 			title: 'Enter Meeting Key',
 			size: 'sm',
 			actions: [
-				{
-					label: 'Cancel',
-					variant: 'ghost',
-					onClick: () => emit('cancel'),
-				},
 				{
 					label: 'Continue',
 					variant: 'solid',

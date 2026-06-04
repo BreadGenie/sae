@@ -81,7 +81,8 @@ export class AuthManager {
 			socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
 			socket.e2eeSalt = decoded.e2ee_salt || undefined;
 			socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
-			socket.e2eeReady = !socket.e2eeRequired;
+			socket.e2eeValidatedKeyProof = undefined;
+			socket.e2eeReady = this.computeE2EEReady(socket);
 			socket.currentToken = token;
 			socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
 			this.scheduleTokenExpiry(socket);
@@ -127,7 +128,7 @@ export class AuthManager {
 		socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
 		socket.e2eeSalt = decoded.e2ee_salt || undefined;
 		socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
-		socket.e2eeReady = socket.e2eeReady || !socket.e2eeRequired;
+		socket.e2eeReady = this.computeE2EEReady(socket);
 
 		if (socket.handshake?.auth) {
 			socket.handshake.auth.token = token;
@@ -199,6 +200,7 @@ export class AuthManager {
 		socket.e2eeKeyVersion = undefined;
 		socket.e2eeSalt = undefined;
 		socket.e2eeExpectedKeyProof = undefined;
+		socket.e2eeValidatedKeyProof = undefined;
 	}
 
 	private scheduleTokenExpiry(socket: Socket): void {
@@ -225,6 +227,16 @@ export class AuthManager {
 			clearTimeout(socket.tokenExpiryTimer);
 			socket.tokenExpiryTimer = undefined;
 		}
+	}
+
+	private computeE2EEReady(socket: Socket): boolean {
+		if (!socket.e2eeRequired) {
+			return true;
+		}
+		return (
+			Boolean(socket.e2eeValidatedKeyProof) &&
+			socket.e2eeValidatedKeyProof === socket.e2eeExpectedKeyProof
+		);
 	}
 
 	ensurePresenceAccess(socket: Socket): void {

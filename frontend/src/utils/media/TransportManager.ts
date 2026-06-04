@@ -388,6 +388,16 @@ export class TransportManager {
 		const produceOptions: Record<string, unknown> = {
 			track,
 			appData: safeAppData,
+			// Keep the underlying track alive when this producer is closed.
+			// mediasoup-client defaults stopTracks=true and calls track.stop()
+			// in Producer.close(), which would kill the background-effects
+			// MediaStreamTrackGenerator track and freeze the local preview
+			// (and the BG-effects writer throws "Stream closed") whenever
+			// producers are torn down — e.g. during a mid-meeting E2EE
+			// reconfigure. The caller is responsible for stopping the track
+			// when the user actually leaves the meeting or turns the device
+			// off (see useMediaControls.onUnmounted / switchInputDevice).
+			stopTracks: false,
 		};
 
 		if (track?.kind === "video") {

@@ -104,7 +104,8 @@ export class SFUMeetingManager {
 	}
 
 	async reconfigureForE2EE(
-		localStream: MediaStream | null = null,
+		videoStream: MediaStream | null = null,
+		audioStream: MediaStream | null = null,
 	): Promise<void> {
 		console.log("Reconfiguring media for E2EE");
 
@@ -126,42 +127,48 @@ export class SFUMeetingManager {
 			if (hadVideo || hadAudio) {
 				await this.transportManager.createSendTransport();
 
-				if (localStream) {
-					if (hadVideo) {
-						const videoTrack = localStream.getVideoTracks()[0];
-						if (videoTrack) {
-							try {
-								const videoProducer =
-									await this.transportManager.createProducer(videoTrack, {
-										type: "camera",
-									});
-								this.mediaHandler.setProducers({ videoProducer });
-							} catch (error) {
-								console.warn(
-									"Failed to re-publish video after E2EE conversion:",
-									error,
-								);
-							}
+				// videoStream may be the processed (background-effects) stream
+				// so remote participants keep seeing the host with their BG
+				// effects after the E2EE reconfigure. audioStream is the raw
+				// local stream because the processed stream has no audio.
+				if (hadVideo && videoStream) {
+					const videoTrack = videoStream.getVideoTracks()[0];
+					if (videoTrack) {
+						try {
+							const videoProducer = await this.transportManager.createProducer(
+								videoTrack,
+								{
+									type: "camera",
+								},
+							);
+							this.mediaHandler.setProducers({ videoProducer });
+						} catch (error) {
+							console.warn(
+								"Failed to re-publish video after E2EE conversion:",
+								error,
+							);
 						}
 					}
+				}
 
-					if (hadAudio) {
-						const audioTrack = localStream.getAudioTracks()[0];
-						if (audioTrack) {
-							try {
-								const audioProducer =
-									await this.transportManager.createProducer(audioTrack, {
-										type: "microphone",
-									});
-								if (audioProducer) {
-									this.mediaHandler.setProducers({ audioProducer });
-								}
-							} catch (error) {
-								console.warn(
-									"Failed to re-publish audio after E2EE conversion:",
-									error,
-								);
+				if (hadAudio && audioStream) {
+					const audioTrack = audioStream.getAudioTracks()[0];
+					if (audioTrack) {
+						try {
+							const audioProducer = await this.transportManager.createProducer(
+								audioTrack,
+								{
+									type: "microphone",
+								},
+							);
+							if (audioProducer) {
+								this.mediaHandler.setProducers({ audioProducer });
 							}
+						} catch (error) {
+							console.warn(
+								"Failed to re-publish audio after E2EE conversion:",
+								error,
+							);
 						}
 					}
 				}

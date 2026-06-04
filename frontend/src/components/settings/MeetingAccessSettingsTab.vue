@@ -57,14 +57,14 @@
 					/>
 				</div>
 
-				<div v-if="showShareUrl && e2eeKey" class="space-y-2">
-					<p class="text-sm font-medium text-ink-gray-8">Share this link</p>
-					<ClickToCopyField :text-content="shareUrl" />
-				</div>
-				<div v-else-if="e2eeEnabled && e2eeKey && !showShareUrl">
-					<Button variant="ghost" @click="showShareUrl = true">
-						Show share link
-					</Button>
+				<div v-if="showKeyField" class="space-y-2">
+					<p class="text-sm font-medium text-ink-gray-8">Meeting key</p>
+					<ClickToCopyField :text-content="e2eeKey" />
+					<p class="text-xs text-ink-gray-6">
+						Share this key with participants through a secure channel (in
+						person, encrypted messenger, etc.). Anyone with the key can join
+						the meeting.
+					</p>
 				</div>
 			</div>
 		</template>
@@ -72,14 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-	Button,
-	debounce,
-	FormControl,
-	frappeRequest,
-	Switch,
-	toast,
-} from "frappe-ui";
+import { debounce, FormControl, frappeRequest, Switch, toast } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useChatStore } from "@/composables/useChatStore";
 import { useMeetingDoc } from "../../composables/useMeetingDoc";
@@ -111,20 +104,11 @@ const allowGuest = ref<boolean>(globalAllowGuest.value);
 const meetingType = ref<string>(globalMeetingType.value);
 const hostOnlyChat = ref<boolean>(chatStore.hostOnlyChat);
 const e2eeEnabled = ref<boolean>(globalE2EEEnabled.value);
-const e2eeKeyStorageKey = `meet:e2ee-key:${props.meetingId}`;
-const e2eeKey = ref<string>(
-	typeof localStorage !== "undefined"
-		? localStorage.getItem(e2eeKeyStorageKey) || ""
-		: "",
-);
+const e2eeKey = ref<string>("");
 const isConvertingToE2EE = ref(false);
-const showShareUrl = ref(false);
-
-const shareUrl = computed(() => {
-	const url = new URL(window.location.href);
-	url.searchParams.set("e", e2eeKey.value);
-	return url.toString();
-});
+const showKeyField = computed(
+	() => e2eeEnabled.value && Boolean(e2eeKey.value),
+);
 
 const meetingDoc = getMeetingDoc(props.meetingId);
 
@@ -183,6 +167,21 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		const keyVersion = generateE2EEKeyVersion();
 		const keyProof = await computeE2EEKeyProof(keyVersion, key);
 
+		// Prime this tab's SfuClient with the key BEFORE the API call so the
+		// host's mid-meeting reconfigure (triggered by meeting:e2ee_enabled)
+		// doesn't have to ask the host to re-enter a key they just generated.
+		// We dispatch before the API call because the server emits the realtime
+		// event as a side effect of the API call, and either may arrive first.
+		// If the API call fails, the SfuClient retains an unused passphrase
+		// which is benign (only consumed when the meeting is actually E2EE).
+		// Guests in other tabs still see the dialog because they don't
+		// receive this event.
+		document.dispatchEvent(
+			new CustomEvent("meet:e2ee-key-set", {
+				detail: { key },
+			}),
+		);
+
 		const response = (await frappeRequest({
 			url: "meet.api.meeting.convert_meeting_to_e2ee",
 			params: {
@@ -198,17 +197,10 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		const payload = response.message || response;
 
 		e2eeKey.value = key;
-		showShareUrl.value = true;
-
-		document.dispatchEvent(
-			new CustomEvent("meet:e2ee-key-set", {
-				detail: { key },
-			}),
-		);
 
 		await meetingDoc.reload();
 		toast.success(
-			"Meeting converted to E2EE. Share the link with participants.",
+			"Meeting converted to E2EE. Share the key with participants through a secure channel.",
 		);
 	} catch (error) {
 		console.error("Failed to enable E2EE:", error);

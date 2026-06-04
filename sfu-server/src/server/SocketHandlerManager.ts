@@ -871,6 +871,7 @@ export class SocketHandlerManager {
 			throw new Error('E2EE key version mismatch');
 		}
 
+		socket.e2eeValidatedKeyProof = socket.e2eeExpectedKeyProof;
 		socket.e2eeReady = true;
 	}
 

@@ -624,33 +624,16 @@ export function useSFUConnection(deps: {
 		}
 	};
 
-	const e2eeKeyStorageKey = `meet:e2ee-key:${meetingId}`;
+	let isReconfiguringForE2EE = false;
 
-	let autoE2EEKey: string | null =
-		new URLSearchParams(window.location.search).get("e") ||
-		localStorage.getItem(e2eeKeyStorageKey);
-
-	if (autoE2EEKey) {
-		try {
-			localStorage.setItem(e2eeKeyStorageKey, autoE2EEKey);
-		} catch {
-			// localStorage may be disabled — best effort
-		}
-	}
-
-	const handleE2EEKeySet = (event: Event) => {
+	const handleHostE2EEKeySet = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
 		if (detail?.key) {
-			autoE2EEKey = detail.key;
-			try {
-				localStorage.setItem(e2eeKeyStorageKey, detail.key);
-			} catch {
-				// best effort
-			}
+			sfuClient.setE2EEPassphrase(detail.key);
 		}
 	};
 
-	let isReconfiguringForE2EE = false;
+	document.addEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
 
 	const handleMeetingE2EEEnabled = async (data: { meeting_id?: string }) => {
 		if (data.meeting_id !== meetingId) return;
@@ -664,29 +647,30 @@ export function useSFUConnection(deps: {
 			const hadCamera = mediaState.isCameraOn;
 			const hadMic = mediaState.isMicOn;
 
-			if (mediaState.localStream) {
-				for (const track of mediaState.localStream.getTracks()) {
-					track.stop();
-				}
-				mediaState.localStream = null;
-			}
-			if (mediaState.processedStream) {
-				mediaState.processedStream = null;
-			}
+			// Keep the live streams around so reconfigureForE2EE can re-produce
+			// their tracks on the new E2EE-enabled send transport in the same
+			// call. Stopping the tracks here and re-acquiring later races with
+			// the SFU producer_created/producer_closed events and leaves the
+			// host with no producers attached to the encrypted transport.
+			//
+			// The video stream should be the processed (background-effects-
+			// applied) one so remote participants keep seeing the host with
+			// the same background effects that were applied before E2EE.
+			// The audio stream must be the raw local stream — the processed
+			// stream only contains the BG-rendered video track and has no
+			// audio.
+			const videoStreamForRepublish =
+				mediaState.processedStream || mediaState.localStream;
+			const audioStreamForRepublish = mediaState.localStream;
 
 			await sfuClient.refreshToken();
 
 			if (!sfuClient.hasE2EEPassphrase()) {
-				let passphrase: string | null = autoE2EEKey;
-				autoE2EEKey = null;
-
-				if (!passphrase) {
-					passphrase = requestE2EEPassphrase
-						? await requestE2EEPassphrase()
-						: window.prompt(
-								"This meeting has been converted to end-to-end encryption. Enter the meeting key to continue.",
-							);
-				}
+				const passphrase = requestE2EEPassphrase
+					? await requestE2EEPassphrase()
+					: window.prompt(
+							"This meeting has been converted to end-to-end encryption. Enter the meeting key to continue.",
+						);
 
 				if (!passphrase?.trim()) {
 					console.warn("E2EE passphrase required but not provided");
@@ -711,14 +695,20 @@ export function useSFUConnection(deps: {
 			});
 
 			if (sfuManager.value) {
-				await sfuManager.value.reconfigureForE2EE(null);
+				await sfuManager.value.reconfigureForE2EE(
+					videoStreamForRepublish,
+					audioStreamForRepublish,
+				);
 			}
 
-			document.dispatchEvent(
-				new CustomEvent("meet:e2ee-needs-media-republish", {
-					detail: { hadCamera, hadMic },
-				}),
-			);
+			// Only request a fresh stream if we didn't have one to republish.
+			if (!videoStreamForRepublish || !audioStreamForRepublish) {
+				document.dispatchEvent(
+					new CustomEvent("meet:e2ee-needs-media-republish", {
+						detail: { hadCamera, hadMic },
+					}),
+				);
+			}
 		} catch (error) {
 			console.error("Failed to reconfigure for E2EE:", error);
 		} finally {
@@ -743,8 +733,6 @@ export function useSFUConnection(deps: {
 		socket.on("meeting_user_rejected", handleMeetingUserRejected);
 		socket.on("meeting:e2ee_enabled", handleMeetingE2EEEnabled);
 
-		document.addEventListener("meet:e2ee-key-set", handleE2EEKeySet);
-
 		realtimeListenersSetup.value = true;
 	};
 
@@ -758,9 +746,7 @@ export function useSFUConnection(deps: {
 		socket.off("meeting_user_rejected", handleMeetingUserRejected);
 		socket.off("meeting:e2ee_enabled", handleMeetingE2EEEnabled);
 
-		document.removeEventListener("meet:e2ee-key-set", handleE2EEKeySet);
-
-		autoE2EEKey = null;
+		document.removeEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
 	};
 
 	const handleGuestJoinResult = async (

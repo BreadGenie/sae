@@ -429,6 +429,7 @@ declare module 'socket.io' {
 		e2eeKeyVersion?: string;
 		e2eeSalt?: string;
 		e2eeExpectedKeyProof?: string;
+		e2eeValidatedKeyProof?: string;
 		e2eeReady?: boolean;
 	}
 }

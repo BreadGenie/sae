@@ -278,10 +278,6 @@ const e2eeKeyDialogError = ref("");
 let resolveE2EEKeyDialog: ((value: string | null) => void) | null = null;
 
 const requestE2EEPassphrase = async (): Promise<string | null> => {
-	const urlKey = new URLSearchParams(window.location.search).get("e");
-	if (urlKey) {
-		return urlKey;
-	}
 	return new Promise((resolve) => {
 		e2eePassphraseInput.value = "";
 		e2eeKeyDialogError.value = "";
@@ -292,8 +288,9 @@ const requestE2EEPassphrase = async (): Promise<string | null> => {
 
 const submitE2EEKeyDialog = () => {
 	const normalized = e2eePassphraseInput.value.trim();
-	if (!normalized) {
-		e2eeKeyDialogError.value = "Please enter a valid meeting key.";
+	if (normalized.length < 8) {
+		e2eeKeyDialogError.value =
+			"Meeting key must be at least 8 characters long.";
 		return;
 	}
 
