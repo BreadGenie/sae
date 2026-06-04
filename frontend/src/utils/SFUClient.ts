@@ -3,6 +3,7 @@
 
 import { frappeRequest } from "frappe-ui";
 import { normalizeCodecStrategy } from "./media/codecStrategy";
+import { computeE2EEKeyProof } from "./media/e2ee";
 import type { SignalChannel } from "./media/SignalChannel";
 
 interface ConnectionDetails {
@@ -13,6 +14,9 @@ interface ConnectionDetails {
 	sfuPort: string | null;
 	tokenExpiresAt: number | null;
 	codecStrategy: string;
+	e2eeRequired: boolean;
+	e2eeKeyVersion: string | null;
+	e2eeSalt: string | null;
 	userData?: Record<string, unknown>;
 }
 
@@ -38,18 +42,27 @@ interface SFUConnectionDetailsResponse {
 	user_data: Record<string, unknown>;
 	expires_in: number;
 	codec_strategy: string;
+	e2ee_required?: boolean;
+	e2ee_key_version?: string;
+	e2ee_salt?: string;
 }
 
 interface SFUGuestConnectionDetailsResponse {
 	sfu_url: string;
 	sfu_port: string;
 	codec_strategy: string;
+	e2ee_required?: boolean;
+	e2ee_key_version?: string;
+	e2ee_salt?: string;
 }
 
 interface SFUTokenRefreshResponse {
 	auth_token: string;
 	expires_in: number;
 	codec_strategy: string;
+	e2ee_required?: boolean;
+	e2ee_key_version?: string;
+	e2ee_salt?: string;
 }
 
 interface SFURouterCapabilitiesResponse {
@@ -101,6 +114,7 @@ export class SFUClient {
 	eventHandlers: Map<string, SFUEventHandler>;
 	isRefreshingToken: boolean;
 	tokenRefreshTimer: ReturnType<typeof setTimeout> | null;
+	e2eePassphrase: string | null;
 
 	constructor(signalChannel: SignalChannel) {
 		this.signalChannel = signalChannel;
@@ -113,10 +127,14 @@ export class SFUClient {
 			sfuPort: null,
 			tokenExpiresAt: null,
 			codecStrategy: "svc",
+			e2eeRequired: false,
+			e2eeKeyVersion: null,
+			e2eeSalt: null,
 		};
 		this.eventHandlers = new Map();
 		this.isRefreshingToken = false;
 		this.tokenRefreshTimer = null;
+		this.e2eePassphrase = null;
 		this.setupDefaultHandlers();
 	}
 
@@ -189,6 +207,9 @@ export class SFUClient {
 					},
 					tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
 					codecStrategy: response.codec_strategy || "svc",
+					e2eeRequired: Boolean(response.e2ee_required),
+					e2eeKeyVersion: response.e2ee_key_version || null,
+					e2eeSalt: response.e2ee_salt || null,
 				};
 			} catch (error) {
 				console.error("Failed to get guest SFU connection details:", error);
@@ -214,6 +235,9 @@ export class SFUClient {
 			userData: response.user_data,
 			tokenExpiresAt,
 			codecStrategy: normalizeCodecStrategy(response.codec_strategy),
+			e2eeRequired: Boolean(response.e2ee_required),
+			e2eeKeyVersion: response.e2ee_key_version || null,
+			e2eeSalt: response.e2ee_salt || null,
 		};
 	}
 
@@ -251,8 +275,12 @@ export class SFUClient {
 			sfuPort: null,
 			tokenExpiresAt: null,
 			codecStrategy: "svc",
+			e2eeRequired: false,
+			e2eeKeyVersion: null,
+			e2eeSalt: null,
 		};
 		this.isRefreshingToken = false;
+		this.e2eePassphrase = null;
 	}
 
 	// ==================== TOKEN MANAGEMENT ====================
@@ -317,6 +345,9 @@ export class SFUClient {
 			this.connectionDetails.codecStrategy = normalizeCodecStrategy(
 				response.codec_strategy || this.connectionDetails.codecStrategy,
 			);
+			this.connectionDetails.e2eeRequired = Boolean(response.e2ee_required);
+			this.connectionDetails.e2eeKeyVersion = response.e2ee_key_version || null;
+			this.connectionDetails.e2eeSalt = response.e2ee_salt || null;
 
 			this.signalChannel.updateAuth(response.auth_token);
 
@@ -472,6 +503,8 @@ export class SFUClient {
 	}> {
 		const response = (await this.sendRequest("create_webrtc_transport", {
 			direction,
+			encryptionEnabled: this.connectionDetails.e2eeRequired,
+			keyVersion: this.connectionDetails.e2eeKeyVersion,
 		})) as SFUWebRtcTransportResponse;
 		try {
 			const clean = JSON.parse(JSON.stringify(response));
@@ -597,11 +630,86 @@ export class SFUClient {
 		userData: unknown,
 		mediaState: unknown,
 	): Promise<unknown> {
+		const supportsInsertableStreams = this.isInsertableStreamsSupported();
+		const e2eeShouldBeActive =
+			this.connectionDetails.e2eeRequired && Boolean(this.e2eePassphrase);
+		const keyVersion = this.connectionDetails.e2eeKeyVersion;
+		const keyProof = await this.buildE2EEKeyProof(keyVersion);
 		return this.sendRequest("join_room", {
 			roomId,
 			userData,
 			mediaState,
+			e2ee: {
+				enabled: e2eeShouldBeActive,
+				keyVersion,
+				keyProof,
+				capability: {
+					supported: supportsInsertableStreams,
+					mode: supportsInsertableStreams ? "insertable-streams" : "none",
+				},
+			},
 		});
+	}
+
+	isE2EERequired(): boolean {
+		return this.connectionDetails.e2eeRequired;
+	}
+
+	getE2EEKeyVersion(): string | null {
+		return this.connectionDetails.e2eeKeyVersion;
+	}
+
+	isE2EEReadyForMedia(): boolean {
+		if (!this.isE2EERequired()) {
+			return false;
+		}
+
+		return Boolean(this.e2eePassphrase) && this.isInsertableStreamsSupported();
+	}
+
+	setE2EEPassphrase(passphrase: string): void {
+		const normalized = passphrase.trim();
+		this.e2eePassphrase = normalized.length > 0 ? normalized : null;
+	}
+
+	hasE2EEPassphrase(): boolean {
+		return Boolean(this.e2eePassphrase);
+	}
+
+	clearE2EEPassphrase(): void {
+		this.e2eePassphrase = null;
+	}
+
+	getE2EEMode(): "insertable-streams" | "none" {
+		return this.isE2EEReadyForMedia() ? "insertable-streams" : "none";
+	}
+
+	isInsertableStreamsSupported(): boolean {
+		if (typeof window === "undefined") {
+			return false;
+		}
+
+		const senderPrototype = (
+			globalThis as typeof globalThis & {
+				RTCRtpSender?: {
+					prototype?: {
+						createEncodedStreams?: unknown;
+					};
+				};
+			}
+		).RTCRtpSender?.prototype;
+
+		return typeof senderPrototype?.createEncodedStreams === "function";
+	}
+
+	private async buildE2EEKeyProof(
+		keyVersion: string | null,
+	): Promise<string | null> {
+		if (!this.connectionDetails.e2eeRequired || !this.e2eePassphrase) {
+			return null;
+		}
+
+		return computeE2EEKeyProof(keyVersion || "v0", this.e2eePassphrase);
 	}
 
 	// ==================== SIGNALING OPERATIONS ====================

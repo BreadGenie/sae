@@ -103,6 +103,81 @@ export class SFUMeetingManager {
 		return this.mediaManager.publishMedia(localStream, options);
 	}
 
+	async reconfigureForE2EE(
+		localStream: MediaStream | null = null,
+	): Promise<void> {
+		console.log("Reconfiguring media for E2EE");
+
+		this.initialSyncInProgress = true;
+
+		try {
+			const hadVideo = !!this.mediaHandler.videoProducer;
+			const hadAudio = !!this.mediaHandler.audioProducer;
+
+			this.mediaHandler.cleanup();
+			this.consumerManager.clear();
+			this.processedConsumers.clear();
+			this.bufferedProducerEvents = [];
+			this.transportManager.cleanup();
+
+			await this.transportManager.initializeDevice();
+			await this.transportManager.createReceiveTransport();
+
+			if (hadVideo || hadAudio) {
+				await this.transportManager.createSendTransport();
+
+				if (localStream) {
+					if (hadVideo) {
+						const videoTrack = localStream.getVideoTracks()[0];
+						if (videoTrack) {
+							try {
+								const videoProducer =
+									await this.transportManager.createProducer(videoTrack, {
+										type: "camera",
+									});
+								this.mediaHandler.setProducers({ videoProducer });
+							} catch (error) {
+								console.warn(
+									"Failed to re-publish video after E2EE conversion:",
+									error,
+								);
+							}
+						}
+					}
+
+					if (hadAudio) {
+						const audioTrack = localStream.getAudioTracks()[0];
+						if (audioTrack) {
+							try {
+								const audioProducer =
+									await this.transportManager.createProducer(audioTrack, {
+										type: "microphone",
+									});
+								if (audioProducer) {
+									this.mediaHandler.setProducers({ audioProducer });
+								}
+							} catch (error) {
+								console.warn(
+									"Failed to re-publish audio after E2EE conversion:",
+									error,
+								);
+							}
+						}
+					}
+				}
+			}
+
+			await this.setupExistingParticipants();
+
+			console.log("E2EE reconfiguration completed");
+		} catch (error) {
+			console.error("E2EE reconfiguration failed:", error);
+			throw error;
+		} finally {
+			this.initialSyncInProgress = false;
+		}
+	}
+
 	async setupExistingParticipants(): Promise<void> {
 		return this.connectionManager.setupExistingParticipants();
 	}

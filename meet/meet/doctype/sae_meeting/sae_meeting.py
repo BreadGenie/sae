@@ -29,6 +29,9 @@ class SaeMeeting(Document):
 		allow_guest: DF.Check
 		banned_users: DF.Table[SaeMeetingUser]
 		co_hosts: DF.Table[SaeMeetingUser]
+		e2ee_enabled: DF.Check
+		e2ee_key_proof: DF.Data | None
+		e2ee_key_version: DF.Data | None
 		meeting_type: DF.Literal["open", "restricted"]
 		members: DF.Table[SaeMeetingUser]
 		waiting_room: DF.Table[SaeMeetingUser]
@@ -375,6 +378,28 @@ class SaeMeeting(Document):
 
 		if self.is_user_banned(guest_id):
 			frappe.throw(_("Guest is banned from this meeting"))
+
+	def enable_e2ee(
+		self,
+		e2ee_key_proof: str | None = None,
+		e2ee_key_version: str | None = None,
+	) -> bool:
+		"""Enable meeting E2EE.
+
+		The E2EE key is generated client-side. The client sends the SHA-256
+		proof of the key (and a version string) so the server can verify
+		joining clients without ever holding the key itself.
+		"""
+		if self.e2ee_enabled:
+			return False
+
+		self.e2ee_enabled = True
+		if e2ee_key_proof is not None:
+			self.e2ee_key_proof = e2ee_key_proof
+		if e2ee_key_version is not None:
+			self.e2ee_key_version = e2ee_key_version
+		self.save()
+		return True
 
 	@frappe.whitelist()
 	def update_settings(

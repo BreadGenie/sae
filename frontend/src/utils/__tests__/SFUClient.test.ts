@@ -355,12 +355,18 @@ describe("getConnectionDetails", () => {
 			user_data: { name: "Alice" },
 			expires_in: 3600,
 			codec_strategy: "svc",
+			e2ee_required: true,
+			e2ee_key_version: "v1",
+			e2ee_salt: "salt-regular",
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-1");
 		expect(details.authToken).toBe("tok-1");
 		expect(details.userId).toBe("usr-1");
 		expect(details.codecStrategy).toBe("svc");
+		expect(details.e2eeRequired).toBe(true);
+		expect(details.e2eeKeyVersion).toBe("v1");
+		expect(details.e2eeSalt).toBe("salt-regular");
 		expect(frappeRequest).toHaveBeenCalledWith(
 			expect.objectContaining({
 				url: "meet.api.meeting.get_sfu_connection_details",
@@ -378,12 +384,130 @@ describe("getConnectionDetails", () => {
 			sfu_url: "https://sfu.example.com",
 			sfu_port: "443",
 			codec_strategy: "svc",
+			e2ee_required: true,
+			e2ee_key_version: "v2",
+			e2ee_salt: "salt-guest",
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-2", "guest-token");
 		expect(details.authToken).toBe("guest-token");
 		expect(details.userId).toBe("guest-1");
 		expect(details.userData?.is_guest).toBe(true);
+		expect(details.e2eeRequired).toBe(true);
+		expect(details.e2eeKeyVersion).toBe("v2");
+		expect(details.e2eeSalt).toBe("salt-guest");
+	});
+});
+
+describe("E2EE signaling payloads", () => {
+	it("passes encryption metadata when creating WebRTC transport", async () => {
+		const client = createClient();
+		client.connected = true;
+		client.connectionDetails.e2eeRequired = true;
+		client.connectionDetails.e2eeKeyVersion = "v3";
+
+		const sendRequestSpy = vi.spyOn(client, "sendRequest").mockResolvedValue({
+			id: "transport-1",
+			iceParameters: {},
+			iceCandidates: [],
+			dtlsParameters: {},
+			success: true,
+		});
+
+		await client.createWebRtcTransport("send");
+
+		expect(sendRequestSpy).toHaveBeenCalledWith("create_webrtc_transport", {
+			direction: "send",
+			encryptionEnabled: true,
+			keyVersion: "v3",
+		});
+	});
+
+	it("includes E2EE capability metadata in join request", async () => {
+		const client = createClient();
+		client.connected = true;
+		client.connectionDetails.e2eeRequired = true;
+		client.connectionDetails.e2eeKeyVersion = "v7";
+		client.setE2EEPassphrase("shared-secret");
+
+		const originalSender = (
+			globalThis as typeof globalThis & {
+				RTCRtpSender?: {
+					prototype?: { createEncodedStreams?: () => void };
+				};
+			}
+		).RTCRtpSender;
+
+		try {
+			(
+				globalThis as typeof globalThis & {
+					RTCRtpSender?: {
+						prototype?: { createEncodedStreams?: () => void };
+					};
+				}
+			).RTCRtpSender = {
+				prototype: {
+					createEncodedStreams: () => {},
+				},
+			};
+
+			const sendRequestSpy = vi
+				.spyOn(client, "sendRequest")
+				.mockResolvedValue({ success: true });
+
+			await client.joinRoom(
+				"room-1",
+				{ name: "Alice" },
+				{ audio_enabled: true },
+			);
+
+			expect(sendRequestSpy).toHaveBeenCalledWith("join_room", {
+				roomId: "room-1",
+				userData: { name: "Alice" },
+				mediaState: { audio_enabled: true },
+				e2ee: {
+					enabled: true,
+					keyVersion: "v7",
+					keyProof: expect.any(String),
+					capability: {
+						supported: true,
+						mode: "insertable-streams",
+					},
+				},
+			});
+		} finally {
+			(
+				globalThis as typeof globalThis & {
+					RTCRtpSender?: {
+						prototype?: { createEncodedStreams?: () => void };
+					};
+				}
+			).RTCRtpSender = originalSender;
+		}
+	});
+
+	it("keeps e2ee enabled=false when passphrase is missing", async () => {
+		const client = createClient();
+		client.connected = true;
+		client.connectionDetails.e2eeRequired = true;
+		client.connectionDetails.e2eeKeyVersion = "v7";
+
+		const sendRequestSpy = vi
+			.spyOn(client, "sendRequest")
+			.mockResolvedValue({ success: true });
+
+		await client.joinRoom("room-1", { name: "Alice" }, { audio_enabled: true });
+
+		expect(sendRequestSpy).toHaveBeenCalledWith(
+			"join_room",
+			expect.objectContaining({
+				e2ee: expect.objectContaining({
+					enabled: false,
+					keyVersion: "v7",
+					keyProof: null,
+				}),
+			}),
+		);
 	});
 });
 
@@ -399,6 +523,9 @@ describe("disconnect", () => {
 			sfuPort: "443",
 			tokenExpiresAt: 100,
 			codecStrategy: "svc",
+			e2eeRequired: false,
+			e2eeKeyVersion: null,
+			e2eeSalt: null,
 		};
 		client.disconnect();
 		expect(client.connected).toBe(false);

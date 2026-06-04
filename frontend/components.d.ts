@@ -16,6 +16,7 @@ declare module 'vue' {
     ChatPanel: typeof import('./src/components/ChatPanel.vue')['default']
     ClickToCopyField: typeof import('./src/components/ClickToCopyField.vue')['default']
     DeviceSettingsTab: typeof import('./src/components/settings/DeviceSettingsTab.vue')['default']
+    E2EEKeyDialog: typeof import('./src/components/E2EEKeyDialog.vue')['default']
     EmojiPicker: typeof import('./src/components/EmojiPicker.vue')['default']
     FloatingReactions: typeof import('./src/components/FloatingReactions.vue')['default']
     GroupTile: typeof import('./src/components/GroupTile.vue')['default']

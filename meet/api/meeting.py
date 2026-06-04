@@ -1,6 +1,7 @@
 # Copyright (c) 2025, Frappe and contributors
 # For license information, please see license.txt
 
+import hashlib
 import secrets
 import time
 from typing import TYPE_CHECKING
@@ -49,6 +50,40 @@ def _generate_sfu_token(
 
 def _get_codec_strategy() -> str:
 	return frappe.get_cached_doc("Sae Settings").codec_strategy or "svc"
+
+
+def _is_e2ee_enabled(meeting_id: str) -> bool:
+	return bool(frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_enabled"))
+
+
+def _get_e2ee_key_version(meeting_id: str) -> str | None:
+	if not _is_e2ee_enabled(meeting_id):
+		return None
+	version = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_key_version")
+	return str(version) if version else None
+
+
+def _get_e2ee_salt(meeting_id: str) -> str:
+	return hashlib.sha256(f"meet-e2ee:{meeting_id}".encode()).hexdigest()
+
+
+def _get_e2ee_key_proof(meeting_id: str) -> str | None:
+	proof = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_key_proof")
+	return str(proof) if proof else None
+
+
+def _get_e2ee_metadata(meeting_id: str) -> dict:
+	return {
+		"e2ee_required": _is_e2ee_enabled(meeting_id),
+		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_salt": _get_e2ee_salt(meeting_id),
+		"e2ee_key_proof": _get_e2ee_key_proof(meeting_id),
+	}
+
+
+def _add_e2ee_metadata(payload: dict, meeting_id: str) -> dict:
+	payload.update(_get_e2ee_metadata(meeting_id))
+	return payload
 
 
 @frappe.whitelist()
@@ -104,6 +139,7 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		user_avatar=user_avatar,
 		is_host=is_host,
 		is_cohost=is_cohost,
+		**_get_e2ee_metadata(meeting_id),
 	)
 
 	return {
@@ -113,6 +149,9 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		"user_id": user,
 		"meeting_id": meeting_id,
 		"codec_strategy": _get_codec_strategy(),
+		"e2ee_required": _is_e2ee_enabled(meeting_id),
+		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"user_data": {
 			"name": user_fullname,
 			"email": user,
@@ -266,9 +305,17 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		user_avatar=user_avatar,
 		is_host=is_host,
 		is_cohost=is_cohost,
+		**_get_e2ee_metadata(meeting_id),
 	)
 
-	return {"auth_token": auth_token, "expires_in": 3600, "codec_strategy": _get_codec_strategy()}
+	return {
+		"auth_token": auth_token,
+		"expires_in": 3600,
+		"codec_strategy": _get_codec_strategy(),
+		"e2ee_required": _is_e2ee_enabled(meeting_id),
+		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_salt": _get_e2ee_salt(meeting_id),
+	}
 
 
 @frappe.whitelist()
@@ -367,6 +414,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				user_name=guest_name_clean,
 				is_host=False,
 				is_guest=True,
+				**_get_e2ee_metadata(meeting_id),
 			)
 			return {
 				"status": "joined",
@@ -377,6 +425,9 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"sfu_url": sfu_config["sfu_server_url"],
 				"sfu_port": sfu_config["sfu_server_port"],
 				"host_only_chat": bool(meeting.host_only_chat),
+				"e2ee_required": _is_e2ee_enabled(meeting_id),
+				"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+				"e2ee_salt": _get_e2ee_salt(meeting_id),
 				"message": "Successfully joined meeting",
 			}
 		elif guest_id not in meeting.get_waiting_room():
@@ -399,6 +450,7 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		user_name=guest_name_clean,
 		is_host=False,
 		is_guest=True,
+		**_get_e2ee_metadata(meeting_id),
 	)
 
 	meeting.add_guest_to_members(guest_id)
@@ -412,6 +464,9 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
 		"host_only_chat": bool(meeting.host_only_chat),
+		"e2ee_required": _is_e2ee_enabled(meeting_id),
+		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"message": "Successfully joined meeting",
 	}
 
@@ -449,6 +504,7 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		user_name=guest_name,
 		is_host=False,
 		is_guest=True,
+		**_get_e2ee_metadata(meeting_id),
 	)
 
 	return {
@@ -460,6 +516,9 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
 		"host_only_chat": bool(meeting.host_only_chat),
+		"e2ee_required": _is_e2ee_enabled(meeting_id),
+		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"message": "Successfully joined meeting",
 	}
 
@@ -495,6 +554,9 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
 		"codec_strategy": _get_codec_strategy(),
+		"e2ee_required": _is_e2ee_enabled(meeting_id),
+		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_salt": _get_e2ee_salt(meeting_id),
 	}
 
 
@@ -553,3 +615,77 @@ def check_meeting_access(meeting_id: str) -> dict:
 		frappe.throw(_("Meeting not found"))
 	except Exception as e:
 		frappe.throw(str(e))
+
+
+@frappe.whitelist()
+def get_meeting_e2ee_details(meeting_id: str) -> dict:
+	"""Return E2EE status for hosts/co-hosts.
+
+	The key itself is never stored server-side, so the host must obtain it
+	from their own session (URL share link or browser local storage).
+	"""
+	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+	if not meeting.is_host_or_cohost(frappe.session.user):
+		frappe.throw(_("Only hosts and co-hosts can view E2EE details"), frappe.PermissionError)
+
+	return {
+		"e2ee_enabled": bool(getattr(meeting, "e2ee_enabled", False)),
+		"e2ee_key_version": getattr(meeting, "e2ee_key_version", None) or None,
+	}
+
+
+@frappe.whitelist()
+def convert_meeting_to_e2ee(
+	meeting_id: str,
+	e2ee_key_proof: str | None = None,
+	e2ee_key_version: str | None = None,
+) -> dict:
+	"""Enable E2EE for a meeting.
+
+	The E2EE key is generated on the host's device. The client sends the
+	SHA-256 proof of the key plus a version string so the server can
+	verify joining clients without ever holding the key.
+	"""
+	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
+
+	if not meeting.is_host_or_cohost(frappe.session.user):
+		frappe.throw(_("Only hosts and co-hosts can convert meetings to E2EE"), frappe.PermissionError)
+
+	if not e2ee_key_proof or not e2ee_key_version:
+		frappe.throw(
+			_("E2EE key proof and version are required"),
+			frappe.ValidationError,
+		)
+
+	meeting.enable_e2ee(
+		e2ee_key_proof=e2ee_key_proof,
+		e2ee_key_version=e2ee_key_version,
+	)
+
+	# Notify all current participants that E2EE has been enabled
+	users_notified = set()
+	for member in meeting.members:
+		user = member.user
+		if not user or user in users_notified:
+			continue
+		users_notified.add(user)
+		if user.startswith("guest_"):
+			frappe.publish_realtime(
+				"meeting:e2ee_enabled",
+				{"meeting_id": meeting_id},
+				room=f"guest:{user}",
+				after_commit=True,
+			)
+		else:
+			frappe.publish_realtime(
+				"meeting:e2ee_enabled",
+				{"meeting_id": meeting_id},
+				user=user,
+				after_commit=True,
+			)
+
+	return {
+		"e2ee_enabled": bool(getattr(meeting, "e2ee_enabled", False)),
+		"e2ee_key_version": getattr(meeting, "e2ee_key_version", None),
+	}

@@ -1,6 +1,7 @@
 import type { APIRequestContext } from "@playwright/test";
 
 type MeetingType = "open" | "restricted";
+const baseURL = process.env.BASE_URL ?? "http://localhost:8096";
 
 interface FrappeMethodResponse<T> {
 	message?: T;
@@ -11,11 +12,14 @@ export async function createMeetingViaApi(
 	request: APIRequestContext,
 	meetingType: MeetingType = "open",
 ): Promise<string> {
-	const response = await request.post("/api/method/meet.api.meeting.create", {
+	const response = await request.post(
+		new URL("/api/method/meet.api.meeting.create", baseURL).toString(),
+		{
 		data: {
 			meeting_type: meetingType,
 		},
-	});
+		},
+	);
 
 	if (!response.ok()) {
 		const responseBody = await response.text();
@@ -38,7 +42,10 @@ export async function clearMeetingCreateRateLimit(
 	request: APIRequestContext,
 ): Promise<void> {
 	await request.post(
-		"/api/method/meet.api.test_helpers.clear_create_rate_limit",
+		new URL(
+			"/api/method/meet.api.test_helpers.clear_create_rate_limit",
+			baseURL,
+		).toString(),
 		{ data: {} },
 	);
 }

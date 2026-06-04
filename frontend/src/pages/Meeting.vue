@@ -174,6 +174,16 @@
 			<RejectionOverlay v-if="isRejected && isGuestSession" @leave="goHome" />
 		</template>
 
+		<E2EEKeyDialog
+			:model-value="showE2EEKeyDialog"
+			:passphrase="e2eePassphraseInput"
+			:error-message="e2eeKeyDialogError"
+			@update:passphrase="e2eePassphraseInput = $event"
+			@update:model-value="handleE2EEKeyDialogUpdate"
+			@submit="submitE2EEKeyDialog"
+			@cancel="cancelE2EEKeyDialog"
+		/>
+
 		<!-- Chat notifications -->
 		<ChatNotificationQueue
 			ref="chatNotificationQueue"
@@ -197,6 +207,7 @@ import { useRoute, useRouter } from "vue-router";
 
 import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
+import E2EEKeyDialog from "../components/E2EEKeyDialog.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
 import LobbyOverlay from "../components/LobbyOverlay.vue";
 import MeetingLayout from "../components/MeetingLayout.vue";
@@ -261,6 +272,53 @@ const gridLayout = useGridLayout(mediaState);
 
 // --- Lobby notification tracking ---
 const notifiedLobbyUsers = ref(new Set<string>());
+const showE2EEKeyDialog = ref(false);
+const e2eePassphraseInput = ref("");
+const e2eeKeyDialogError = ref("");
+let resolveE2EEKeyDialog: ((value: string | null) => void) | null = null;
+
+const requestE2EEPassphrase = async (): Promise<string | null> => {
+	const urlKey = new URLSearchParams(window.location.search).get("e");
+	if (urlKey) {
+		return urlKey;
+	}
+	return new Promise((resolve) => {
+		e2eePassphraseInput.value = "";
+		e2eeKeyDialogError.value = "";
+		showE2EEKeyDialog.value = true;
+		resolveE2EEKeyDialog = resolve;
+	});
+};
+
+const submitE2EEKeyDialog = () => {
+	const normalized = e2eePassphraseInput.value.trim();
+	if (!normalized) {
+		e2eeKeyDialogError.value = "Please enter a valid meeting key.";
+		return;
+	}
+
+	showE2EEKeyDialog.value = false;
+	e2eeKeyDialogError.value = "";
+	resolveE2EEKeyDialog?.(normalized);
+	resolveE2EEKeyDialog = null;
+};
+
+const cancelE2EEKeyDialog = () => {
+	showE2EEKeyDialog.value = false;
+	e2eeKeyDialogError.value = "";
+	if (resolveE2EEKeyDialog) {
+		resolveE2EEKeyDialog(null);
+		resolveE2EEKeyDialog = null;
+	}
+};
+
+const handleE2EEKeyDialogUpdate = (value: boolean) => {
+	if (value) {
+		showE2EEKeyDialog.value = true;
+		return;
+	}
+	cancelE2EEKeyDialog();
+};
 
 // --- Meeting doc ---
 const {
@@ -356,6 +414,7 @@ const sfuConnection = useSFUConnection({
 	onActiveSpeakerChanged: (participantIds: string[]) => {
 		participantStore.activeSpeakerIds = participantIds;
 	},
+	requestE2EEPassphrase,
 });
 
 // --- Media Controls ---
@@ -611,6 +670,43 @@ const setSinkIdOnVideoElements = async (sinkId: string) => {
 	await Promise.all(promises);
 };
 
+const handleE2EENeedsMediaRepublish = async () => {
+	if (!mediaState.isCameraOn && !mediaState.isMicOn) return;
+	try {
+		const { stream } = await mediaControls.acquireUserMedia(
+			mediaState.isCameraOn,
+			mediaState.isMicOn,
+		);
+		mediaState.localStream = stream;
+		if (mediaState.isCameraOn) {
+			mediaState.cameraPermissionGranted = true;
+			await mediaControls.applyBackgroundEffectsToLocalStream(true);
+		}
+		if (mediaState.isMicOn) {
+			mediaState.microphonePermissionGranted = true;
+		}
+		if (mediaState.localVideo) {
+			mediaControls.setLocalVideoRef(mediaState.localVideo);
+		}
+		if (mediaState.localStream && sfuConnection.sfuManager.value) {
+			const videoTracks = mediaState.processedStream
+				? mediaState.processedStream.getVideoTracks()
+				: mediaState.localStream.getVideoTracks();
+			const audioTracks = mediaState.localStream.getAudioTracks();
+			const streamToPublish = new MediaStream([...videoTracks, ...audioTracks]);
+			await sfuConnection.sfuManager.value.publishMedia(streamToPublish, {
+				publishVideo: mediaState.isCameraOn,
+				publishAudio: mediaState.isMicOn,
+			});
+		}
+	} catch (error) {
+		console.error(
+			"Failed to republish media after E2EE reconfiguration:",
+			error,
+		);
+	}
+};
+
 // --- Lifecycle ---
 onMounted(async () => {
 	// get wasJustCreated before resetting stores else it'll be reset to false
@@ -635,6 +731,10 @@ onMounted(async () => {
 	window.addEventListener("keydown", keyboardShortcuts.handleKeyDown);
 	window.addEventListener("keyup", keyboardShortcuts.handleKeyUp);
 	document.addEventListener("fullscreenchange", syncFullscreenState);
+	document.addEventListener(
+		"meet:e2ee-needs-media-republish",
+		handleE2EENeedsMediaRepublish,
+	);
 	syncFullscreenState();
 
 	// Check meeting access for unauthenticated users
@@ -700,9 +800,20 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+	if (resolveE2EEKeyDialog) {
+		resolveE2EEKeyDialog(null);
+		resolveE2EEKeyDialog = null;
+	}
+	showE2EEKeyDialog.value = false;
+	e2eeKeyDialogError.value = "";
+
 	window.removeEventListener("keydown", keyboardShortcuts.handleKeyDown);
 	window.removeEventListener("keyup", keyboardShortcuts.handleKeyUp);
 	document.removeEventListener("fullscreenchange", syncFullscreenState);
+	document.removeEventListener(
+		"meet:e2ee-needs-media-republish",
+		handleE2EENeedsMediaRepublish,
+	);
 });
 
 // Watch for localVideo element and localStream connection

@@ -10,6 +10,7 @@ import { useRouter } from "vue-router";
 import { useSocket } from "../socket";
 import audioNotificationManager from "../utils/audioNotifications";
 import { getErrorMessage } from "../utils/error";
+import { setE2EEErrorHandler } from "../utils/media/e2ee";
 import { SocketIOSignalChannel } from "../utils/media/SignalChannel";
 import { SFUClient } from "../utils/SFUClient";
 import { SFUMeetingManager } from "../utils/SFUMeetingManager";
@@ -64,6 +65,7 @@ export function useSFUConnection(deps: {
 	onScreenShareStarted: (data: SFUScreenShareData) => void;
 	onScreenShareStopped: (data: SFUScreenShareData) => void;
 	onActiveSpeakerChanged: (participantIds: string[]) => void;
+	requestE2EEPassphrase?: () => Promise<string | null>;
 }): SFUConnectionAPI {
 	const {
 		connectionState,
@@ -78,6 +80,7 @@ export function useSFUConnection(deps: {
 		onScreenShareStarted,
 		onScreenShareStopped,
 		onActiveSpeakerChanged,
+		requestE2EEPassphrase,
 	} = deps;
 
 	const router = useRouter();
@@ -91,6 +94,7 @@ export function useSFUConnection(deps: {
 
 	const realtimeListenersSetup = shallowRef(false);
 	const joiningInProgress = shallowRef(false);
+	const hasShownE2EEKeyMismatchToast = shallowRef(false);
 
 	const joinMeetingAPI = createResource({
 		url: "meet.api.meeting.join_meeting",
@@ -292,6 +296,18 @@ export function useSFUConnection(deps: {
 		}
 
 		try {
+			setE2EEErrorHandler(({ code }) => {
+				if (
+					code === "decrypt-failure-threshold" &&
+					!hasShownE2EEKeyMismatchToast.value
+				) {
+					hasShownE2EEKeyMismatchToast.value = true;
+					toast.error(
+						"Unable to decrypt meeting media. Verify that your E2EE key matches the host key.",
+					);
+				}
+			});
+
 			const manager = new SFUMeetingManager(sfuClient);
 			manager.initialize({
 				meetingId,
@@ -306,6 +322,29 @@ export function useSFUConnection(deps: {
 
 			await manager.connect(connectionState.guestAuthToken);
 			connectionState.codecStrategy = sfuClient.getCodecStrategy() || "svc";
+
+			if (sfuClient.isE2EERequired()) {
+				if (!sfuClient.isInsertableStreamsSupported()) {
+					throw new Error(
+						"This meeting requires E2EE, but your browser does not support encoded insertable streams.",
+					);
+				}
+
+				if (!sfuClient.hasE2EEPassphrase()) {
+					const passphrase = requestE2EEPassphrase
+						? await requestE2EEPassphrase()
+						: window.prompt(
+								"This meeting requires end-to-end encryption. Enter the meeting key to continue.",
+							);
+					if (!passphrase?.trim()) {
+						throw new Error(
+							"A valid E2EE key is required to join this meeting.",
+						);
+					}
+
+					sfuClient.setE2EEPassphrase(passphrase);
+				}
+			}
 
 			let userData: Record<string, unknown>;
 			if (guestName) {
@@ -585,6 +624,108 @@ export function useSFUConnection(deps: {
 		}
 	};
 
+	const e2eeKeyStorageKey = `meet:e2ee-key:${meetingId}`;
+
+	let autoE2EEKey: string | null =
+		new URLSearchParams(window.location.search).get("e") ||
+		localStorage.getItem(e2eeKeyStorageKey);
+
+	if (autoE2EEKey) {
+		try {
+			localStorage.setItem(e2eeKeyStorageKey, autoE2EEKey);
+		} catch {
+			// localStorage may be disabled — best effort
+		}
+	}
+
+	const handleE2EEKeySet = (event: Event) => {
+		const detail = (event as CustomEvent).detail;
+		if (detail?.key) {
+			autoE2EEKey = detail.key;
+			try {
+				localStorage.setItem(e2eeKeyStorageKey, detail.key);
+			} catch {
+				// best effort
+			}
+		}
+	};
+
+	let isReconfiguringForE2EE = false;
+
+	const handleMeetingE2EEEnabled = async (data: { meeting_id?: string }) => {
+		if (data.meeting_id !== meetingId) return;
+		if (isReconfiguringForE2EE) return;
+
+		isReconfiguringForE2EE = true;
+
+		try {
+			if (!sfuClient?.isConnected?.()) return;
+
+			const hadCamera = mediaState.isCameraOn;
+			const hadMic = mediaState.isMicOn;
+
+			if (mediaState.localStream) {
+				for (const track of mediaState.localStream.getTracks()) {
+					track.stop();
+				}
+				mediaState.localStream = null;
+			}
+			if (mediaState.processedStream) {
+				mediaState.processedStream = null;
+			}
+
+			await sfuClient.refreshToken();
+
+			if (!sfuClient.hasE2EEPassphrase()) {
+				let passphrase: string | null = autoE2EEKey;
+				autoE2EEKey = null;
+
+				if (!passphrase) {
+					passphrase = requestE2EEPassphrase
+						? await requestE2EEPassphrase()
+						: window.prompt(
+								"This meeting has been converted to end-to-end encryption. Enter the meeting key to continue.",
+							);
+				}
+
+				if (!passphrase?.trim()) {
+					console.warn("E2EE passphrase required but not provided");
+					return;
+				}
+
+				sfuClient.setE2EEPassphrase(passphrase);
+			}
+
+			const userData = {
+				userId: currentUser.currentUser.value?.user_id || "",
+				name:
+					currentUser.currentUser.value?.full_name ||
+					currentUser.currentUser.value?.name ||
+					"",
+				avatar: currentUser.currentUser.value?.avatar || null,
+				is_guest: currentUser.currentUser.value?.is_guest || false,
+			};
+			await sfuClient.joinRoom(meetingId, userData, {
+				audio_enabled: mediaState.isMicOn,
+				video_enabled: mediaState.isCameraOn,
+			});
+
+			if (sfuManager.value) {
+				await sfuManager.value.reconfigureForE2EE(null);
+			}
+
+			document.dispatchEvent(
+				new CustomEvent("meet:e2ee-needs-media-republish", {
+					detail: { hadCamera, hadMic },
+				}),
+			);
+		} catch (error) {
+			console.error("Failed to reconfigure for E2EE:", error);
+		} finally {
+			isReconfiguringForE2EE = false;
+		}
+	};
+
 	const setupFrappeRealtimeEventListeners = () => {
 		if (realtimeListenersSetup.value) {
 			return;
@@ -600,6 +741,9 @@ export function useSFUConnection(deps: {
 		socket.on("meeting_join_rejected", handleMeetingJoinRejected);
 		socket.on("meeting_user_approved", handleMeetingUserApproved);
 		socket.on("meeting_user_rejected", handleMeetingUserRejected);
+		socket.on("meeting:e2ee_enabled", handleMeetingE2EEEnabled);
+
+		document.addEventListener("meet:e2ee-key-set", handleE2EEKeySet);
 
 		realtimeListenersSetup.value = true;
 	};
@@ -612,6 +756,11 @@ export function useSFUConnection(deps: {
 		socket.off("meeting_join_rejected", handleMeetingJoinRejected);
 		socket.off("meeting_user_approved", handleMeetingUserApproved);
 		socket.off("meeting_user_rejected", handleMeetingUserRejected);
+		socket.off("meeting:e2ee_enabled", handleMeetingE2EEEnabled);
+
+		document.removeEventListener("meet:e2ee-key-set", handleE2EEKeySet);
+
+		autoE2EEKey = null;
 	};
 
 	const handleGuestJoinResult = async (
@@ -735,6 +884,9 @@ export function useSFUConnection(deps: {
 	};
 
 	onUnmounted(async () => {
+		setE2EEErrorHandler(null);
+		hasShownE2EEKeyMismatchToast.value = false;
+
 		if (activeSpeakerTimeout.value) {
 			clearTimeout(activeSpeakerTimeout.value);
 			activeSpeakerTimeout.value = null;

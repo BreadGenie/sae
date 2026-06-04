@@ -14,6 +14,12 @@ import { clearMeetingCreateRateLimit, createMeetingViaApi, type MeetingType } fr
 const isCI = !!process.env.CI;
 const previewTimeout = isCI ? 45_000 : 20_000;
 const meetingReadyTimeout = isCI ? 60_000 : 20_000;
+const defaultE2EEKey = process.env.E2EE_TEST_KEY || "test-e2ee-key";
+const baseURL = process.env.BASE_URL ?? "http://localhost:8096";
+
+function appUrl(pathname: string): string {
+	return new URL(pathname, baseURL).toString();
+}
 
 function readMeetingsState(): MeetingsState {
 	const raw = fs.readFileSync(MEETINGS_STATE_FILE, "utf-8");
@@ -23,9 +29,9 @@ function readMeetingsState(): MeetingsState {
 interface Participant {
 	context: BrowserContext;
 	page: Page;
-	joinMeeting(meetingId: string): Promise<void>;
-	joinAsGuest(meetingId: string, guestName: string): Promise<void>;
-	joinAsHost(meetingId: string): Promise<void>;
+	joinMeeting(meetingId: string, e2eeKey?: string): Promise<void>;
+	joinAsGuest(meetingId: string, guestName: string, e2eeKey?: string): Promise<void>;
+	joinAsHost(meetingId: string, e2eeKey?: string): Promise<void>;
 	endCall(): Promise<void>;
 }
 
@@ -52,7 +58,32 @@ async function waitForMeetingReady(page: Page): Promise<void> {
 	await expect(page.getByTestId("toolbar-end-call")).toBeVisible();
 }
 
-async function joinFromPreview(page: Page): Promise<void> {
+async function enterE2EEKeyIfNeeded(
+	page: Page,
+	key: string = defaultE2EEKey,
+): Promise<void> {
+	const dialog = page.getByTestId("e2ee-key-dialog");
+	const input = page.getByTestId("e2ee-key-input");
+	const submit = page.getByRole("button", { name: "Continue" });
+
+	const visible = await dialog
+		.waitFor({ state: "visible", timeout: 8_000 })
+		.then(() => true)
+		.catch(() => false);
+
+	if (!visible) {
+		return;
+	}
+
+	await input.fill(key);
+	await submit.click();
+	await dialog.waitFor({ state: "hidden", timeout: previewTimeout });
+}
+
+async function joinFromPreview(
+	page: Page,
+	e2eeKey: string = defaultE2EEKey,
+): Promise<void> {
 	const preview = page.getByTestId("meeting-preview");
 	const meetingLayout = page.getByTestId("meeting-layout");
 	const joinButton = page.getByTestId("join-meeting-preview-button");
@@ -70,6 +101,9 @@ async function joinFromPreview(page: Page): Promise<void> {
 		await expect(joinButton).toBeEnabled({ timeout: previewTimeout });
 		try {
 			await joinButton.click({ timeout: previewTimeout });
+			await enterE2EEKeyIfNeeded(page, e2eeKey);
+			await waitForMeetingReady(page);
+			return;
 		} catch (error) {
 			const previewStillVisible = await preview.isVisible().catch(() => false);
 			const layoutVisible = await meetingLayout.isVisible().catch(() => false);
@@ -114,11 +148,16 @@ async function buildParticipant(browser: Browser): Promise<Participant> {
 	return {
 		context,
 		page,
-		async joinMeeting(meetingId: string) {
-			await page.goto(`/meet/${meetingId}`);
+		async joinMeeting(meetingId: string, e2eeKey: string = defaultE2EEKey) {
+			await page.goto(appUrl(`/meet/${meetingId}`));
+			await joinFromPreview(page, e2eeKey);
 		},
-		async joinAsGuest(meetingId: string, guestName: string) {
-			await page.goto(`/meet/${meetingId}`);
+		async joinAsGuest(
+			meetingId: string,
+			guestName: string,
+			e2eeKey: string = defaultE2EEKey,
+		) {
+			await page.goto(appUrl(`/meet/${meetingId}`));
 			await expect(page.getByTestId("meeting-preview")).toBeVisible({
 				timeout: previewTimeout,
 			});
@@ -128,13 +167,13 @@ async function buildParticipant(browser: Browser): Promise<Participant> {
 			await expect(page.getByTestId("join-meeting-preview-button")).toBeEnabled({
 				timeout: previewTimeout,
 			});
-			await joinFromPreview(page);
+			await joinFromPreview(page, e2eeKey);
 		},
-		async joinAsHost(meetingId: string) {
+		async joinAsHost(meetingId: string, e2eeKey: string = defaultE2EEKey) {
 			await loginViaApi(context.request);
-			await page.goto("/meet/");
-			await page.goto(`/meet/${meetingId}`);
-			await joinFromPreview(page);
+			await page.goto(appUrl("/meet/"));
+			await page.goto(appUrl(`/meet/${meetingId}`));
+			await joinFromPreview(page, e2eeKey);
 		},
 		async endCall() {
 			await page.getByTestId("toolbar-end-call").click();
@@ -149,7 +188,7 @@ export const test = base.extend<TestFixtures>({
 		await prepareContext(context);
 		await loginViaApi(context.request);
 		const page = await context.newPage();
-		await page.goto("/meet/");
+		await page.goto(appUrl("/meet/"));
 		await use(page);
 		await context.close();
 	},
@@ -194,3 +233,4 @@ test.beforeEach(async ({ hostPage }) => {
 });
 
 export { expect, joinFromPreview };
+export { appUrl };

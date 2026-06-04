@@ -6,6 +6,7 @@
 import type { Consumer, Producer } from "mediasoup-client/types";
 import type { SFUClient } from "../SFUClient";
 import { resolveCodecStrategy } from "./codecStrategy";
+import { setupReceiverTransform, setupSenderTransform } from "./e2ee";
 import {
 	audioCodecOptions,
 	screenEncodings,
@@ -183,6 +184,10 @@ export class TransportManager {
 		return this.sfuClient;
 	}
 
+	private shouldEnableE2EETransforms(): boolean {
+		return Boolean(this.sfuClient?.isE2EEReadyForMedia?.());
+	}
+
 	private extractRouterRtpCapabilities(response: unknown): RouterCapabilities {
 		if (
 			typeof response === "object" &&
@@ -216,12 +221,19 @@ export class TransportManager {
 		if (!this.device) throw new Error("Device failed to initialize");
 		const client = this.getClient();
 		const rawTransportParams = await client.createWebRtcTransport("send");
+		const shouldEnableE2EE = this.shouldEnableE2EETransforms();
+
+		const additionalSettings: Record<string, unknown> = {};
+		if (shouldEnableE2EE) {
+			additionalSettings.encodedInsertableStreams = true;
+		}
 
 		this.sendTransport = this.device.createSendTransport({
 			id: rawTransportParams.id,
 			iceParameters: rawTransportParams.iceParameters,
 			iceCandidates: rawTransportParams.iceCandidates,
 			dtlsParameters: rawTransportParams.dtlsParameters,
+			additionalSettings,
 		});
 		this.setupSendTransportHandlers();
 
@@ -284,12 +296,19 @@ export class TransportManager {
 		if (!this.device) throw new Error("Device failed to initialize");
 		const client = this.getClient();
 		const rawTransportParams = await client.createWebRtcTransport("recv");
+		const shouldEnableE2EE = this.shouldEnableE2EETransforms();
+
+		const additionalSettings: Record<string, unknown> = {};
+		if (shouldEnableE2EE) {
+			additionalSettings.encodedInsertableStreams = true;
+		}
 
 		this.recvTransport = this.device.createRecvTransport({
 			id: rawTransportParams.id,
 			iceParameters: rawTransportParams.iceParameters,
 			iceCandidates: rawTransportParams.iceCandidates,
 			dtlsParameters: rawTransportParams.dtlsParameters,
+			additionalSettings,
 		});
 		this.setupReceiveTransportHandlers();
 		return this.recvTransport;
@@ -406,6 +425,13 @@ export class TransportManager {
 		}
 
 		const producer = await this.sendTransport.produce(produceOptions);
+		if (this.shouldEnableE2EETransforms()) {
+			try {
+				await setupSenderTransform(producer.rtpSender, this.sfuClient as never);
+			} catch (error) {
+				console.warn("Failed to setup E2EE sender transform:", error);
+			}
+		}
 
 		if (safeAppData.type === "screen") {
 			try {
@@ -465,6 +491,17 @@ export class TransportManager {
 			console.info("Screen share consumer created", {
 				consumerId: consumer.id,
 			});
+
+		if (consumer && this.shouldEnableE2EETransforms()) {
+			try {
+				await setupReceiverTransform(
+					consumer.rtpReceiver,
+					this.sfuClient as never,
+				);
+			} catch (error) {
+				console.warn("Failed to setup E2EE receiver transform:", error);
+			}
+		}
 		return consumer;
 	}
 

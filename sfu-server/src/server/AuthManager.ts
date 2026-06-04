@@ -77,6 +77,11 @@ export class AuthManager {
 			socket.isHost = decoded.is_host || false;
 			socket.isCohost = decoded.is_cohost || false;
 			socket.scope = decoded.scope || 'presence-preview';
+			socket.e2eeRequired = Boolean(decoded.e2ee_required);
+			socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
+			socket.e2eeSalt = decoded.e2ee_salt || undefined;
+			socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
+			socket.e2eeReady = !socket.e2eeRequired;
 			socket.currentToken = token;
 			socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
 			this.scheduleTokenExpiry(socket);
@@ -118,6 +123,11 @@ export class AuthManager {
 
 		socket.currentToken = token;
 		socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
+		socket.e2eeRequired = Boolean(decoded.e2ee_required);
+		socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
+		socket.e2eeSalt = decoded.e2ee_salt || undefined;
+		socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
+		socket.e2eeReady = socket.e2eeReady || !socket.e2eeRequired;
 
 		if (socket.handshake?.auth) {
 			socket.handshake.auth.token = token;
@@ -184,6 +194,11 @@ export class AuthManager {
 		this.clearTokenExpiry(socket);
 		socket.currentToken = undefined;
 		socket.tokenExpiresAt = undefined;
+		socket.e2eeReady = undefined;
+		socket.e2eeRequired = undefined;
+		socket.e2eeKeyVersion = undefined;
+		socket.e2eeSalt = undefined;
+		socket.e2eeExpectedKeyProof = undefined;
 	}
 
 	private scheduleTokenExpiry(socket: Socket): void {

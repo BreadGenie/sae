@@ -34,6 +34,9 @@ class IntegrationTestMeetingApi(IntegrationTestCase):
 		self.assertEqual(result["user_id"], self.member_email)
 		self.assertEqual(result["meeting_id"], self.meeting.name)
 		self.assertTrue(result["auth_token"])
+		self.assertFalse(result["e2ee_required"])
+		self.assertIsNone(result["e2ee_key_version"])
+		self.assertTrue(result["e2ee_salt"])
 
 	def test_restricted_meeting_non_member_cannot_get_sfu_connection_details(self):
 		frappe.set_user(self.outsider_email)

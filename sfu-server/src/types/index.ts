@@ -1,26 +1,21 @@
-import type { AudioLevelObserver } from 'mediasoup/node/lib/AudioLevelObserverTypes';
-import type { Consumer } from 'mediasoup/node/lib/ConsumerTypes';
-import type { Producer } from 'mediasoup/node/lib/ProducerTypes';
-import type { Router } from 'mediasoup/node/lib/RouterTypes';
 import type {
-	RouterRtpCodecCapability,
-	RtpCodecCapability,
-} from 'mediasoup/node/lib/rtpParametersTypes';
-import type {
+	ActiveSpeakerObserver,
 	AppData,
-	RtpCapabilities,
-	RtpParameters,
-} from 'mediasoup/node/lib/types';
-import type {
+	AudioLevelObserver,
+	Consumer,
 	DtlsParameters,
 	IceCandidate,
 	IceParameters,
+	Producer,
+	Router,
+	RouterRtpCodecCapability,
+	RtpCapabilities,
+	RtpCodecCapability,
+	RtpParameters,
 	WebRtcTransport,
-} from 'mediasoup/node/lib/WebRtcTransportTypes';
-import type {
 	WorkerLogLevel,
 	WorkerSettings,
-} from 'mediasoup/node/lib/WorkerTypes';
+} from 'mediasoup/types';
 import type {
 	ActiveSpeakerEvent,
 	AuthExpiredEvent,
@@ -391,7 +386,12 @@ export interface JWTPayload {
 	user_avatar?: string;
 	is_host: boolean;
 	is_cohost?: boolean;
+	is_guest?: boolean;
 	scope?: SFUScope;
+	e2ee_required?: boolean;
+	e2ee_key_version?: string;
+	e2ee_salt?: string;
+	e2ee_key_proof?: string;
 	session_id?: string;
 	exp?: number;
 	iat?: number;
@@ -425,5 +425,10 @@ declare module 'socket.io' {
 		tokenExpiresAt?: number;
 		tokenExpiryTimer?: NodeJS.Timeout;
 		scope?: SFUScope;
+		e2eeRequired?: boolean;
+		e2eeKeyVersion?: string;
+		e2eeSalt?: string;
+		e2eeExpectedKeyProof?: string;
+		e2eeReady?: boolean;
 	}
 }

@@ -279,7 +279,7 @@ export class SocketHandlerManager {
 	private setupRoomHandlers(socket: Socket): void {
 		socket.on('join_room', async (data, callback) => {
 			try {
-				const { roomId, userData, mediaState } = data;
+				const { roomId, userData, mediaState, e2ee } = data;
 				await this.handleJoinRoom(socket, {
 					roomId,
 					participantId: socket.userId,
@@ -291,6 +291,7 @@ export class SocketHandlerManager {
 						video_enabled: mediaState.video_enabled,
 						is_guest: userData.is_guest,
 					},
+					e2ee,
 				});
 				callback({ success: true });
 			} catch (error) {
@@ -456,11 +457,27 @@ export class SocketHandlerManager {
 
 	private async handleJoinRoom(
 		socket: Socket,
-		data: { roomId: string; participantId: string; userData: UserData },
+		data: {
+			roomId: string;
+			participantId: string;
+			userData: UserData;
+			e2ee?: {
+				enabled?: boolean;
+				keyVersion?: string;
+				keyProof?: string;
+				capability?: {
+					supported?: boolean;
+				};
+			};
+		},
 	): Promise<void> {
-		const { roomId, participantId, userData } = data;
+		const { roomId, participantId, userData, e2ee } = data;
 
 		try {
+			if (socket.scope === 'full') {
+				this.enforceE2EEJoinPolicy(socket, e2ee);
+			}
+
 			// Validate that roomId matches the token's meeting_id
 			if (socket.meetingId && socket.meetingId !== roomId) {
 				throw new Error(
@@ -537,7 +554,11 @@ export class SocketHandlerManager {
 		socket.on('create_webrtc_transport', async (data, callback) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
-				const { direction } = data;
+				const { direction, encryptionEnabled, keyVersion } = data;
+				this.enforceE2EETransportPolicy(socket, {
+					encryptionEnabled,
+					keyVersion,
+				});
 				const roomId = socket.meetingId;
 				const userId = socket.userId;
 
@@ -603,6 +624,11 @@ export class SocketHandlerManager {
 				}
 
 				this.authManager.ensureFullAccess(socket);
+				if (socket.e2eeRequired) {
+					throw new Error(
+						'Plain transport is not allowed when E2EE is required',
+					);
+				}
 
 				const roomId = socket.meetingId;
 				const userId = socket.userId;
@@ -625,6 +651,7 @@ export class SocketHandlerManager {
 		socket.on('create_producer', async (data, callback) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
+				this.enforceE2EEMediaPolicy(socket);
 				const { transportId, rtpParameters, kind, appData = {} } = data;
 				const producer = await this.mediasoup.createProducer(
 					transportId,
@@ -660,6 +687,7 @@ export class SocketHandlerManager {
 		socket.on('create_consumer', async (data, callback) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
+				this.enforceE2EEMediaPolicy(socket);
 				const { transportId, producerId, rtpCapabilities } = data;
 				const consumer = await this.mediasoup.createConsumer(
 					transportId,
@@ -800,6 +828,88 @@ export class SocketHandlerManager {
 				callback({ success: false, error: (error as Error).message });
 			}
 		});
+	}
+
+	private enforceE2EEJoinPolicy(
+		socket: Socket,
+		e2ee?: {
+			enabled?: boolean;
+			keyVersion?: string;
+			keyProof?: string;
+			capability?: { supported?: boolean };
+		},
+	): void {
+		if (!socket.e2eeRequired) {
+			socket.e2eeReady = true;
+			return;
+		}
+
+		if (!e2ee?.enabled) {
+			throw new Error('E2EE is required for this room');
+		}
+
+		if (!e2ee.capability?.supported) {
+			throw new Error('Client does not support required E2EE capabilities');
+		}
+
+		if (!e2ee.keyVersion) {
+			throw new Error('Missing E2EE key version in join request');
+		}
+
+		if (!e2ee.keyProof) {
+			throw new Error('Missing E2EE key proof in join request');
+		}
+
+		if (
+			socket.e2eeExpectedKeyProof &&
+			e2ee.keyProof !== socket.e2eeExpectedKeyProof
+		) {
+			throw new Error('E2EE key proof mismatch');
+		}
+
+		if (socket.e2eeKeyVersion && e2ee.keyVersion !== socket.e2eeKeyVersion) {
+			throw new Error('E2EE key version mismatch');
+		}
+
+		socket.e2eeReady = true;
+	}
+
+	private enforceE2EETransportPolicy(
+		socket: Socket,
+		data: {
+			encryptionEnabled?: boolean;
+			keyVersion?: string;
+		},
+	): void {
+		if (!socket.e2eeRequired) {
+			return;
+		}
+
+		if (!socket.e2eeReady) {
+			throw new Error('E2EE join handshake not completed');
+		}
+
+		if (!data.encryptionEnabled) {
+			throw new Error('Encrypted transport is required for this room');
+		}
+
+		if (!data.keyVersion) {
+			throw new Error('Missing E2EE key version for transport creation');
+		}
+
+		if (socket.e2eeKeyVersion && data.keyVersion !== socket.e2eeKeyVersion) {
+			throw new Error('E2EE key version mismatch for transport creation');
+		}
+	}
+
+	private enforceE2EEMediaPolicy(socket: Socket): void {
+		if (!socket.e2eeRequired) {
+			return;
+		}
+
+		if (!socket.e2eeReady) {
+			throw new Error('E2EE join handshake not completed');
+		}
 	}
 
 	private setupMediaControlHandlers(socket: Socket): void {
