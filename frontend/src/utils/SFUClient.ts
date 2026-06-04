@@ -115,6 +115,7 @@ export class SFUClient {
 	isRefreshingToken: boolean;
 	tokenRefreshTimer: ReturnType<typeof setTimeout> | null;
 	e2eePassphrase: string | null;
+	ownSenderId: number | null;
 
 	constructor(signalChannel: SignalChannel) {
 		this.signalChannel = signalChannel;
@@ -135,7 +136,16 @@ export class SFUClient {
 		this.isRefreshingToken = false;
 		this.tokenRefreshTimer = null;
 		this.e2eePassphrase = null;
+		this.ownSenderId = null;
 		this.setupDefaultHandlers();
+	}
+
+	getOwnSenderId(): number | null {
+		return this.ownSenderId;
+	}
+
+	setOwnSenderId(senderId: number | null): void {
+		this.ownSenderId = senderId;
 	}
 
 	// ==================== CONNECTION MANAGEMENT ====================
@@ -635,7 +645,7 @@ export class SFUClient {
 			this.connectionDetails.e2eeRequired && Boolean(this.e2eePassphrase);
 		const keyVersion = this.connectionDetails.e2eeKeyVersion;
 		const keyProof = await this.buildE2EEKeyProof(keyVersion);
-		return this.sendRequest("join_room", {
+		const result = (await this.sendRequest("join_room", {
 			roomId,
 			userData,
 			mediaState,
@@ -648,7 +658,11 @@ export class SFUClient {
 					mode: supportsInsertableStreams ? "insertable-streams" : "none",
 				},
 			},
-		});
+		})) as { success?: boolean; senderId?: number };
+		if (result && typeof result.senderId === "number") {
+			this.setOwnSenderId(result.senderId);
+		}
+		return result;
 	}
 
 	isE2EERequired(): boolean {

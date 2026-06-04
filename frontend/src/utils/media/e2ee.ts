@@ -320,18 +320,6 @@ async function deriveE2EEKey(
 	]);
 }
 
-const E2EE_KEY_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-export function generateE2EEKey(): string {
-	const bytes = new Uint8Array(16);
-	crypto.getRandomValues(bytes);
-	const chars: string[] = [];
-	for (let i = 0; i < bytes.length; i++) {
-		chars.push(E2EE_KEY_ALPHABET[bytes[i] % E2EE_KEY_ALPHABET.length]);
-	}
-	return `${chars.slice(0, 4).join("")}-${chars.slice(4, 8).join("")}-${chars.slice(8, 12).join("")}-${chars.slice(12, 16).join("")}`;
-}
-
 export function generateE2EEKeyVersion(): string {
 	const bytes = new Uint8Array(4);
 	crypto.getRandomValues(bytes);

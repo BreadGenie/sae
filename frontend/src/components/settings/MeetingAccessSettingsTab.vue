@@ -51,19 +51,20 @@
 					<Switch
 						class="w-full !px-0"
 						label="End-to-end encryption"
-						description="Convert this meeting to E2EE to require a meeting key on join."
+						description="Convert this meeting to E2EE. The SFU sees only encrypted bytes; media is decrypted on participants' devices."
 						v-model="e2eeEnabled"
 						:disabled="isConvertingToE2EE || meetingDoc.updateSettings.loading || meetingDoc.get.loading || e2eeEnabled"
 					/>
 				</div>
 
-				<div v-if="showKeyField" class="space-y-2">
-					<p class="text-sm font-medium text-ink-gray-8">Meeting key</p>
-					<ClickToCopyField :text-content="e2eeKey" />
+				<div v-if="e2eeEnabled && e2eeFingerprint" class="space-y-2">
+					<p class="text-sm font-medium text-ink-gray-8">E2EE meeting ID</p>
+					<ClickToCopyField :text-content="e2eeFingerprint" />
 					<p class="text-xs text-ink-gray-6">
-						Share this key with participants through a secure channel (in
-						person, encrypted messenger, etc.). Anyone with the key can join
-						the meeting.
+						Participants can verify they're in the right meeting by
+						comparing this fingerprint with the one shown on the host's
+						screen. The host's signing key is registered to this device
+						(<code>{{ deviceId }}</code>).
 					</p>
 				</div>
 			</div>
@@ -75,11 +76,14 @@
 import { debounce, FormControl, frappeRequest, Switch, toast } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useChatStore } from "@/composables/useChatStore";
+import { useDeviceIdentity } from "../../composables/useDeviceIdentity";
 import { useMeetingDoc } from "../../composables/useMeetingDoc";
 import {
-	computeE2EEKeyProof,
-	generateE2EEKey,
+	exportPublicKey,
 	generateE2EEKeyVersion,
+	importEd25519PublicKey,
+	signProof,
+	x25519KeyPair,
 } from "../../utils/media/e2ee";
 import ClickToCopyField from "../ClickToCopyField.vue";
 import SettingsLayoutBase from "./SettingsLayoutBase.vue";
@@ -104,13 +108,13 @@ const allowGuest = ref<boolean>(globalAllowGuest.value);
 const meetingType = ref<string>(globalMeetingType.value);
 const hostOnlyChat = ref<boolean>(chatStore.hostOnlyChat);
 const e2eeEnabled = ref<boolean>(globalE2EEEnabled.value);
-const e2eeKey = ref<string>("");
+const e2eeFingerprint = ref<string>("");
+const deviceId = ref<string>("");
 const isConvertingToE2EE = ref(false);
-const showKeyField = computed(
-	() => e2eeEnabled.value && Boolean(e2eeKey.value),
-);
 
 const meetingDoc = getMeetingDoc(props.meetingId);
+
+const { getIdentity } = useDeviceIdentity();
 
 let detailsLoaded = false;
 
@@ -142,15 +146,20 @@ const loadE2EEDetails = async () => {
 		})) as {
 			e2ee_enabled?: boolean;
 			e2ee_key_version?: string | null;
+			e2ee_host_public_key?: string | null;
 			message?: {
 				e2ee_enabled?: boolean;
 				e2ee_key_version?: string | null;
+				e2ee_host_public_key?: string | null;
 			};
 		};
 
 		const payload = response.message || response;
 
 		e2eeEnabled.value = Boolean(payload.e2ee_enabled);
+		if (payload.e2ee_host_public_key) {
+			e2eeFingerprint.value = formatFingerprint(payload.e2ee_host_public_key);
+		}
 	} catch (error) {
 		console.error("Failed to load E2EE details:", error);
 	}
@@ -163,22 +172,34 @@ watch(e2eeEnabled, async (val, oldVal) => {
 
 	isConvertingToE2EE.value = true;
 	try {
-		const key = generateE2EEKey();
-		const keyVersion = generateE2EEKeyVersion();
-		const keyProof = await computeE2EEKeyProof(keyVersion, key);
+		// v2: per-device ed25519 auth key + X25519 meeting anchor.
+		// See docs/adr/0003-per-device-host-identity.md and
+		// docs/refactors/e2ee-modernization.md.
+		const identity = await getIdentity();
+		deviceId.value = identity.deviceId;
 
-		// Prime this tab's SfuClient with the key BEFORE the API call so the
-		// host's mid-meeting reconfigure (triggered by meeting:e2ee_enabled)
-		// doesn't have to ask the host to re-enter a key they just generated.
-		// We dispatch before the API call because the server emits the realtime
-		// event as a side effect of the API call, and either may arrive first.
-		// If the API call fails, the SfuClient retains an unused passphrase
-		// which is benign (only consumed when the meeting is actually E2EE).
-		// Guests in other tabs still see the dialog because they don't
-		// receive this event.
+		await ensureDeviceRegistered(identity);
+
+		const meetingKeyPair = await x25519KeyPair();
+		const meetingPublicKey = await exportPublicKey(meetingKeyPair.publicKey);
+		const keyVersion = generateE2EEKeyVersion();
+
+		// Build the signed proof: bytes(X25519_pub) || bytes(key_version_ascii)
+		const pubRaw = Uint8Array.from(atob(meetingPublicKey), (c) =>
+			c.charCodeAt(0),
+		);
+		const message = new Uint8Array(pubRaw.length + keyVersion.length);
+		message.set(pubRaw, 0);
+		message.set(new TextEncoder().encode(keyVersion), pubRaw.length);
+		const keyProof = await signProof(identity.authKeyPair.privateKey, message);
+
+		// Broadcast to this tab and other tabs that E2EE is coming online.
+		// Other tabs receive meeting:e2ee_enabled via realtime; the local
+		// CustomEvent covers the host's own UI components that listen for
+		// "E2EE is now on" without going through the realtime channel.
 		document.dispatchEvent(
 			new CustomEvent("meet:e2ee-key-set", {
-				detail: { key },
+				detail: { hostX25519KeyPair: meetingKeyPair, keyVersion },
 			}),
 		);
 
@@ -188,19 +209,24 @@ watch(e2eeEnabled, async (val, oldVal) => {
 				meeting_id: props.meetingId,
 				e2ee_key_proof: keyProof,
 				e2ee_key_version: keyVersion,
+				e2ee_host_public_key: meetingPublicKey,
+				e2ee_device_id: identity.deviceId,
 			},
 		})) as {
 			e2ee_enabled?: boolean;
-			message?: { e2ee_enabled?: boolean };
+			e2ee_host_public_key?: string;
+			message?: { e2ee_enabled?: boolean; e2ee_host_public_key?: string };
 		};
 
 		const payload = response.message || response;
 
-		e2eeKey.value = key;
+		if (payload.e2ee_host_public_key) {
+			e2eeFingerprint.value = formatFingerprint(payload.e2ee_host_public_key);
+		}
 
 		await meetingDoc.reload();
 		toast.success(
-			"Meeting converted to E2EE. Share the key with participants through a secure channel.",
+			"Meeting converted to E2EE. Participants will be prompted to accept the handshake.",
 		);
 	} catch (error) {
 		console.error("Failed to enable E2EE:", error);
@@ -210,6 +236,36 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		isConvertingToE2EE.value = false;
 	}
 });
+
+async function ensureDeviceRegistered(identity: {
+	deviceId: string;
+	authPublicKey: string;
+}): Promise<void> {
+	await frappeRequest({
+		url: "meet.api.meeting.register_e2ee_device",
+		params: {
+			device_id: identity.deviceId,
+			ed25519_public_key: identity.authPublicKey,
+		},
+		method: "POST",
+	});
+}
+
+function formatFingerprint(publicKeyB64: string): string {
+	try {
+		const raw = Uint8Array.from(atob(publicKeyB64), (c) => c.charCodeAt(0));
+		const hex = Array.from(raw, (b) => b.toString(16).padStart(2, "0")).join(
+			"",
+		);
+		const groups: string[] = [];
+		for (let i = 0; i < hex.length; i += 8) {
+			groups.push(hex.slice(i, i + 8));
+		}
+		return groups.slice(0, 4).join(" ");
+	} catch {
+		return publicKeyB64;
+	}
+}
 
 const saveSettings = debounce(async () => {
 	if (meetingDoc.updateSettings.loading) return;

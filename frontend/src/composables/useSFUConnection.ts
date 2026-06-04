@@ -10,13 +10,20 @@ import { useRouter } from "vue-router";
 import { useSocket } from "../socket";
 import audioNotificationManager from "../utils/audioNotifications";
 import { getErrorMessage } from "../utils/error";
-import { setE2EEErrorHandler } from "../utils/media/e2ee";
+import {
+	exportPublicKey,
+	importPublicKey,
+	openEnvelope,
+	setE2EEErrorHandler,
+	x25519KeyPair,
+} from "../utils/media/e2ee";
 import { SocketIOSignalChannel } from "../utils/media/SignalChannel";
 import { SFUClient } from "../utils/SFUClient";
 import { SFUMeetingManager } from "../utils/SFUMeetingManager";
 import { useChatStore } from "./useChatStore";
 import type { ConnectionState } from "./useConnectionState";
 import type { CurrentUser } from "./useCurrentUser";
+import { useE2EEHandshake } from "./useE2EEHandshake";
 import type { GridLayout } from "./useGridLayout";
 import type { LobbyStore } from "./useLobbyStore";
 import type { MediaState } from "./useMediaState";
@@ -95,6 +102,21 @@ export function useSFUConnection(deps: {
 	const realtimeListenersSetup = shallowRef(false);
 	const joiningInProgress = shallowRef(false);
 	const hasShownE2EEKeyMismatchToast = shallowRef(false);
+
+	// E2EE v2 handshake state.
+	// hostX25519Priv / hostX25519Pub are populated when this tab is the host
+	// who enabled E2EE. joinerX25519Priv is populated for joiners and used to
+	// open the host's envelope. v2MeetingSecret is the meeting-shared secret
+	// derived from the envelope exchange; null until the handshake completes.
+	const hostX25519Priv = shallowRef<CryptoKey | null>(null);
+	const hostX25519PubB64 = shallowRef<string | null>(null);
+	const joinerX25519Priv = shallowRef<CryptoKey | null>(null);
+	const joinerX25519PubB64 = shallowRef<string | null>(null);
+	const joinerPubBySenderId = new Map<number, string>();
+	const v2MeetingSecret = shallowRef<Uint8Array<ArrayBuffer> | null>(null);
+	const v2KeyVersion = shallowRef<number | null>(null);
+	const { beginJoinerHandshake, openJoinerEnvelope, buildHostEnvelope } =
+		useE2EEHandshake();
 
 	const joinMeetingAPI = createResource({
 		url: "meet.api.meeting.join_meeting",
@@ -626,18 +648,190 @@ export function useSFUConnection(deps: {
 
 	let isReconfiguringForE2EE = false;
 
+	const startV2HandshakeAsJoiner = async (
+		hostX25519PubB64Param: string,
+		keyVersionString: string,
+	) => {
+		if (joinerX25519Priv.value) {
+			return;
+		}
+		const kp = await x25519KeyPair();
+		joinerX25519Priv.value = kp.privateKey;
+		joinerX25519PubB64.value = await exportPublicKey(kp.publicKey);
+		const versionNumber = parseKeyVersion(keyVersionString);
+		v2KeyVersion.value = versionNumber;
+
+		const participantId = currentUser.currentUser.value?.user_id || "";
+		const senderId = sfuClient.getOwnSenderId?.() ?? 0;
+		sfuClient.signalChannel.emit("e2ee:handshake", {
+			fromParticipantId: participantId,
+			fromSenderId: senderId,
+			x25519PublicKey: joinerX25519PubB64.value,
+		});
+		hostX25519PubB64.value = hostX25519PubB64Param;
+	};
+
+	const handleV2HandshakeEnvelope = async (data: {
+		fromParticipantId: string;
+		fromSenderId: number;
+		toParticipantId?: string;
+		toSenderId?: number;
+		envelope?: string;
+	}) => {
+		if (!data.envelope) {
+			return;
+		}
+		if (
+			!joinerX25519Priv.value ||
+			!hostX25519PubB64.value ||
+			v2KeyVersion.value == null
+		) {
+			return;
+		}
+		const ownParticipantId = currentUser.currentUser.value?.user_id || "";
+		if (data.toParticipantId && data.toParticipantId !== ownParticipantId) {
+			return;
+		}
+		const kp: CryptoKeyPair = {
+			privateKey: joinerX25519Priv.value,
+			publicKey: null as unknown as CryptoKey,
+		};
+		const secret = await openJoinerEnvelope(
+			kp,
+			hostX25519PubB64.value,
+			data.envelope,
+			{ meetingId, keyVersion: v2KeyVersion.value },
+		);
+		v2MeetingSecret.value = secret;
+		document.dispatchEvent(
+			new CustomEvent("meet:e2ee-handshake-complete", {
+				detail: {
+					meetingId,
+					meetingSecret: secret,
+					keyVersion: v2KeyVersion.value,
+				},
+			}),
+		);
+	};
+
+	const handleV2JoinerHello = async (data: {
+		fromParticipantId: string;
+		fromSenderId: number;
+		x25519PublicKey?: string;
+	}) => {
+		if (!data.x25519PublicKey) {
+			return;
+		}
+		if (
+			!hostX25519Priv.value ||
+			!v2MeetingSecret.value ||
+			v2KeyVersion.value == null
+		) {
+			return;
+		}
+		joinerPubBySenderId.set(data.fromSenderId, data.x25519PublicKey);
+		const envelope = await buildHostEnvelope(
+			hostX25519Priv.value,
+			data.x25519PublicKey,
+			v2MeetingSecret.value,
+			{ meetingId, keyVersion: v2KeyVersion.value },
+		);
+		const ownParticipantId = currentUser.currentUser.value?.user_id || "";
+		const ownSenderId = sfuClient.getOwnSenderId?.() ?? 0;
+		sfuClient.signalChannel.emit("e2ee:handshake", {
+			fromParticipantId: ownParticipantId,
+			fromSenderId: ownSenderId,
+			toParticipantId: data.fromParticipantId,
+			toSenderId: data.fromSenderId,
+			envelope,
+		});
+	};
+
+	const handleV2HandshakeMessage = (data: unknown) => {
+		if (!data || typeof data !== "object") {
+			return;
+		}
+		const msg = data as {
+			fromParticipantId?: string;
+			fromSenderId?: number;
+			toParticipantId?: string;
+			toSenderId?: number;
+			x25519PublicKey?: string;
+			envelope?: string;
+		};
+		if (msg.envelope) {
+			void handleV2HandshakeEnvelope(
+				msg as Parameters<typeof handleV2HandshakeEnvelope>[0],
+			);
+		} else if (msg.x25519PublicKey) {
+			void handleV2JoinerHello(
+				msg as Parameters<typeof handleV2JoinerHello>[0],
+			);
+		}
+	};
+
 	const handleHostE2EEKeySet = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
 		if (detail?.key) {
 			sfuClient.setE2EEPassphrase(detail.key);
+		} else if (detail?.hostX25519KeyPair && detail?.keyVersion) {
+			// v2 path: host side stores its X25519 keypair + key version.
+			hostX25519Priv.value = detail.hostX25519KeyPair.privateKey;
+			hostX25519PubB64.value = null;
+			void exportPublicKey(detail.hostX25519KeyPair.publicKey).then((b64) => {
+				hostX25519PubB64.value = b64;
+			});
+			v2KeyVersion.value = parseKeyVersion(detail.keyVersion);
+			// Host must also generate its own meeting_secret; for v1 parity
+			// we wait for the convert_meeting_to_e2ee response to confirm
+			// the host's X25519 pubkey, then we derive the secret locally.
+			void generateHostMeetingSecret();
 		}
 	};
 
+	async function generateHostMeetingSecret() {
+		const ms = new Uint8Array(32);
+		globalThis.crypto.getRandomValues(ms);
+		v2MeetingSecret.value = ms;
+		document.dispatchEvent(
+			new CustomEvent("meet:e2ee-handshake-complete", {
+				detail: {
+					meetingId,
+					meetingSecret: ms,
+					keyVersion: v2KeyVersion.value,
+				},
+			}),
+		);
+	}
+
+	function parseKeyVersion(s: string): number {
+		const m = /^v(\d+)-/.exec(s);
+		return m ? Number(m[1]) : 0;
+	}
+
 	document.addEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
 
-	const handleMeetingE2EEEnabled = async (data: { meeting_id?: string }) => {
+	const handleMeetingE2EEEnabled = async (data: {
+		meeting_id?: string;
+		e2ee_host_public_key?: string;
+		e2ee_key_version?: string;
+	}) => {
 		if (data.meeting_id !== meetingId) return;
 		if (isReconfiguringForE2EE) return;
+
+		// v2 path: if the realtime payload carries the host's X25519 pubkey
+		// and a key version, start the v2 handshake. The v1 passphrase
+		// path below still runs in parallel for v1 media encryption.
+		if (data.e2ee_host_public_key && data.e2ee_key_version) {
+			try {
+				await startV2HandshakeAsJoiner(
+					data.e2ee_host_public_key,
+					data.e2ee_key_version,
+				);
+			} catch (err) {
+				console.error("E2EE v2 handshake (joiner) failed:", err);
+			}
+		}
 
 		isReconfiguringForE2EE = true;
 
@@ -733,6 +927,8 @@ export function useSFUConnection(deps: {
 		socket.on("meeting_user_rejected", handleMeetingUserRejected);
 		socket.on("meeting:e2ee_enabled", handleMeetingE2EEEnabled);
 
+		sfuClient.signalChannel.on("e2ee:handshake", handleV2HandshakeMessage);
+
 		realtimeListenersSetup.value = true;
 	};
 
@@ -746,7 +942,19 @@ export function useSFUConnection(deps: {
 		socket.off("meeting_user_rejected", handleMeetingUserRejected);
 		socket.off("meeting:e2ee_enabled", handleMeetingE2EEEnabled);
 
+		sfuClient.signalChannel.off("e2ee:handshake", handleV2HandshakeMessage);
+
 		document.removeEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
+
+		// Wipe v2 chain state on disconnect so the next join starts fresh
+		// (see docs/adr/0006-chain-tips-wiped-on-pagehide.md).
+		v2MeetingSecret.value = null;
+		joinerX25519Priv.value = null;
+		joinerX25519PubB64.value = null;
+		hostX25519Priv.value = null;
+		hostX25519PubB64.value = null;
+		joinerPubBySenderId.clear();
+		v2KeyVersion.value = null;
 	};
 
 	const handleGuestJoinResult = async (
@@ -892,6 +1100,25 @@ export function useSFUConnection(deps: {
 
 		realtimeListenersSetup.value = false;
 	});
+
+	// T4.4: wipe v2 chain state on pagehide. Chain tips are per-frame AES
+	// keys; persisting them (even in memory across pagehide) is the same
+	// anti-pattern v1's passphrase-in-localStorage embodied. iOS Safari
+	// suspend/resume triggers a fresh ECDH via the meeting:e2ee_enabled
+	// path; this is the last-mile defense.
+	if (typeof window !== "undefined") {
+		const onPageHide = () => {
+			v2MeetingSecret.value = null;
+			joinerX25519Priv.value = null;
+			joinerX25519PubB64.value = null;
+			hostX25519Priv.value = null;
+			hostX25519PubB64.value = null;
+			joinerPubBySenderId.clear();
+			v2KeyVersion.value = null;
+		};
+		window.addEventListener("pagehide", onPageHide);
+		onUnmounted(() => window.removeEventListener("pagehide", onPageHide));
+	}
 
 	return {
 		sfuClient,

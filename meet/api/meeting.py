@@ -861,3 +861,45 @@ def convert_meeting_to_e2ee(
 		"e2ee_key_version": getattr(meeting, "e2ee_key_version", None),
 		"e2ee_host_public_key": getattr(meeting, "e2ee_host_public_key", None),
 	}
+
+
+@frappe.whitelist()
+def register_e2ee_device(
+	device_id: str,
+	ed25519_public_key: str,
+) -> dict:
+	"""Register a per-device ed25519 public key for the current user.
+
+	Used to bootstrap a new device's host identity. The client generates
+	the keypair locally (stored in IndexedDB; private key never leaves the
+	device) and uploads only the public key. The server stores it in
+	`tabUser.device_keys[device_id]`. The signature check in
+	`_verify_e2ee_proof_signature` then trusts this key for any meeting
+	this user enables E2EE on.
+	"""
+	if not _is_valid_e2ee_device_id(device_id):
+		frappe.throw(_("device_id must be 1-64 chars of [a-zA-Z0-9._-]"), frappe.ValidationError)
+
+	try:
+		raw = base64.b64decode(ed25519_public_key, validate=True)
+	except Exception:
+		frappe.throw(_("ed25519_public_key must be base64"), frappe.ValidationError)
+	if len(raw) != 32:
+		frappe.throw(_("ed25519_public_key must decode to 32 bytes"), frappe.ValidationError)
+
+	user = frappe.get_doc("User", frappe.session.user)
+	device_keys: dict = {}
+	if user.device_keys:
+		try:
+			device_keys = (
+				json.loads(user.device_keys) if isinstance(user.device_keys, str) else user.device_keys
+			)
+		except (TypeError, ValueError):
+			device_keys = {}
+	if not isinstance(device_keys, dict):
+		device_keys = {}
+
+	device_keys[device_id] = {"ed25519_pub": ed25519_public_key}
+	user.db_set("device_keys", json.dumps(device_keys), update_modified=False)
+
+	return {"device_id": device_id, "ed25519_public_key": ed25519_public_key}

@@ -381,7 +381,7 @@ export class SocketHandlerManager {
 					},
 					e2ee,
 				});
-				callback({ success: true });
+				callback({ success: true, senderId: socket.senderId });
 			} catch (error) {
 				loggers.socketHandler.error(
 					'Error joining room: %s',

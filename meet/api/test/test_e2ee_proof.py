@@ -15,8 +15,8 @@ from meet.api.meeting import (
 	_is_valid_e2ee_version,
 	_verify_e2ee_proof_signature,
 	convert_meeting_to_e2ee,
+	register_e2ee_device,
 )
-from meet.meet.doctype.sae_meeting.sae_meeting import SaeMeeting
 
 
 def _b64(raw: bytes) -> str:
@@ -220,3 +220,54 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		self.assertEqual(meeting.e2ee_key_version, version)
 		self.assertEqual(meeting.e2ee_host_public_key, host_pub_b64)
 		self.assertEqual(meeting.e2ee_key_proof, sig_b64)
+
+	def test_register_e2ee_device_persists_pubkey(self):
+		auth_priv = Ed25519PrivateKey.generate()
+		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
+		device_id = "laptop-2026-register"
+
+		frappe.set_user(self.host_email)
+		# Clear any pre-existing entry for this device
+		user = frappe.get_doc("User", self.host_email)
+		device_keys = {}
+		if user.device_keys:
+			try:
+				device_keys = (
+					json.loads(user.device_keys) if isinstance(user.device_keys, str) else user.device_keys
+				)
+			except (TypeError, ValueError):
+				device_keys = {}
+		if isinstance(device_keys, dict):
+			device_keys.pop(device_id, None)
+		user.db_set("device_keys", json.dumps(device_keys), update_modified=False)
+
+		result = register_e2ee_device(
+			device_id=device_id,
+			ed25519_public_key=auth_pub_b64,
+		)
+		self.assertEqual(result["device_id"], device_id)
+		self.assertEqual(result["ed25519_public_key"], auth_pub_b64)
+
+		user.reload()
+		stored = json.loads(user.device_keys)
+		self.assertEqual(stored[device_id]["ed25519_pub"], auth_pub_b64)
+
+		# Re-registering overwrites with the new key.
+		new_auth = Ed25519PrivateKey.generate()
+		new_pub_b64 = _b64(new_auth.public_key().public_bytes_raw())
+		register_e2ee_device(
+			device_id=device_id,
+			ed25519_public_key=new_pub_b64,
+		)
+		user.reload()
+		stored = json.loads(user.device_keys)
+		self.assertEqual(stored[device_id]["ed25519_pub"], new_pub_b64)
+
+	def test_register_e2ee_device_rejects_invalid_inputs(self):
+		frappe.set_user(self.host_email)
+		with self.assertRaises(frappe.ValidationError):
+			register_e2ee_device(device_id="bad device id", ed25519_public_key=_b64(b"\x00" * 32))
+		with self.assertRaises(frappe.ValidationError):
+			register_e2ee_device(device_id="good-id", ed25519_public_key="not_base64@@@")
+		with self.assertRaises(frappe.ValidationError):
+			register_e2ee_device(device_id="good-id", ed25519_public_key=_b64(b"\x00" * 31))
