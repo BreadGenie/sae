@@ -14,7 +14,6 @@ import {
 	exportPublicKey,
 	importPublicKey,
 	openEnvelope,
-	setE2EEErrorHandler,
 	setV2MeetingContext,
 	wipeV2MeetingContext,
 	x25519KeyPair,
@@ -74,7 +73,6 @@ export function useSFUConnection(deps: {
 	onScreenShareStarted: (data: SFUScreenShareData) => void;
 	onScreenShareStopped: (data: SFUScreenShareData) => void;
 	onActiveSpeakerChanged: (participantIds: string[]) => void;
-	requestE2EEPassphrase?: () => Promise<string | null>;
 }): SFUConnectionAPI {
 	const {
 		connectionState,
@@ -89,7 +87,6 @@ export function useSFUConnection(deps: {
 		onScreenShareStarted,
 		onScreenShareStopped,
 		onActiveSpeakerChanged,
-		requestE2EEPassphrase,
 	} = deps;
 
 	const router = useRouter();
@@ -320,18 +317,6 @@ export function useSFUConnection(deps: {
 		}
 
 		try {
-			setE2EEErrorHandler(({ code }) => {
-				if (
-					code === "decrypt-failure-threshold" &&
-					!hasShownE2EEKeyMismatchToast.value
-				) {
-					hasShownE2EEKeyMismatchToast.value = true;
-					toast.error(
-						"Unable to decrypt meeting media. Verify that your E2EE key matches the host key.",
-					);
-				}
-			});
-
 			const manager = new SFUMeetingManager(sfuClient);
 			manager.initialize({
 				meetingId,
@@ -352,21 +337,6 @@ export function useSFUConnection(deps: {
 					throw new Error(
 						"This meeting requires E2EE, but your browser does not support encoded insertable streams.",
 					);
-				}
-
-				if (!sfuClient.hasE2EEPassphrase()) {
-					const passphrase = requestE2EEPassphrase
-						? await requestE2EEPassphrase()
-						: window.prompt(
-								"This meeting requires end-to-end encryption. Enter the meeting key to continue.",
-							);
-					if (!passphrase?.trim()) {
-						throw new Error(
-							"A valid E2EE key is required to join this meeting.",
-						);
-					}
-
-					sfuClient.setE2EEPassphrase(passphrase);
 				}
 			}
 
@@ -774,19 +744,17 @@ export function useSFUConnection(deps: {
 
 	const handleHostE2EEKeySet = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
-		if (detail?.key) {
-			sfuClient.setE2EEPassphrase(detail.key);
-		} else if (detail?.hostX25519KeyPair && detail?.keyVersion) {
-			// v2 path: host side stores its X25519 keypair + key version.
+		if (detail?.hostX25519KeyPair && detail?.keyVersion) {
+			// Host side stores its X25519 keypair + key version.
 			hostX25519Priv.value = detail.hostX25519KeyPair.privateKey;
 			hostX25519PubB64.value = null;
 			void exportPublicKey(detail.hostX25519KeyPair.publicKey).then((b64) => {
 				hostX25519PubB64.value = b64;
 			});
 			v2KeyVersion.value = parseKeyVersion(detail.keyVersion);
-			// Host must also generate its own meeting_secret; for v1 parity
-			// we wait for the convert_meeting_to_e2ee response to confirm
-			// the host's X25519 pubkey, then we derive the secret locally.
+			// Host must also generate its own meeting_secret; we wait for the
+			// convert_meeting_to_e2ee response to confirm the host's X25519
+			// pubkey, then we derive the secret locally.
 			void generateHostMeetingSecret();
 		}
 	};
@@ -811,7 +779,7 @@ export function useSFUConnection(deps: {
 		return m ? Number(m[1]) : 0;
 	}
 
-	document.addEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
+	document.addEventListener("meet:e2ee-host-enabled", handleHostE2EEKeySet);
 
 	const handleV2HandshakeComplete = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
@@ -907,21 +875,6 @@ export function useSFUConnection(deps: {
 
 			await sfuClient.refreshToken();
 
-			if (!sfuClient.hasE2EEPassphrase()) {
-				const passphrase = requestE2EEPassphrase
-					? await requestE2EEPassphrase()
-					: window.prompt(
-							"This meeting has been converted to end-to-end encryption. Enter the meeting key to continue.",
-						);
-
-				if (!passphrase?.trim()) {
-					console.warn("E2EE passphrase required but not provided");
-					return;
-				}
-
-				sfuClient.setE2EEPassphrase(passphrase);
-			}
-
 			const userData = {
 				userId: currentUser.currentUser.value?.user_id || "",
 				name:
@@ -992,7 +945,7 @@ export function useSFUConnection(deps: {
 
 		sfuClient.signalChannel.off("e2ee:handshake", handleV2HandshakeMessage);
 
-		document.removeEventListener("meet:e2ee-key-set", handleHostE2EEKeySet);
+		document.removeEventListener("meet:e2ee-host-enabled", handleHostE2EEKeySet);
 		document.removeEventListener(
 			"meet:e2ee-handshake-complete",
 			handleV2HandshakeComplete,
@@ -1135,7 +1088,6 @@ export function useSFUConnection(deps: {
 	};
 
 	onUnmounted(async () => {
-		setE2EEErrorHandler(null);
 		hasShownE2EEKeyMismatchToast.value = false;
 
 		if (activeSpeakerTimeout.value) {

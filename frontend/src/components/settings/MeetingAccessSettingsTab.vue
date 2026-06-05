@@ -198,7 +198,7 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		// CustomEvent covers the host's own UI components that listen for
 		// "E2EE is now on" without going through the realtime channel.
 		document.dispatchEvent(
-			new CustomEvent("meet:e2ee-key-set", {
+			new CustomEvent("meet:e2ee-host-enabled", {
 				detail: { hostX25519KeyPair: meetingKeyPair, keyVersion },
 			}),
 		);

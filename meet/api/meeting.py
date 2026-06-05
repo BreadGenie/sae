@@ -2,7 +2,6 @@
 # For license information, please see license.txt
 
 import base64
-import hashlib
 import json
 import secrets
 import time
@@ -166,14 +165,6 @@ def _get_e2ee_host_public_key(meeting_id: str) -> str | None:
 	return str(pk) if pk else None
 
 
-def _get_e2ee_salt(meeting_id: str) -> str:
-	"""v1-only: deterministic salt for chat E2EE key derivation.
-	Still exposed in the API response so v1 chat E2EE continues to work
-	while v2 media E2EE is incrementally rolled out.
-	"""
-	return hashlib.sha256(f"meet-e2ee:{meeting_id}".encode()).hexdigest()
-
-
 def _get_e2ee_key_proof(meeting_id: str) -> str | None:
 	proof = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_key_proof")
 	return str(proof) if proof else None
@@ -183,7 +174,6 @@ def _get_e2ee_metadata(meeting_id: str) -> dict:
 	return {
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_key_proof": _get_e2ee_key_proof(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
@@ -259,7 +249,6 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"user_data": {
 			"name": user_fullname,
@@ -423,7 +412,6 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
@@ -537,7 +525,6 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"host_only_chat": bool(meeting.host_only_chat),
 				"e2ee_required": _is_e2ee_enabled(meeting_id),
 				"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-				"e2ee_salt": _get_e2ee_salt(meeting_id),
 				"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 				"message": "Successfully joined meeting",
 			}
@@ -577,7 +564,6 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		"host_only_chat": bool(meeting.host_only_chat),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"message": "Successfully joined meeting",
 	}
@@ -630,7 +616,6 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		"host_only_chat": bool(meeting.host_only_chat),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"message": "Successfully joined meeting",
 	}
@@ -669,7 +654,6 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_salt": _get_e2ee_salt(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 

@@ -3,7 +3,6 @@
 
 import { frappeRequest } from "frappe-ui";
 import { normalizeCodecStrategy } from "./media/codecStrategy";
-import { computeE2EEKeyProof } from "./media/e2ee";
 import type { SignalChannel } from "./media/SignalChannel";
 
 interface ConnectionDetails {
@@ -16,7 +15,6 @@ interface ConnectionDetails {
 	codecStrategy: string;
 	e2eeRequired: boolean;
 	e2eeKeyVersion: string | null;
-	e2eeSalt: string | null;
 	e2eeHostPublicKey: string | null;
 	userData?: Record<string, unknown>;
 }
@@ -45,7 +43,6 @@ interface SFUConnectionDetailsResponse {
 	codec_strategy: string;
 	e2ee_required?: boolean;
 	e2ee_key_version?: string;
-	e2ee_salt?: string;
 	e2ee_host_public_key?: string;
 }
 
@@ -55,7 +52,6 @@ interface SFUGuestConnectionDetailsResponse {
 	codec_strategy: string;
 	e2ee_required?: boolean;
 	e2ee_key_version?: string;
-	e2ee_salt?: string;
 	e2ee_host_public_key?: string;
 }
 
@@ -65,7 +61,6 @@ interface SFUTokenRefreshResponse {
 	codec_strategy: string;
 	e2ee_required?: boolean;
 	e2ee_key_version?: string;
-	e2ee_salt?: string;
 }
 
 interface SFURouterCapabilitiesResponse {
@@ -117,7 +112,6 @@ export class SFUClient {
 	eventHandlers: Map<string, SFUEventHandler>;
 	isRefreshingToken: boolean;
 	tokenRefreshTimer: ReturnType<typeof setTimeout> | null;
-	e2eePassphrase: string | null;
 	ownSenderId: number | null;
 
 	constructor(signalChannel: SignalChannel) {
@@ -133,13 +127,11 @@ export class SFUClient {
 			codecStrategy: "svc",
 			e2eeRequired: false,
 			e2eeKeyVersion: null,
-			e2eeSalt: null,
 			e2eeHostPublicKey: null,
 		};
 		this.eventHandlers = new Map();
 		this.isRefreshingToken = false;
 		this.tokenRefreshTimer = null;
-		this.e2eePassphrase = null;
 		this.ownSenderId = null;
 		this.setupDefaultHandlers();
 	}
@@ -220,11 +212,10 @@ export class SFUClient {
 						is_guest: true,
 					},
 					tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
-					codecStrategy: response.codec_strategy || "svc",
-					e2eeRequired: Boolean(response.e2ee_required),
-					e2eeKeyVersion: response.e2ee_key_version || null,
-					e2eeSalt: response.e2ee_salt || null,
-					e2eeHostPublicKey: response.e2ee_host_public_key || null,
+				codecStrategy: response.codec_strategy || "svc",
+				e2eeRequired: Boolean(response.e2ee_required),
+				e2eeKeyVersion: response.e2ee_key_version || null,
+				e2eeHostPublicKey: response.e2ee_host_public_key || null,
 				};
 			} catch (error) {
 				console.error("Failed to get guest SFU connection details:", error);
@@ -249,11 +240,10 @@ export class SFUClient {
 			sfuPort: response.sfu_port,
 			userData: response.user_data,
 			tokenExpiresAt,
-			codecStrategy: normalizeCodecStrategy(response.codec_strategy),
-			e2eeRequired: Boolean(response.e2ee_required),
-			e2eeKeyVersion: response.e2ee_key_version || null,
-			e2eeSalt: response.e2ee_salt || null,
-			e2eeHostPublicKey: response.e2ee_host_public_key || null,
+		codecStrategy: normalizeCodecStrategy(response.codec_strategy),
+		e2eeRequired: Boolean(response.e2ee_required),
+		e2eeKeyVersion: response.e2ee_key_version || null,
+		e2eeHostPublicKey: response.e2ee_host_public_key || null,
 		};
 	}
 
@@ -293,11 +283,9 @@ export class SFUClient {
 			codecStrategy: "svc",
 			e2eeRequired: false,
 			e2eeKeyVersion: null,
-			e2eeSalt: null,
 			e2eeHostPublicKey: null,
 		};
 		this.isRefreshingToken = false;
-		this.e2eePassphrase = null;
 	}
 
 	// ==================== TOKEN MANAGEMENT ====================
@@ -364,7 +352,6 @@ export class SFUClient {
 			);
 			this.connectionDetails.e2eeRequired = Boolean(response.e2ee_required);
 			this.connectionDetails.e2eeKeyVersion = response.e2ee_key_version || null;
-			this.connectionDetails.e2eeSalt = response.e2ee_salt || null;
 
 			this.signalChannel.updateAuth(response.auth_token);
 
@@ -648,18 +635,13 @@ export class SFUClient {
 		mediaState: unknown,
 	): Promise<unknown> {
 		const supportsInsertableStreams = this.isInsertableStreamsSupported();
-		const e2eeShouldBeActive =
-			this.connectionDetails.e2eeRequired && Boolean(this.e2eePassphrase);
-		const keyVersion = this.connectionDetails.e2eeKeyVersion;
-		const keyProof = await this.buildE2EEKeyProof(keyVersion);
+		const e2eeShouldBeActive = this.isV2E2EERequired();
 		const result = (await this.sendRequest("join_room", {
 			roomId,
 			userData,
 			mediaState,
 			e2ee: {
 				enabled: e2eeShouldBeActive,
-				keyVersion,
-				keyProof,
 				capability: {
 					supported: supportsInsertableStreams,
 					mode: supportsInsertableStreams ? "insertable-streams" : "none",
@@ -680,33 +662,12 @@ export class SFUClient {
 		return this.connectionDetails.e2eeKeyVersion;
 	}
 
-	isE2EEReadyForMedia(): boolean {
-		if (!this.isE2EERequired()) {
-			return false;
-		}
-
-		return Boolean(this.e2eePassphrase) && this.isInsertableStreamsSupported();
-	}
-
 	isV2E2EERequired(): boolean {
 		return Boolean(this.connectionDetails.e2eeHostPublicKey);
 	}
 
-	setE2EEPassphrase(passphrase: string): void {
-		const normalized = passphrase.trim();
-		this.e2eePassphrase = normalized.length > 0 ? normalized : null;
-	}
-
-	hasE2EEPassphrase(): boolean {
-		return Boolean(this.e2eePassphrase);
-	}
-
-	clearE2EEPassphrase(): void {
-		this.e2eePassphrase = null;
-	}
-
 	getE2EEMode(): "insertable-streams" | "none" {
-		return this.isE2EEReadyForMedia() ? "insertable-streams" : "none";
+		return this.isInsertableStreamsSupported() ? "insertable-streams" : "none";
 	}
 
 	isInsertableStreamsSupported(): boolean {
@@ -725,16 +686,6 @@ export class SFUClient {
 		).RTCRtpSender?.prototype;
 
 		return typeof senderPrototype?.createEncodedStreams === "function";
-	}
-
-	private async buildE2EEKeyProof(
-		keyVersion: string | null,
-	): Promise<string | null> {
-		if (!this.connectionDetails.e2eeRequired || !this.e2eePassphrase) {
-			return null;
-		}
-
-		return computeE2EEKeyProof(keyVersion || "v0", this.e2eePassphrase);
 	}
 
 	// ==================== SIGNALING OPERATIONS ====================

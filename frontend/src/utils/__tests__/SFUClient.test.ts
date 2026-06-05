@@ -357,7 +357,6 @@ describe("getConnectionDetails", () => {
 			codec_strategy: "svc",
 			e2ee_required: true,
 			e2ee_key_version: "v1",
-			e2ee_salt: "salt-regular",
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-1");
@@ -366,7 +365,6 @@ describe("getConnectionDetails", () => {
 		expect(details.codecStrategy).toBe("svc");
 		expect(details.e2eeRequired).toBe(true);
 		expect(details.e2eeKeyVersion).toBe("v1");
-		expect(details.e2eeSalt).toBe("salt-regular");
 		expect(frappeRequest).toHaveBeenCalledWith(
 			expect.objectContaining({
 				url: "meet.api.meeting.get_sfu_connection_details",
@@ -386,7 +384,6 @@ describe("getConnectionDetails", () => {
 			codec_strategy: "svc",
 			e2ee_required: true,
 			e2ee_key_version: "v2",
-			e2ee_salt: "salt-guest",
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-2", "guest-token");
@@ -395,7 +392,6 @@ describe("getConnectionDetails", () => {
 		expect(details.userData?.is_guest).toBe(true);
 		expect(details.e2eeRequired).toBe(true);
 		expect(details.e2eeKeyVersion).toBe("v2");
-		expect(details.e2eeSalt).toBe("salt-guest");
 	});
 });
 
@@ -427,8 +423,7 @@ describe("E2EE signaling payloads", () => {
 		const client = createClient();
 		client.connected = true;
 		client.connectionDetails.e2eeRequired = true;
-		client.connectionDetails.e2eeKeyVersion = "v7";
-		client.setE2EEPassphrase("shared-secret");
+		client.connectionDetails.e2eeHostPublicKey = "host-pub-b64";
 
 		const originalSender = (
 			globalThis as typeof globalThis & {
@@ -449,7 +444,7 @@ describe("E2EE signaling payloads", () => {
 				prototype: {
 					createEncodedStreams: () => {},
 				},
-			};
+			} as unknown as typeof globalThis.RTCRtpSender;
 
 			const sendRequestSpy = vi
 				.spyOn(client, "sendRequest")
@@ -467,8 +462,6 @@ describe("E2EE signaling payloads", () => {
 				mediaState: { audio_enabled: true },
 				e2ee: {
 					enabled: true,
-					keyVersion: "v7",
-					keyProof: expect.any(String),
 					capability: {
 						supported: true,
 						mode: "insertable-streams",
@@ -486,11 +479,10 @@ describe("E2EE signaling payloads", () => {
 		}
 	});
 
-	it("keeps e2ee enabled=false when passphrase is missing", async () => {
+	it("keeps e2ee enabled=false when host public key is missing", async () => {
 		const client = createClient();
 		client.connected = true;
 		client.connectionDetails.e2eeRequired = true;
-		client.connectionDetails.e2eeKeyVersion = "v7";
 
 		const sendRequestSpy = vi
 			.spyOn(client, "sendRequest")
@@ -503,8 +495,6 @@ describe("E2EE signaling payloads", () => {
 			expect.objectContaining({
 				e2ee: expect.objectContaining({
 					enabled: false,
-					keyVersion: "v7",
-					keyProof: null,
 				}),
 			}),
 		);
@@ -525,7 +515,7 @@ describe("disconnect", () => {
 			codecStrategy: "svc",
 			e2eeRequired: false,
 			e2eeKeyVersion: null,
-			e2eeSalt: null,
+			e2eeHostPublicKey: null,
 		};
 		client.disconnect();
 		expect(client.connected).toBe(false);
