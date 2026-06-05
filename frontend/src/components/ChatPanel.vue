@@ -63,7 +63,7 @@
 						/>
 					</template>
 					<div v-else class="text-center text-sm text-gray-500 py-3 bg-gray-50 rounded border border-gray-200 m-2">
-						The host has restricted chat to hosts only.
+						The host has restricted chat to hosts and co-hosts only.
 					</div>
 				</form>
 			</div>
@@ -111,6 +111,7 @@ const props = defineProps<{
 	userName?: string;
 	messages?: ChatMessage[] | { value: ChatMessage[] };
 	isHost?: boolean;
+	isCohost?: boolean;
 	hostOnlyChat?: boolean;
 }>();
 
@@ -129,7 +130,7 @@ const isEmojiDataReady = ref(false);
 
 const canSendMessages = computed(() => {
 	if (!props.hostOnlyChat) return true;
-	return props.isHost;
+	return props.isHost || props.isCohost;
 });
 
 const defaultEmojis: EmojiItem[] = [

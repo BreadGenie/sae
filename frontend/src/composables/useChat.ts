@@ -55,8 +55,8 @@ export function useChat(deps: {
 		});
 
 		sfuClient.on("sfu_error", (data: any) => {
-			if (data?.error?.includes("hosts can send messages")) {
-				toast.error("The host has restricted chat to hosts only.");
+			if (data?.code === "HOST_ONLY_CHAT") {
+				toast.error("The host has restricted chat to hosts and co-hosts only.");
 				chatStore.hostOnlyChat = true;
 			}
 		});

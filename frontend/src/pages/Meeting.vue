@@ -100,6 +100,7 @@
 									'You'
 								"
 								:isHost="isCurrentUserHost"
+								:isCohost="isCurrentUserCohost"
                                 :hostOnlyChat="chatStore.hostOnlyChat"
 								@close="toggleChat"
 								@send="chat.onSendChat"
@@ -267,6 +268,7 @@ const {
 	meetingTitle,
 	meetingOwner,
 	isCurrentUserHost,
+	isCurrentUserCohost,
 	meetingCoHosts,
 } = useMeetingDoc();
 const meetingDoc = getMeetingDoc(meetingId.value);
@@ -415,7 +417,7 @@ const lobby = useLobby({
 	meetingId: meetingId.value as string,
 });
 
-type AccessData = { allow_guest?: boolean; host_only_chat?: number };
+type AccessData = { allow_guest?: boolean; host_only_chat?: boolean };
 
 // --- Keyboard Shortcuts ---
 const keyboardShortcuts = useKeyboardShortcuts({
@@ -787,7 +789,7 @@ watch(
 	(isRestricted, oldValue) => {
 		if (
 			isRestricted !== oldValue &&
-			isCurrentUserHost.value &&
+			(isCurrentUserHost.value || isCurrentUserCohost.value) &&
 			sfuConnection.sfuClient?.isConnected()
 		) {
 			chat.toggleRestriction(isRestricted);

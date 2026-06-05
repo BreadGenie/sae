@@ -580,7 +580,7 @@ def check_meeting_access(meeting_id: str) -> dict:
 		settings = frappe.get_cached_doc("Sae Settings")
 		allow_guest = settings.allow_guest and meeting.allow_guest
 
-		return {"allow_guest": allow_guest, "host_only_chat": meeting.host_only_chat}
+		return {"allow_guest": allow_guest, "host_only_chat": bool(meeting.host_only_chat)}
 	except frappe.DoesNotExistError:
 		frappe.throw(_("Meeting not found"))
 	except Exception as e:

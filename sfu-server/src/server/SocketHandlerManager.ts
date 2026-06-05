@@ -1047,7 +1047,9 @@ export class SocketHandlerManager {
 
 				if (this.hostOnlyChat[roomId] && !socket.isHost && !socket.isCohost) {
 					socket.emit('sfu_error', {
-						error: 'Only hosts can send messages right now.',
+						error: 'Only hosts and co-hosts can send messages right now.',
+						code: 'HOST_ONLY_CHAT',
+						timestamp: new Date().toISOString(),
 					});
 					return;
 				}
