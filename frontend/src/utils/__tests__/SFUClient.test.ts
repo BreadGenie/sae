@@ -518,9 +518,15 @@ describe("E2EE signaling payloads", () => {
 		const client = createClient();
 		client.connectionDetails.e2eeRequired = false;
 		client.connectionDetails.e2eeHostPublicKey = null;
-		client.setE2EERequired(true, { hostPublicKey: "D".repeat(44) });
+		client.connectionDetails.e2eeKeyVersion = null;
+		client.setE2EERequired(true, {
+			hostPublicKey: "D".repeat(44),
+			keyVersion: "v1-abcd1234",
+		});
 		expect(client.isV2E2EERequired()).toBe(true);
 		expect(client.connectionDetails.e2eeHostPublicKey).toBe("D".repeat(44));
+		expect(client.connectionDetails.e2eeKeyVersion).toBe("v1-abcd1234");
+		expect(client.getE2EEKeyVersion()).toBe("v1-abcd1234");
 	});
 });
 

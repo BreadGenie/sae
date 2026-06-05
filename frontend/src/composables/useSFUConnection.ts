@@ -367,6 +367,20 @@ export function useSFUConnection(deps: {
 				video_enabled: mediaState.isCameraOn,
 			});
 
+			// If E2EE was already enabled when we joined, kick off the
+			// joiner handshake now. The realtime `meeting:e2ee_enabled`
+			// event won't reach us (it was broadcast before we joined),
+			// so without this trigger we'd be sitting in the room with
+			// `e2ee.enabled: true` in our join request but no
+			// meeting_secret yet, and no transform would install.
+			if (sfuClient.isV2E2EERequired() && !isHost) {
+				const hostPub = sfuClient.connectionDetails.e2eeHostPublicKey;
+				const keyVersion = sfuClient.connectionDetails.e2eeKeyVersion ?? "v1-";
+				if (hostPub) {
+					void startV2HandshakeAsJoiner(hostPub, keyVersion);
+				}
+			}
+
 			await manager.initializeDevice();
 			await manager.createReceiveTransport();
 
@@ -856,6 +870,7 @@ export function useSFUConnection(deps: {
 		// join with "E2EE is required for this room".
 		sfuClient?.setE2EERequired(Boolean(data.e2ee_host_public_key), {
 			hostPublicKey: data.e2ee_host_public_key ?? null,
+			keyVersion: data.e2ee_key_version ?? null,
 		});
 
 		isReconfiguringForE2EE = true;
