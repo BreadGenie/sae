@@ -637,6 +637,39 @@ export function wipeV2MeetingContext(): void {
 	}
 	v2PendingSenders.clear();
 	v2PendingReceivers.clear();
+	chatKeyCache = null;
+}
+
+let chatKeyCache: { meetingSecretVersion: number; key: CryptoKey } | null =
+	null;
+
+export async function getE2EEChatKeyV2(): Promise<CryptoKey | null> {
+	if (!v2MeetingSecret) return null;
+	if (chatKeyCache && chatKeyCache.meetingSecretVersion === v2KeyVersion) {
+		return chatKeyCache.key;
+	}
+	const subtle = getSubtle();
+	const ikm = v2MeetingSecret;
+	const salt = new Uint8Array(32);
+	const info = new TextEncoder().encode("meet-e2ee-v2|chat");
+	const hkdfKey = await subtle.importKey(
+		"raw",
+		ikm as BufferSource,
+		"HKDF",
+		false,
+		["deriveBits"],
+	);
+	const bits = await subtle.deriveBits(
+		{ name: "HKDF", hash: "SHA-256", salt, info: info as BufferSource },
+		hkdfKey,
+		256,
+	);
+	const key = await subtle.importKey("raw", bits, { name: "AES-GCM" }, false, [
+		"encrypt",
+		"decrypt",
+	]);
+	chatKeyCache = { meetingSecretVersion: v2KeyVersion, key };
+	return key;
 }
 
 function getOrCreateSenderChain(senderId: number): SenderChainState | null {

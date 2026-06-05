@@ -783,6 +783,38 @@ describe("E2EE v2 chain registry", () => {
 	});
 });
 
+describe("E2EE v2 chat key", () => {
+	beforeEach(async () => {
+		const { wipeV2MeetingContext } = await import("../e2ee");
+		wipeV2MeetingContext();
+	});
+
+	it("getE2EEChatKeyV2 returns null when no meeting context", async () => {
+		const { getE2EEChatKeyV2 } = await import("../e2ee");
+		expect(await getE2EEChatKeyV2()).toBeNull();
+	});
+
+	it("getE2EEChatKeyV2 is deterministic per (meetingSecret, keyVersion)", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setV2MeetingContext(secret, 7);
+		const k1 = await e2ee.getE2EEChatKeyV2();
+		const k2 = await e2ee.getE2EEChatKeyV2();
+		expect(k1).not.toBeNull();
+		expect(k1).toBe(k2);
+	});
+
+	it("wipeV2MeetingContext invalidates the cached chat key", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setV2MeetingContext(secret, 1);
+		const k1 = await e2ee.getE2EEChatKeyV2();
+		expect(k1).not.toBeNull();
+		e2ee.wipeV2MeetingContext();
+		expect(await e2ee.getE2EEChatKeyV2()).toBeNull();
+	});
+});
+
 function makeMockSender(): RTCRtpSender {
 	const readable = new ReadableStream<{ data: ArrayBuffer }>({
 		start(c) {

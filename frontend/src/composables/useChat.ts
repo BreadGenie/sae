@@ -1,5 +1,6 @@
 import { toast } from "frappe-ui";
 import audioNotificationManager from "../utils/audioNotifications";
+import { getE2EEChatKeyV2, hasV2MeetingContext } from "../utils/media/e2ee";
 import type { SFUClient } from "../utils/SFUClient";
 import type { ChatMessage, ChatStore } from "./useChatStore";
 import type { CurrentUser } from "./useCurrentUser";
@@ -14,36 +15,6 @@ const E2EE_CHAT_PREFIX = "e2ee:";
 
 function isEncryptedChatMessage(message: string): boolean {
 	return message.startsWith(E2EE_CHAT_PREFIX);
-}
-
-function e2eePassphrase(sfuClient: SFUClient): string | null {
-	return sfuClient.e2eePassphrase;
-}
-
-function e2eeSalt(sfuClient: SFUClient): string {
-	return (
-		sfuClient.connectionDetails.e2eeSalt ||
-		`meet-e2ee-${sfuClient.connectionDetails.e2eeKeyVersion}`
-	);
-}
-
-async function deriveChatKey(
-	passphrase: string,
-	salt: string,
-): Promise<CryptoKey> {
-	const subtle = globalThis.crypto?.subtle;
-	if (!subtle) {
-		throw new Error("SubtleCrypto not available");
-	}
-	const payload = `chat-e2ee:${salt}:${passphrase}`;
-	const hash = await subtle.digest(
-		"SHA-256",
-		new TextEncoder().encode(payload),
-	);
-	return subtle.importKey("raw", hash, "AES-GCM", false, [
-		"encrypt",
-		"decrypt",
-	]);
 }
 
 async function encryptChatMessage(
@@ -90,11 +61,8 @@ async function decryptChatMessage(
 	return new TextDecoder().decode(decrypted);
 }
 
-function shouldEncryptChat(sfuClient: SFUClient): boolean {
-	return (
-		sfuClient.connectionDetails.e2eeRequired &&
-		Boolean(sfuClient.e2eePassphrase)
-	);
+function shouldEncryptChat(): boolean {
+	return hasV2MeetingContext();
 }
 
 export function useChat(deps: {
@@ -104,19 +72,8 @@ export function useChat(deps: {
 }): ChatAPI {
 	const { chatStore, currentUser, sfuClient } = deps;
 
-	let chatCryptoKey: CryptoKey | undefined;
-	let chatCryptoKeyPromise: Promise<CryptoKey> | undefined;
-
-	async function getChatKey(): Promise<CryptoKey> {
-		if (chatCryptoKey) return chatCryptoKey;
-		if (!chatCryptoKeyPromise) {
-			const passphrase = e2eePassphrase(sfuClient);
-			const salt = e2eeSalt(sfuClient);
-			if (!passphrase) throw new Error("E2EE passphrase not set");
-			chatCryptoKeyPromise = deriveChatKey(passphrase, salt);
-		}
-		chatCryptoKey = await chatCryptoKeyPromise;
-		return chatCryptoKey;
+	async function getChatKey(): Promise<CryptoKey | null> {
+		return getE2EEChatKeyV2();
 	}
 
 	const setupChatEvents = (notificationQueue: unknown) => {
@@ -128,14 +85,14 @@ export function useChat(deps: {
 			let plaintext = data.message as string;
 
 			if (isEncryptedChatMessage(plaintext)) {
-				if (!sfuClient.e2eePassphrase) {
+				const key = await getChatKey();
+				if (!key) {
 					console.warn(
-						"E2EE chat: received encrypted message but no passphrase set",
+						"E2EE chat: received encrypted message but no v2 meeting context set",
 					);
 					plaintext = "[Encrypted message]";
 				} else {
 					try {
-						const key = await getChatKey();
 						plaintext = await decryptChatMessage(key, plaintext);
 					} catch (e) {
 						console.error("E2EE chat: decryption failed", e);
@@ -207,9 +164,11 @@ export function useChat(deps: {
 			if (sfuClient.isConnected()) {
 				let messageToSend = text;
 
-				if (shouldEncryptChat(sfuClient)) {
+				if (shouldEncryptChat()) {
 					const key = await getChatKey();
-					messageToSend = await encryptChatMessage(key, text);
+					if (key) {
+						messageToSend = await encryptChatMessage(key, text);
+					}
 				}
 
 				sfuClient.sendChatMessage(messageToSend, {
