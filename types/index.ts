@@ -172,8 +172,6 @@ export interface E2EECapability {
 
 export interface E2EESessionMetadata {
 	enabled: boolean;
-	keyVersion?: string;
-	keyProof?: string;
 	capability: E2EECapability;
 	ecdhPublicKey?: string;
 }
@@ -188,7 +186,6 @@ export interface JoinRoomRequest {
 export interface CreateWebRtcTransportRequest {
 	direction: "send" | "recv";
 	encryptionEnabled?: boolean;
-	keyVersion?: string;
 }
 
 export interface MediaControlRequest {

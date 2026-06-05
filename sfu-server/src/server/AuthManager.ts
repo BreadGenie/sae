@@ -78,12 +78,7 @@ export class AuthManager {
 			socket.isCohost = decoded.is_cohost || false;
 			socket.scope = decoded.scope || 'presence-preview';
 			socket.e2eeRequired = Boolean(decoded.e2ee_required);
-			socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
-			socket.e2eeSalt = decoded.e2ee_salt || undefined;
-			socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
-			socket.e2eeHostPublicKey = decoded.e2ee_host_public_key || undefined;
-			socket.e2eeValidatedKeyProof = undefined;
-			socket.e2eeReady = this.computeE2EEReady(socket);
+			socket.e2eeReady = !socket.e2eeRequired;
 			socket.currentToken = token;
 			socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
 			this.scheduleTokenExpiry(socket);
@@ -126,11 +121,7 @@ export class AuthManager {
 		socket.currentToken = token;
 		socket.tokenExpiresAt = decoded.exp ? decoded.exp * 1000 : undefined;
 		socket.e2eeRequired = Boolean(decoded.e2ee_required);
-		socket.e2eeKeyVersion = decoded.e2ee_key_version || undefined;
-		socket.e2eeSalt = decoded.e2ee_salt || undefined;
-		socket.e2eeExpectedKeyProof = decoded.e2ee_key_proof || undefined;
-		socket.e2eeHostPublicKey = decoded.e2ee_host_public_key || undefined;
-		socket.e2eeReady = this.computeE2EEReady(socket);
+		socket.e2eeReady = !socket.e2eeRequired;
 
 		if (socket.handshake?.auth) {
 			socket.handshake.auth.token = token;
@@ -199,11 +190,6 @@ export class AuthManager {
 		socket.tokenExpiresAt = undefined;
 		socket.e2eeReady = undefined;
 		socket.e2eeRequired = undefined;
-		socket.e2eeKeyVersion = undefined;
-		socket.e2eeSalt = undefined;
-		socket.e2eeExpectedKeyProof = undefined;
-		socket.e2eeHostPublicKey = undefined;
-		socket.e2eeValidatedKeyProof = undefined;
 		socket.x25519PublicKey = undefined;
 	}
 
@@ -234,13 +220,7 @@ export class AuthManager {
 	}
 
 	private computeE2EEReady(socket: Socket): boolean {
-		if (!socket.e2eeRequired) {
-			return true;
-		}
-		return (
-			Boolean(socket.e2eeValidatedKeyProof) &&
-			socket.e2eeValidatedKeyProof === socket.e2eeExpectedKeyProof
-		);
+		return !socket.e2eeRequired;
 	}
 
 	ensurePresenceAccess(socket: Socket): void {

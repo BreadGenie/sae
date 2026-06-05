@@ -356,7 +356,7 @@ describe("getConnectionDetails", () => {
 			expires_in: 3600,
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_key_version: "v1",
+			e2ee_host_public_key: "A".repeat(44),
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-1");
@@ -364,7 +364,7 @@ describe("getConnectionDetails", () => {
 		expect(details.userId).toBe("usr-1");
 		expect(details.codecStrategy).toBe("svc");
 		expect(details.e2eeRequired).toBe(true);
-		expect(details.e2eeKeyVersion).toBe("v1");
+		expect(details.e2eeHostPublicKey).toBe("A".repeat(44));
 		expect(frappeRequest).toHaveBeenCalledWith(
 			expect.objectContaining({
 				url: "meet.api.meeting.get_sfu_connection_details",
@@ -383,7 +383,7 @@ describe("getConnectionDetails", () => {
 			sfu_port: "443",
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_key_version: "v2",
+			e2ee_host_public_key: "B".repeat(44),
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-2", "guest-token");
@@ -391,7 +391,7 @@ describe("getConnectionDetails", () => {
 		expect(details.userId).toBe("guest-1");
 		expect(details.userData?.is_guest).toBe(true);
 		expect(details.e2eeRequired).toBe(true);
-		expect(details.e2eeKeyVersion).toBe("v2");
+		expect(details.e2eeHostPublicKey).toBe("B".repeat(44));
 	});
 });
 
@@ -400,7 +400,6 @@ describe("E2EE signaling payloads", () => {
 		const client = createClient();
 		client.connected = true;
 		client.connectionDetails.e2eeRequired = true;
-		client.connectionDetails.e2eeKeyVersion = "v3";
 
 		const sendRequestSpy = vi.spyOn(client, "sendRequest").mockResolvedValue({
 			id: "transport-1",
@@ -415,7 +414,6 @@ describe("E2EE signaling payloads", () => {
 		expect(sendRequestSpy).toHaveBeenCalledWith("create_webrtc_transport", {
 			direction: "send",
 			encryptionEnabled: true,
-			keyVersion: "v3",
 		});
 	});
 
@@ -514,7 +512,6 @@ describe("disconnect", () => {
 			tokenExpiresAt: 100,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeKeyVersion: null,
 			e2eeHostPublicKey: null,
 		};
 		client.disconnect();

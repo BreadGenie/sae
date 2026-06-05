@@ -649,10 +649,9 @@ export class SocketHandlerManager {
 		socket.on('create_webrtc_transport', async (data, callback) => {
 			try {
 				this.authManager.ensureFullAccess(socket);
-				const { direction, encryptionEnabled, keyVersion } = data;
+				const { direction, encryptionEnabled } = data;
 				this.enforceE2EETransportPolicy(socket, {
 					encryptionEnabled,
-					keyVersion,
 				});
 				const roomId = socket.meetingId;
 				const userId = socket.userId;
@@ -929,8 +928,6 @@ export class SocketHandlerManager {
 		socket: Socket,
 		e2ee?: {
 			enabled?: boolean;
-			keyVersion?: string;
-			keyProof?: string;
 			capability?: { supported?: boolean };
 			ecdhPublicKey?: string;
 		},
@@ -948,25 +945,6 @@ export class SocketHandlerManager {
 			throw new Error('Client does not support required E2EE capabilities');
 		}
 
-		if (!e2ee.keyVersion) {
-			throw new Error('Missing E2EE key version in join request');
-		}
-
-		if (!e2ee.keyProof) {
-			throw new Error('Missing E2EE key proof in join request');
-		}
-
-		if (
-			socket.e2eeExpectedKeyProof &&
-			e2ee.keyProof !== socket.e2eeExpectedKeyProof
-		) {
-			throw new Error('E2EE key proof mismatch');
-		}
-
-		if (socket.e2eeKeyVersion && e2ee.keyVersion !== socket.e2eeKeyVersion) {
-			throw new Error('E2EE key version mismatch');
-		}
-
 		if (e2ee.ecdhPublicKey) {
 			if (
 				typeof e2ee.ecdhPublicKey !== 'string' ||
@@ -976,7 +954,6 @@ export class SocketHandlerManager {
 			}
 		}
 
-		socket.e2eeValidatedKeyProof = socket.e2eeExpectedKeyProof;
 		socket.e2eeReady = true;
 	}
 
@@ -984,7 +961,6 @@ export class SocketHandlerManager {
 		socket: Socket,
 		data: {
 			encryptionEnabled?: boolean;
-			keyVersion?: string;
 		},
 	): void {
 		if (!socket.e2eeRequired) {
@@ -997,14 +973,6 @@ export class SocketHandlerManager {
 
 		if (!data.encryptionEnabled) {
 			throw new Error('Encrypted transport is required for this room');
-		}
-
-		if (!data.keyVersion) {
-			throw new Error('Missing E2EE key version for transport creation');
-		}
-
-		if (socket.e2eeKeyVersion && data.keyVersion !== socket.e2eeKeyVersion) {
-			throw new Error('E2EE key version mismatch for transport creation');
 		}
 	}
 

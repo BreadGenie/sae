@@ -14,7 +14,6 @@ interface ConnectionDetails {
 	tokenExpiresAt: number | null;
 	codecStrategy: string;
 	e2eeRequired: boolean;
-	e2eeKeyVersion: string | null;
 	e2eeHostPublicKey: string | null;
 	userData?: Record<string, unknown>;
 }
@@ -42,7 +41,6 @@ interface SFUConnectionDetailsResponse {
 	expires_in: number;
 	codec_strategy: string;
 	e2ee_required?: boolean;
-	e2ee_key_version?: string;
 	e2ee_host_public_key?: string;
 }
 
@@ -51,7 +49,6 @@ interface SFUGuestConnectionDetailsResponse {
 	sfu_port: string;
 	codec_strategy: string;
 	e2ee_required?: boolean;
-	e2ee_key_version?: string;
 	e2ee_host_public_key?: string;
 }
 
@@ -60,7 +57,6 @@ interface SFUTokenRefreshResponse {
 	expires_in: number;
 	codec_strategy: string;
 	e2ee_required?: boolean;
-	e2ee_key_version?: string;
 }
 
 interface SFURouterCapabilitiesResponse {
@@ -126,7 +122,6 @@ export class SFUClient {
 			tokenExpiresAt: null,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeKeyVersion: null,
 			e2eeHostPublicKey: null,
 		};
 		this.eventHandlers = new Map();
@@ -212,10 +207,9 @@ export class SFUClient {
 						is_guest: true,
 					},
 					tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
-				codecStrategy: response.codec_strategy || "svc",
-				e2eeRequired: Boolean(response.e2ee_required),
-				e2eeKeyVersion: response.e2ee_key_version || null,
-				e2eeHostPublicKey: response.e2ee_host_public_key || null,
+					codecStrategy: response.codec_strategy || "svc",
+					e2eeRequired: Boolean(response.e2ee_required),
+					e2eeHostPublicKey: response.e2ee_host_public_key || null,
 				};
 			} catch (error) {
 				console.error("Failed to get guest SFU connection details:", error);
@@ -240,10 +234,9 @@ export class SFUClient {
 			sfuPort: response.sfu_port,
 			userData: response.user_data,
 			tokenExpiresAt,
-		codecStrategy: normalizeCodecStrategy(response.codec_strategy),
-		e2eeRequired: Boolean(response.e2ee_required),
-		e2eeKeyVersion: response.e2ee_key_version || null,
-		e2eeHostPublicKey: response.e2ee_host_public_key || null,
+			codecStrategy: normalizeCodecStrategy(response.codec_strategy),
+			e2eeRequired: Boolean(response.e2ee_required),
+			e2eeHostPublicKey: response.e2ee_host_public_key || null,
 		};
 	}
 
@@ -282,7 +275,6 @@ export class SFUClient {
 			tokenExpiresAt: null,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeKeyVersion: null,
 			e2eeHostPublicKey: null,
 		};
 		this.isRefreshingToken = false;
@@ -351,7 +343,6 @@ export class SFUClient {
 				response.codec_strategy || this.connectionDetails.codecStrategy,
 			);
 			this.connectionDetails.e2eeRequired = Boolean(response.e2ee_required);
-			this.connectionDetails.e2eeKeyVersion = response.e2ee_key_version || null;
 
 			this.signalChannel.updateAuth(response.auth_token);
 
@@ -508,7 +499,6 @@ export class SFUClient {
 		const response = (await this.sendRequest("create_webrtc_transport", {
 			direction,
 			encryptionEnabled: this.connectionDetails.e2eeRequired,
-			keyVersion: this.connectionDetails.e2eeKeyVersion,
 		})) as SFUWebRtcTransportResponse;
 		try {
 			const clean = JSON.parse(JSON.stringify(response));
@@ -659,7 +649,7 @@ export class SFUClient {
 	}
 
 	getE2EEKeyVersion(): string | null {
-		return this.connectionDetails.e2eeKeyVersion;
+		return null;
 	}
 
 	isV2E2EERequired(): boolean {

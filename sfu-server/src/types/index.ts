@@ -390,10 +390,6 @@ export interface JWTPayload {
 	is_guest?: boolean;
 	scope?: SFUScope;
 	e2ee_required?: boolean;
-	e2ee_key_version?: string;
-	e2ee_salt?: string;
-	e2ee_key_proof?: string;
-	e2ee_host_public_key?: string;
 	session_id?: string;
 	exp?: number;
 	iat?: number;
@@ -439,11 +435,6 @@ declare module 'socket.io' {
 		tokenExpiryTimer?: NodeJS.Timeout;
 		scope?: SFUScope;
 		e2eeRequired?: boolean;
-		e2eeKeyVersion?: string;
-		e2eeSalt?: string;
-		e2eeExpectedKeyProof?: string;
-		e2eeValidatedKeyProof?: string;
-		e2eeHostPublicKey?: string;
 		e2eeReady?: boolean;
 	}
 }

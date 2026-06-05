@@ -142,20 +142,6 @@ def _verify_e2ee_proof_signature(
 		return False
 
 
-def _get_e2ee_key_version(meeting_id: str) -> str | None:
-	if not _is_e2ee_enabled(meeting_id):
-		return None
-	version = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_key_version")
-	return str(version) if version else None
-
-
-def _get_e2ee_key_proof(meeting_id: str) -> str | None:
-	if not _is_e2ee_enabled(meeting_id):
-		return None
-	proof = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_key_proof")
-	return str(proof) if proof else None
-
-
 def _get_e2ee_host_public_key(meeting_id: str) -> str | None:
 	if not _is_e2ee_enabled(meeting_id):
 		return None
@@ -171,8 +157,6 @@ def _get_e2ee_key_proof(meeting_id: str) -> str | None:
 def _get_e2ee_metadata(meeting_id: str) -> dict:
 	return {
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
-		"e2ee_key_proof": _get_e2ee_key_proof(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
@@ -246,7 +230,6 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		"meeting_id": meeting_id,
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"user_data": {
 			"name": user_fullname,
@@ -409,7 +392,6 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		"expires_in": 3600,
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
@@ -522,7 +504,6 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 				"sfu_port": sfu_config["sfu_server_port"],
 				"host_only_chat": bool(meeting.host_only_chat),
 				"e2ee_required": _is_e2ee_enabled(meeting_id),
-				"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 				"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 				"message": "Successfully joined meeting",
 			}
@@ -561,7 +542,6 @@ def join_meeting_as_guest(meeting_id: str, guest_name: str, guest_id: str | None
 		"sfu_port": sfu_config["sfu_server_port"],
 		"host_only_chat": bool(meeting.host_only_chat),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"message": "Successfully joined meeting",
 	}
@@ -613,7 +593,6 @@ def get_approved_guest_connection_details(meeting_id: str, guest_id: str) -> dic
 		"sfu_port": sfu_config["sfu_server_port"],
 		"host_only_chat": bool(meeting.host_only_chat),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"message": "Successfully joined meeting",
 	}
@@ -651,7 +630,6 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 		"sfu_port": sfu_config["sfu_server_port"],
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 	}
 
