@@ -98,7 +98,7 @@ const saveSettings = debounce(async () => {
 		await meetingDoc.updateSettings.submit({
 			allow_guest: allowGuest.value,
 			meeting_type: meetingType.value,
-			host_only_chat: hostOnlyChat.value ? 1 : 0,
+			host_only_chat: hostOnlyChat.value,
 		});
 
 		await meetingDoc.reload();
