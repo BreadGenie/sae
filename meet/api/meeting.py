@@ -158,6 +158,13 @@ def _get_e2ee_key_version(meeting_id: str) -> str | None:
 	return str(version) if version else None
 
 
+def _get_e2ee_key_proof(meeting_id: str) -> str | None:
+	if not _is_e2ee_enabled(meeting_id):
+		return None
+	proof = frappe.db.get_value("Sae Meeting", meeting_id, "e2ee_key_proof")
+	return str(proof) if proof else None
+
+
 def _get_e2ee_host_public_key(meeting_id: str) -> str | None:
 	if not _is_e2ee_enabled(meeting_id):
 		return None
