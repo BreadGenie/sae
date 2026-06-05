@@ -54,6 +54,7 @@
 						description="Convert this meeting to E2EE. The SFU sees only encrypted bytes; media is decrypted on participants' devices."
 						v-model="e2eeEnabled"
 						:disabled="isConvertingToE2EE || meetingDoc.updateSettings.loading || meetingDoc.get.loading || e2eeEnabled"
+						data-testid="e2ee-toggle"
 					/>
 				</div>
 
