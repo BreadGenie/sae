@@ -343,6 +343,10 @@ export class SFUClient {
 				response.codec_strategy || this.connectionDetails.codecStrategy,
 			);
 			this.connectionDetails.e2eeRequired = Boolean(response.e2ee_required);
+			if (response.e2ee_host_public_key !== undefined) {
+				this.connectionDetails.e2eeHostPublicKey =
+					response.e2ee_host_public_key || null;
+			}
 
 			this.signalChannel.updateAuth(response.auth_token);
 
@@ -646,6 +650,16 @@ export class SFUClient {
 
 	isE2EERequired(): boolean {
 		return this.connectionDetails.e2eeRequired;
+	}
+
+	setE2EERequired(
+		required: boolean,
+		options: { hostPublicKey?: string | null } = {},
+	): void {
+		this.connectionDetails.e2eeRequired = required;
+		if (options.hostPublicKey !== undefined) {
+			this.connectionDetails.e2eeHostPublicKey = options.hostPublicKey || null;
+		}
 	}
 
 	getE2EEKeyVersion(): string | null {

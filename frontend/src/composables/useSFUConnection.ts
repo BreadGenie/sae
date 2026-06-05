@@ -849,6 +849,15 @@ export function useSFUConnection(deps: {
 			}
 		}
 
+		// Update SFU client's view of the meeting's E2EE state from the
+		// realtime payload. Without this, the re-joinRoom call below would
+		// send e2ee.enabled=false because connectionDetails was populated
+		// before the host enabled E2EE, and the SFU would reject the
+		// join with "E2EE is required for this room".
+		sfuClient?.setE2EERequired(Boolean(data.e2ee_host_public_key), {
+			hostPublicKey: data.e2ee_host_public_key ?? null,
+		});
+
 		isReconfiguringForE2EE = true;
 
 		try {
@@ -945,7 +954,10 @@ export function useSFUConnection(deps: {
 
 		sfuClient.signalChannel.off("e2ee:handshake", handleV2HandshakeMessage);
 
-		document.removeEventListener("meet:e2ee-host-enabled", handleHostE2EEKeySet);
+		document.removeEventListener(
+			"meet:e2ee-host-enabled",
+			handleHostE2EEKeySet,
+		);
 		document.removeEventListener(
 			"meet:e2ee-handshake-complete",
 			handleV2HandshakeComplete,

@@ -497,6 +497,31 @@ describe("E2EE signaling payloads", () => {
 			}),
 		);
 	});
+
+	it("picks up e2ee_host_public_key returned by refresh_sfu_token", async () => {
+		vi.mocked(frappeRequest).mockResolvedValue({
+			auth_token: "tok-2",
+			expires_in: 3600,
+			codec_strategy: "svc",
+			e2ee_required: true,
+			e2ee_host_public_key: "C".repeat(44),
+		});
+		const client = createClient();
+		client.connectionDetails.e2eeRequired = false;
+		client.connectionDetails.e2eeHostPublicKey = null;
+		await client.refreshToken();
+		expect(client.connectionDetails.e2eeRequired).toBe(true);
+		expect(client.connectionDetails.e2eeHostPublicKey).toBe("C".repeat(44));
+	});
+
+	it("setE2EERequired updates connectionDetails for the realtime-event flow", () => {
+		const client = createClient();
+		client.connectionDetails.e2eeRequired = false;
+		client.connectionDetails.e2eeHostPublicKey = null;
+		client.setE2EERequired(true, { hostPublicKey: "D".repeat(44) });
+		expect(client.isV2E2EERequired()).toBe(true);
+		expect(client.connectionDetails.e2eeHostPublicKey).toBe("D".repeat(44));
+	});
 });
 
 describe("disconnect", () => {
