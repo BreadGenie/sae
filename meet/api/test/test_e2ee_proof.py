@@ -227,19 +227,23 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		device_id = "laptop-2026-register"
 
 		frappe.set_user(self.host_email)
-		# Clear any pre-existing entry for this device
-		user = frappe.get_doc("User", self.host_email)
-		device_keys = {}
-		if user.device_keys:
+		# Clear any pre-existing entry for this device.
+		existing = frappe.db.get_value("User", self.host_email, "device_keys")
+		device_keys: dict = {}
+		if existing:
 			try:
-				device_keys = (
-					json.loads(user.device_keys) if isinstance(user.device_keys, str) else user.device_keys
-				)
+				device_keys = json.loads(existing) if isinstance(existing, str) else existing
 			except (TypeError, ValueError):
 				device_keys = {}
 		if isinstance(device_keys, dict):
 			device_keys.pop(device_id, None)
-		user.db_set("device_keys", json.dumps(device_keys), update_modified=False)
+		frappe.db.set_value(
+			"User",
+			self.host_email,
+			"device_keys",
+			json.dumps(device_keys),
+			update_modified=False,
+		)
 
 		result = register_e2ee_device(
 			device_id=device_id,
@@ -248,8 +252,7 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		self.assertEqual(result["device_id"], device_id)
 		self.assertEqual(result["ed25519_public_key"], auth_pub_b64)
 
-		user.reload()
-		stored = json.loads(user.device_keys)
+		stored = json.loads(frappe.db.get_value("User", self.host_email, "device_keys"))
 		self.assertEqual(stored[device_id]["ed25519_pub"], auth_pub_b64)
 
 		# Re-registering overwrites with the new key.
@@ -259,8 +262,7 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			device_id=device_id,
 			ed25519_public_key=new_pub_b64,
 		)
-		user.reload()
-		stored = json.loads(user.device_keys)
+		stored = json.loads(frappe.db.get_value("User", self.host_email, "device_keys"))
 		self.assertEqual(stored[device_id]["ed25519_pub"], new_pub_b64)
 
 	def test_register_e2ee_device_rejects_invalid_inputs(self):

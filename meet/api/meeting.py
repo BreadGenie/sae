@@ -878,19 +878,23 @@ def register_e2ee_device(
 	if len(raw) != 32:
 		frappe.throw(_("ed25519_public_key must decode to 32 bytes"), frappe.ValidationError)
 
-	user = frappe.get_doc("User", frappe.session.user)
+	existing = frappe.db.get_value("User", frappe.session.user, "device_keys")
 	device_keys: dict = {}
-	if user.device_keys:
+	if existing:
 		try:
-			device_keys = (
-				json.loads(user.device_keys) if isinstance(user.device_keys, str) else user.device_keys
-			)
+			device_keys = json.loads(existing) if isinstance(existing, str) else existing
 		except (TypeError, ValueError):
 			device_keys = {}
 	if not isinstance(device_keys, dict):
 		device_keys = {}
 
 	device_keys[device_id] = {"ed25519_pub": ed25519_public_key}
-	user.db_set("device_keys", json.dumps(device_keys), update_modified=False)
+	frappe.db.set_value(
+		"User",
+		frappe.session.user,
+		"device_keys",
+		json.dumps(device_keys),
+		update_modified=False,
+	)
 
 	return {"device_id": device_id, "ed25519_public_key": ed25519_public_key}
