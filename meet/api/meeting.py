@@ -110,7 +110,8 @@ def _verify_e2ee_proof_signature(
 	"""Verify the ed25519 signature in `e2ee_key_proof`.
 
 	Signature input (host-side): bytes(host_x25519_pub_32) || bytes(key_version_ascii)
-	Signed by: the host's device ed25519 auth key (looked up in tabUser.device_keys)
+	Signed by: the host's device ed25519 auth key (looked up in
+	tabE2EE Device Key where user == user and device_id == device_id)
 	"""
 	try:
 		signature = base64.b64decode(proof, validate=True)
@@ -118,22 +119,12 @@ def _verify_e2ee_proof_signature(
 	except Exception:
 		return False
 
-	device_keys_json = frappe.db.get_value("User", user, "device_keys")
-	if not device_keys_json:
+	device_keys_json = frappe.db.get_value(
+		"E2EE Device Key", {"user": user, "device_id": device_id}, "ed25519_public_key"
+	)
+	if not device_keys_json or not isinstance(device_keys_json, str):
 		return False
-	try:
-		device_keys = json.loads(device_keys_json) if isinstance(device_keys_json, str) else device_keys_json
-	except (TypeError, ValueError):
-		return False
-	if not isinstance(device_keys, dict):
-		return False
-
-	entry = device_keys.get(device_id)
-	if not isinstance(entry, dict):
-		return False
-	auth_pub_b64 = entry.get("ed25519_pub")
-	if not auth_pub_b64 or not isinstance(auth_pub_b64, str):
-		return False
+	auth_pub_b64 = device_keys_json
 
 	try:
 		auth_pub_raw = base64.b64decode(auth_pub_b64, validate=True)
@@ -756,8 +747,8 @@ def convert_meeting_to_e2ee(
 	auth keypair. The X25519 public key is the meeting's anchor; it is
 	stored on the meeting and broadcast to joiners so they can ECDH a
 	per-joiner envelope. The ed25519 public key lives in
-	`tabUser.device_keys[device_id]` and is used to verify the host's
-	signature over (X25519_pub || key_version).
+	`tabE2EE Device Key` (one row per user+device_id) and is used to
+	verify the host's signature over (X25519_pub || key_version).
 	"""
 	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
@@ -864,7 +855,7 @@ def register_e2ee_device(
 	Used to bootstrap a new device's host identity. The client generates
 	the keypair locally (stored in IndexedDB; private key never leaves the
 	device) and uploads only the public key. The server stores it in
-	`tabUser.device_keys[device_id]`. The signature check in
+	`tabE2EE Device Key` (one row per user+device_id). The signature check in
 	`_verify_e2ee_proof_signature` then trusts this key for any meeting
 	this user enables E2EE on.
 	"""
@@ -878,23 +869,23 @@ def register_e2ee_device(
 	if len(raw) != 32:
 		frappe.throw(_("ed25519_public_key must decode to 32 bytes"), frappe.ValidationError)
 
-	existing = frappe.db.get_value("User", frappe.session.user, "device_keys")
-	device_keys: dict = {}
-	if existing:
-		try:
-			device_keys = json.loads(existing) if isinstance(existing, str) else existing
-		except (TypeError, ValueError):
-			device_keys = {}
-	if not isinstance(device_keys, dict):
-		device_keys = {}
-
-	device_keys[device_id] = {"ed25519_pub": ed25519_public_key}
-	frappe.db.set_value(
-		"User",
-		frappe.session.user,
-		"device_keys",
-		json.dumps(device_keys),
-		update_modified=False,
+	# Upsert the (user, device_id) pair into the E2EE Device Key DocType.
+	existing_name = frappe.db.get_value(
+		"E2EE Device Key", {"user": frappe.session.user, "device_id": device_id}, "name"
 	)
+	if existing_name:
+		frappe.db.set_value(
+			"E2EE Device Key",
+			existing_name,
+			"ed25519_public_key",
+			ed25519_public_key,
+			update_modified=False,
+		)
+	else:
+		doc = frappe.new_doc("E2EE Device Key")
+		doc.user = frappe.session.user
+		doc.device_id = device_id
+		doc.ed25519_public_key = ed25519_public_key
+		doc.insert(ignore_permissions=True)
 
 	return {"device_id": device_id, "ed25519_public_key": ed25519_public_key}

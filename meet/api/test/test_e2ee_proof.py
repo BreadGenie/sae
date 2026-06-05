@@ -57,19 +57,23 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			user.save(ignore_permissions=True)
 
 	def _set_device_keys(self, email: str, device_id: str, ed25519_pub_b64: str):
-		user = frappe.get_doc("User", email)
-		device_keys = {}
-		if user.device_keys:
-			try:
-				device_keys = (
-					json.loads(user.device_keys) if isinstance(user.device_keys, str) else user.device_keys
-				)
-			except (TypeError, ValueError):
-				device_keys = {}
-		if not isinstance(device_keys, dict):
-			device_keys = {}
-		device_keys[device_id] = {"ed25519_pub": ed25519_pub_b64}
-		user.db_set("device_keys", json.dumps(device_keys), update_modified=False)
+		existing_name = frappe.db.get_value(
+			"E2EE Device Key", {"user": email, "device_id": device_id}, "name"
+		)
+		if existing_name:
+			frappe.db.set_value(
+				"E2EE Device Key",
+				existing_name,
+				"ed25519_public_key",
+				ed25519_pub_b64,
+				update_modified=False,
+			)
+		else:
+			doc = frappe.new_doc("E2EE Device Key")
+			doc.user = email
+			doc.device_id = device_id
+			doc.ed25519_public_key = ed25519_pub_b64
+			doc.insert(ignore_permissions=True)
 
 	def test_validators(self):
 		self.assertTrue(_is_valid_e2ee_version("v1-abcd1234"))
@@ -228,22 +232,11 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 
 		frappe.set_user(self.host_email)
 		# Clear any pre-existing entry for this device.
-		existing = frappe.db.get_value("User", self.host_email, "device_keys")
-		device_keys: dict = {}
-		if existing:
-			try:
-				device_keys = json.loads(existing) if isinstance(existing, str) else existing
-			except (TypeError, ValueError):
-				device_keys = {}
-		if isinstance(device_keys, dict):
-			device_keys.pop(device_id, None)
-		frappe.db.set_value(
-			"User",
-			self.host_email,
-			"device_keys",
-			json.dumps(device_keys),
-			update_modified=False,
+		existing_name = frappe.db.get_value(
+			"E2EE Device Key", {"user": self.host_email, "device_id": device_id}, "name"
 		)
+		if existing_name:
+			frappe.delete_doc("E2EE Device Key", existing_name, ignore_permissions=True)
 
 		result = register_e2ee_device(
 			device_id=device_id,
@@ -252,8 +245,12 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		self.assertEqual(result["device_id"], device_id)
 		self.assertEqual(result["ed25519_public_key"], auth_pub_b64)
 
-		stored = json.loads(frappe.db.get_value("User", self.host_email, "device_keys"))
-		self.assertEqual(stored[device_id]["ed25519_pub"], auth_pub_b64)
+		stored = frappe.db.get_value(
+			"E2EE Device Key",
+			{"user": self.host_email, "device_id": device_id},
+			"ed25519_public_key",
+		)
+		self.assertEqual(stored, auth_pub_b64)
 
 		# Re-registering overwrites with the new key.
 		new_auth = Ed25519PrivateKey.generate()
@@ -262,8 +259,12 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			device_id=device_id,
 			ed25519_public_key=new_pub_b64,
 		)
-		stored = json.loads(frappe.db.get_value("User", self.host_email, "device_keys"))
-		self.assertEqual(stored[device_id]["ed25519_pub"], new_pub_b64)
+		stored = frappe.db.get_value(
+			"E2EE Device Key",
+			{"user": self.host_email, "device_id": device_id},
+			"ed25519_public_key",
+		)
+		self.assertEqual(stored, new_pub_b64)
 
 	def test_register_e2ee_device_rejects_invalid_inputs(self):
 		frappe.set_user(self.host_email)
