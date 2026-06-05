@@ -528,7 +528,7 @@ export class TransportManager {
 				e2eeV2Required,
 				hasContext,
 				hasRtpReceiver: !!consumer.rtpReceiver,
-				producerId: consumeArgs.producerId,
+				producerId: rawConsumerParams.producerId,
 			});
 			if (e2eeGate && consumer.rtpReceiver) {
 				try {
