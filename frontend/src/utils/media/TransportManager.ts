@@ -441,7 +441,17 @@ export class TransportManager {
 		}
 
 		const producer = await this.sendTransport.produce(produceOptions);
-		if (this.shouldEnableE2EETransforms() && producer.rtpSender) {
+		const e2eeGate = this.shouldEnableE2EETransforms();
+		const e2eeV2Required = this.sfuClient?.isV2E2EERequired?.() ?? false;
+		const hasContext = hasV2MeetingContext();
+		console.log("[E2EE v2] createProducer gate", {
+			e2eeGate,
+			e2eeV2Required,
+			hasContext,
+			hasRtpSender: !!producer.rtpSender,
+			kind: track?.kind,
+		});
+		if (e2eeGate && producer.rtpSender) {
 			try {
 				const senderId = this.sfuClient?.getOwnSenderId?.() ?? 0;
 				await setupSenderTransformV2(producer.rtpSender, senderId);
@@ -509,11 +519,23 @@ export class TransportManager {
 				consumerId: consumer.id,
 			});
 
-		if (consumer && this.shouldEnableE2EETransforms() && consumer.rtpReceiver) {
-			try {
-				await setupReceiverTransformV2(consumer.rtpReceiver);
-			} catch (error) {
-				console.warn("Failed to setup E2EE receiver transform:", error);
+		if (consumer) {
+			const e2eeGate = this.shouldEnableE2EETransforms();
+			const e2eeV2Required = this.sfuClient?.isV2E2EERequired?.() ?? false;
+			const hasContext = hasV2MeetingContext();
+			console.log("[E2EE v2] createConsumer gate", {
+				e2eeGate,
+				e2eeV2Required,
+				hasContext,
+				hasRtpReceiver: !!consumer.rtpReceiver,
+				producerId: consumeArgs.producerId,
+			});
+			if (e2eeGate && consumer.rtpReceiver) {
+				try {
+					await setupReceiverTransformV2(consumer.rtpReceiver);
+				} catch (error) {
+					console.warn("Failed to setup E2EE receiver transform:", error);
+				}
 			}
 		}
 		return consumer;
