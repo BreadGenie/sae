@@ -594,20 +594,35 @@ export async function setupSenderTransformV2(
 		return false;
 	}
 	if (!hasInsertableStreamSupportV2()) {
+		console.warn(
+			"[E2EE v2] setupSenderTransformV2: insertable stream support missing",
+		);
 		return false;
 	}
 	if (!hasV2MeetingContext()) {
+		console.warn(
+			"[E2EE v2] setupSenderTransformV2: no meeting context (deferring)",
+			{ senderId },
+		);
 		v2PendingSenders.add({ sender, senderId });
 		return false;
 	}
 	const chain = getOrCreateSenderChain(senderId);
 	if (!chain) {
+		console.warn("[E2EE v2] setupSenderTransformV2: chain is null");
 		return false;
 	}
 	const streams = (
 		sender as SenderWithInsertableStreams
 	).createEncodedStreams?.();
-	if (!streams) return false;
+	if (!streams) {
+		console.warn(
+			"[E2EE v2] setupSenderTransformV2: createEncodedStreams returned nothing",
+			{ hasProto: typeof sender.createEncodedStreams },
+		);
+		return false;
+	}
+	console.log("[E2EE v2] sender transform installed", { senderId });
 	const readable = streams.readable || streams.readableStream;
 	const writable = streams.writable || streams.writableStream;
 	if (!readable || !writable) return false;
@@ -636,11 +651,14 @@ export async function setupReceiverTransformV2(
 		return false;
 	}
 	if (!hasV2MeetingContext()) {
-		v2PendingReceivers.add({ receiver });
+		v2PendingReceivers.add(receiver);
 		return false;
 	}
 	const chain = getOrCreateReceiverChain();
-	if (!chain) return false;
+	if (!chain) {
+		console.warn("[E2EE v2] setupReceiverTransformV2: chain is null");
+		return false;
+	}
 	const streams = (
 		receiver as ReceiverWithInsertableStreams
 	).createEncodedStreams?.();
