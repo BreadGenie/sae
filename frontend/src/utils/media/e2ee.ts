@@ -46,6 +46,21 @@ export function setE2EEErrorHandler(handler: E2EEErrorHandler | null): void {
 	e2eeErrorHandler = handler;
 }
 
+export const E2EE_NEEDS_KEY_RESYNC_EVENT = "meet:e2ee-needs-key-resync";
+
+function dispatchE2EEResyncEvent(senderId: number, generation: number): void {
+	if (typeof globalThis.dispatchEvent !== "function") return;
+	globalThis.dispatchEvent(
+		new CustomEvent(E2EE_NEEDS_KEY_RESYNC_EVENT, {
+			detail: {
+				senderId,
+				generation,
+				threshold: RESYNC_FRAME_GAP_THRESHOLD,
+			},
+		}),
+	);
+}
+
 function getSubtle(): SubtleCrypto {
 	const subtle = globalThis.crypto?.subtle;
 	if (!subtle) {
@@ -436,6 +451,8 @@ export class SenderChainState {
 	}
 }
 
+export const RESYNC_FRAME_GAP_THRESHOLD = 100;
+
 export class ReceiverChainState {
 	private readonly meetingSecret: Uint8Array<ArrayBuffer>;
 	private readonly chainTips = new Map<
@@ -450,7 +467,7 @@ export class ReceiverChainState {
 	async getKeyForFrame(
 		senderId: number,
 		generation: number,
-	): Promise<{ key: CryptoKey } | { error: "gap" | "replay" | "unknown" }> {
+	): Promise<{ key: CryptoKey } | { error: "replay" | "resync" }> {
 		let entry = this.chainTips.get(senderId);
 		if (!entry) {
 			const tip = await initSenderChain(this.meetingSecret, senderId);
@@ -460,8 +477,13 @@ export class ReceiverChainState {
 		if (generation < entry.expectedGeneration) {
 			return { error: "replay" };
 		}
-		if (generation > entry.expectedGeneration) {
-			return { error: "gap" };
+		const gap = generation - entry.expectedGeneration;
+		if (gap >= RESYNC_FRAME_GAP_THRESHOLD) {
+			return { error: "resync" };
+		}
+		for (let i = 0; i < gap; i++) {
+			entry.tip = await advanceChain(entry.tip);
+			entry.expectedGeneration++;
 		}
 		const key = await chainTipToAESKey(entry.tip);
 		entry.tip = await advanceChain(entry.tip);
@@ -531,6 +553,9 @@ export function createDecryptionTransformStreamV2(
 				header.generation,
 			);
 			if ("error" in result) {
+				if (result.error === "resync") {
+					dispatchE2EEResyncEvent(header.senderId, header.generation);
+				}
 				return;
 			}
 			const ciphertext = data.slice(24);

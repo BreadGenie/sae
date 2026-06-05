@@ -831,6 +831,34 @@ export function useSFUConnection(deps: {
 		handleV2HandshakeComplete,
 	);
 
+	const resyncV2Handshake = () => {
+		wipeV2MeetingContext();
+		joinerX25519Priv.value = null;
+		joinerX25519PubB64.value = null;
+		v2KeyVersion.value = null;
+		if (!hostX25519PubB64.value) return;
+		if (!sfuManager.value || !sfuClient.connected) return;
+		void startV2HandshakeAsJoiner(
+			hostX25519PubB64.value,
+			`v${v2KeyVersion.value ?? 1}-`,
+		);
+	};
+
+	const handleE2EEResync = (event: Event) => {
+		const detail = (
+			event as CustomEvent<{
+				senderId: number;
+				generation: number;
+				threshold: number;
+			}>
+		).detail;
+		console.warn(
+			`E2EE v2: missed ~${detail.threshold}+ frames from sender ${detail.senderId} (gen ${detail.generation}), re-syncing`,
+		);
+		resyncV2Handshake();
+	};
+	document.addEventListener("meet:e2ee-needs-key-resync", handleE2EEResync);
+
 	const handleMeetingE2EEEnabled = async (data: {
 		meeting_id?: string;
 		e2ee_host_public_key?: string;
@@ -968,6 +996,10 @@ export function useSFUConnection(deps: {
 		document.removeEventListener(
 			"meet:e2ee-handshake-complete",
 			handleV2HandshakeComplete,
+		);
+		document.removeEventListener(
+			"meet:e2ee-needs-key-resync",
+			handleE2EEResync,
 		);
 
 		// Wipe v2 chain state on disconnect so the next join starts fresh

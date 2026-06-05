@@ -694,6 +694,53 @@ describe("Transform streams v2 (T1.5 + T1.6)", () => {
 	});
 });
 
+describe("ReceiverChainState gap/resync behavior", () => {
+	it("small gaps advance the chain silently", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+		const r = await state.getKeyForFrame(1, 5);
+		expect("key" in r).toBe(true);
+	});
+
+	it("gap of >=100 frames returns 'resync' error", async () => {
+		const {
+			generateMeetingSecret,
+			ReceiverChainState,
+			RESYNC_FRAME_GAP_THRESHOLD,
+		} = await import("../e2ee");
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+		const r = await state.getKeyForFrame(1, RESYNC_FRAME_GAP_THRESHOLD);
+		expect(r).toEqual({ error: "resync" });
+	});
+
+	it("dispatchE2EEResyncEvent fires meet:e2ee-needs-key-resync with detail", async () => {
+		const { E2EE_NEEDS_KEY_RESYNC_EVENT, RESYNC_FRAME_GAP_THRESHOLD } =
+			await import("../e2ee");
+		let captured: CustomEvent | null = null;
+		const listener = (e: Event) => {
+			captured = e as CustomEvent;
+		};
+		document.addEventListener(E2EE_NEEDS_KEY_RESYNC_EVENT, listener);
+		document.dispatchEvent(
+			new CustomEvent(E2EE_NEEDS_KEY_RESYNC_EVENT, {
+				detail: {
+					senderId: 7,
+					generation: 250,
+					threshold: RESYNC_FRAME_GAP_THRESHOLD,
+				},
+			}),
+		);
+		document.removeEventListener(E2EE_NEEDS_KEY_RESYNC_EVENT, listener);
+		expect(captured).not.toBeNull();
+		expect(captured!.detail.senderId).toBe(7);
+		expect(captured!.detail.threshold).toBe(RESYNC_FRAME_GAP_THRESHOLD);
+	});
+});
+
 describe("E2EE v2 chain registry", () => {
 	beforeEach(async () => {
 		const { wipeV2MeetingContext } = await import("../e2ee");
