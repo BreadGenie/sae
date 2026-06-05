@@ -59,13 +59,11 @@
 				</div>
 
 				<div v-if="e2eeEnabled && e2eeFingerprint" class="space-y-2">
-					<p class="text-sm font-medium text-ink-gray-8">E2EE meeting ID</p>
+					<p class="text-sm font-medium text-ink-gray-8">E2EE Fingerprint</p>
 					<ClickToCopyField :text-content="e2eeFingerprint" />
 					<p class="text-xs text-ink-gray-6">
 						Participants can verify they're in the right meeting by
-						comparing this fingerprint with the one shown on the host's
-						screen. The host's signing key is registered to this device
-						(<code>{{ deviceId }}</code>).
+						comparing this fingerprint.
 					</p>
 				</div>
 			</div>
@@ -80,7 +78,9 @@ import { useChatStore } from "@/composables/useChatStore";
 import { useDeviceIdentity } from "../../composables/useDeviceIdentity";
 import { useMeetingDoc } from "../../composables/useMeetingDoc";
 import {
+	exportEd25519PublicKey,
 	exportPublicKey,
+	formatFingerprint,
 	generateE2EEKeyVersion,
 	importEd25519PublicKey,
 	signProof,
@@ -173,7 +173,7 @@ watch(e2eeEnabled, async (val, oldVal) => {
 
 	isConvertingToE2EE.value = true;
 	try {
-		// v2: per-device ed25519 auth key + X25519 meeting anchor.
+		// E2EE: per-device ed25519 auth key + X25519 meeting anchor.
 		// See docs/adr/0003-per-device-host-identity.md and
 		// docs/refactors/e2ee-modernization.md.
 		const identity = await getIdentity();
@@ -200,8 +200,16 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		// "E2EE is now on" without going through the realtime channel.
 		document.dispatchEvent(
 			new CustomEvent("meet:e2ee-host-enabled", {
-				detail: { hostX25519KeyPair: meetingKeyPair, keyVersion },
+				detail: {
+					hostX25519KeyPair: meetingKeyPair,
+					hostSigningKeyPair: identity.signingKeyPair,
+					keyVersion,
+				},
 			}),
+		);
+
+		const hostSigningPublicKey = await exportEd25519PublicKey(
+			identity.signingKeyPair.publicKey,
 		);
 
 		const response = (await frappeRequest({
@@ -211,6 +219,7 @@ watch(e2eeEnabled, async (val, oldVal) => {
 				e2ee_key_proof: keyProof,
 				e2ee_key_version: keyVersion,
 				e2ee_host_public_key: meetingPublicKey,
+				e2ee_host_signing_public_key: hostSigningPublicKey,
 				e2ee_device_id: identity.deviceId,
 			},
 		})) as {
@@ -227,7 +236,7 @@ watch(e2eeEnabled, async (val, oldVal) => {
 
 		await meetingDoc.reload();
 		toast.success(
-			"Meeting converted to E2EE. Participants will be prompted to accept the handshake.",
+			"Meeting is now end-to-end encrypted. Compare the fingerprint to verify authenticity.",
 		);
 	} catch (error) {
 		console.error("Failed to enable E2EE:", error);
@@ -250,22 +259,6 @@ async function ensureDeviceRegistered(identity: {
 		},
 		method: "POST",
 	});
-}
-
-function formatFingerprint(publicKeyB64: string): string {
-	try {
-		const raw = Uint8Array.from(atob(publicKeyB64), (c) => c.charCodeAt(0));
-		const hex = Array.from(raw, (b) => b.toString(16).padStart(2, "0")).join(
-			"",
-		);
-		const groups: string[] = [];
-		for (let i = 0; i < hex.length; i += 8) {
-			groups.push(hex.slice(i, i + 8));
-		}
-		return groups.slice(0, 4).join(" ");
-	} catch {
-		return publicKeyB64;
-	}
 }
 
 const saveSettings = debounce(async () => {

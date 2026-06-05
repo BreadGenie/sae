@@ -15,6 +15,7 @@ interface ConnectionDetails {
 	codecStrategy: string;
 	e2eeRequired: boolean;
 	e2eeHostPublicKey: string | null;
+	e2eeHostSigningPublicKey: string | null;
 	e2eeKeyVersion: string | null;
 	userData?: Record<string, unknown>;
 }
@@ -43,6 +44,7 @@ interface SFUConnectionDetailsResponse {
 	codec_strategy: string;
 	e2ee_required?: boolean;
 	e2ee_host_public_key?: string;
+	e2ee_host_signing_public_key?: string;
 	e2ee_key_version?: string;
 }
 
@@ -52,6 +54,7 @@ interface SFUGuestConnectionDetailsResponse {
 	codec_strategy: string;
 	e2ee_required?: boolean;
 	e2ee_host_public_key?: string;
+	e2ee_host_signing_public_key?: string;
 	e2ee_key_version?: string;
 }
 
@@ -61,6 +64,7 @@ interface SFUTokenRefreshResponse {
 	codec_strategy: string;
 	e2ee_required?: boolean;
 	e2ee_host_public_key?: string;
+	e2ee_host_signing_public_key?: string;
 	e2ee_key_version?: string;
 }
 
@@ -91,11 +95,7 @@ interface SFUConsumerResponse {
 	appData?: {
 		type?: string;
 	};
-	[key: string]: unknown;
-}
-
-interface SFUProducersResponse {
-	producers: unknown[];
+	senderId?: number;
 	[key: string]: unknown;
 }
 
@@ -128,6 +128,7 @@ export class SFUClient {
 			codecStrategy: "svc",
 			e2eeRequired: false,
 			e2eeHostPublicKey: null,
+			e2eeHostSigningPublicKey: null,
 			e2eeKeyVersion: null,
 		};
 		this.eventHandlers = new Map();
@@ -216,6 +217,8 @@ export class SFUClient {
 					codecStrategy: response.codec_strategy || "svc",
 					e2eeRequired: Boolean(response.e2ee_required),
 					e2eeHostPublicKey: response.e2ee_host_public_key || null,
+					e2eeHostSigningPublicKey:
+						response.e2ee_host_signing_public_key || null,
 					e2eeKeyVersion: response.e2ee_key_version || null,
 				};
 			} catch (error) {
@@ -244,6 +247,7 @@ export class SFUClient {
 			codecStrategy: normalizeCodecStrategy(response.codec_strategy),
 			e2eeRequired: Boolean(response.e2ee_required),
 			e2eeHostPublicKey: response.e2ee_host_public_key || null,
+			e2eeHostSigningPublicKey: response.e2ee_host_signing_public_key || null,
 			e2eeKeyVersion: response.e2ee_key_version || null,
 		};
 	}
@@ -284,6 +288,7 @@ export class SFUClient {
 			codecStrategy: "svc",
 			e2eeRequired: false,
 			e2eeHostPublicKey: null,
+			e2eeHostSigningPublicKey: null,
 			e2eeKeyVersion: null,
 		};
 		this.isRefreshingToken = false;
@@ -355,6 +360,10 @@ export class SFUClient {
 			if (response.e2ee_host_public_key !== undefined) {
 				this.connectionDetails.e2eeHostPublicKey =
 					response.e2ee_host_public_key || null;
+			}
+			if (response.e2ee_host_signing_public_key !== undefined) {
+				this.connectionDetails.e2eeHostSigningPublicKey =
+					response.e2ee_host_signing_public_key || null;
 			}
 			if (response.e2ee_key_version !== undefined) {
 				this.connectionDetails.e2eeKeyVersion =
@@ -642,7 +651,7 @@ export class SFUClient {
 		mediaState: unknown,
 	): Promise<unknown> {
 		const supportsInsertableStreams = this.isInsertableStreamsSupported();
-		const e2eeShouldBeActive = this.isV2E2EERequired();
+		const e2eeShouldBeActive = this.isE2EERequired();
 		const result = (await this.sendRequest("join_room", {
 			roomId,
 			userData,
@@ -661,17 +670,21 @@ export class SFUClient {
 		return result;
 	}
 
-	isE2EERequired(): boolean {
-		return this.connectionDetails.e2eeRequired;
-	}
-
 	setE2EERequired(
 		required: boolean,
-		options: { hostPublicKey?: string | null; keyVersion?: string | null } = {},
+		options: {
+			hostPublicKey?: string | null;
+			hostSigningPublicKey?: string | null;
+			keyVersion?: string | null;
+		} = {},
 	): void {
 		this.connectionDetails.e2eeRequired = required;
 		if (options.hostPublicKey !== undefined) {
 			this.connectionDetails.e2eeHostPublicKey = options.hostPublicKey || null;
+		}
+		if (options.hostSigningPublicKey !== undefined) {
+			this.connectionDetails.e2eeHostSigningPublicKey =
+				options.hostSigningPublicKey || null;
 		}
 		if (options.keyVersion !== undefined) {
 			this.connectionDetails.e2eeKeyVersion = options.keyVersion || null;
@@ -682,7 +695,7 @@ export class SFUClient {
 		return this.connectionDetails.e2eeKeyVersion;
 	}
 
-	isV2E2EERequired(): boolean {
+	isE2EERequired(): boolean {
 		return Boolean(this.connectionDetails.e2eeHostPublicKey);
 	}
 

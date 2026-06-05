@@ -250,7 +250,9 @@ export class SocketHandlerManager {
 				toParticipantId?: string;
 				toSenderId?: number;
 				x25519PublicKey?: string;
+				signingPublicKey?: string;
 				envelope?: string;
+				responderX25519Pub?: string;
 			}) => {
 				try {
 					if (socket.scope !== 'full') {
@@ -258,10 +260,12 @@ export class SocketHandlerManager {
 					}
 					if (!socket.roomId) return;
 					const roomId = socket.roomId;
-					const fromParticipantId = payload.fromParticipantId;
-					const fromSenderId = payload.fromSenderId;
+					const fromParticipantId = socket.participantId;
+					const fromSenderId = socket.senderId;
 					const x25519PublicKey = payload.x25519PublicKey;
+					const signingPublicKey = payload.signingPublicKey;
 					const envelope = payload.envelope;
+					const responderX25519Pub = payload.responderX25519Pub;
 
 					if (!fromParticipantId || fromSenderId === undefined) return;
 
@@ -270,6 +274,7 @@ export class SocketHandlerManager {
 							fromParticipantId,
 							fromSenderId,
 							x25519PublicKey,
+							signingPublicKey,
 						});
 						return;
 					}
@@ -286,6 +291,7 @@ export class SocketHandlerManager {
 							toParticipantId: targetParticipant,
 							toSenderId: payload.toSenderId,
 							envelope,
+							responderX25519Pub,
 						});
 						return;
 					}
@@ -601,6 +607,25 @@ export class SocketHandlerManager {
 				}
 				this.fullAccessSockets.get(roomId)?.add(socket.id);
 
+				// If this peer is rejoining the room (e.g., host is
+				// reconfiguring for E2EE mid-meeting), drop any leftover
+				// transports/producers/consumers from the previous session.
+				// Otherwise, `getExistingProducers` later returns the stale
+				// (non-E2EE) producers, and joiners subscribe to them
+				// instead of the new E2EE ones — leaving them reading
+				// unencrypted bytes through an E2EE transform.
+				const existingPeer = this.mediasoup
+					.getRoomPeers?.(roomId)
+					?.get(participantId);
+				if (existingPeer) {
+					loggers.socketHandler.info(
+						'Peer %s already in room %s — clearing stale transports/producers before rejoin',
+						participantId,
+						roomId,
+					);
+					await this.mediasoup.removePeer(roomId, participantId);
+				}
+
 				this.mediasoup.addPeer(roomId, participantId, userData);
 
 				if (this.isRealParticipant(userData.userId)) {
@@ -752,6 +777,7 @@ export class SocketHandlerManager {
 					rtpParameters,
 					kind,
 					appData,
+					socket.senderId ?? 0,
 				);
 
 				const isScreen =
@@ -803,6 +829,14 @@ export class SocketHandlerManager {
 			try {
 				this.authManager.ensureFullAccess(socket);
 				const { producerId } = data;
+				const ownerCheck = this.assertProducerOwnership(
+					producerId,
+					socket.userId,
+				);
+				if (!ownerCheck.ok) {
+					callback({ success: false, error: ownerCheck.error });
+					return;
+				}
 				const result = this.mediasoup.closeProducer(producerId);
 
 				callback({ success: true, ...result });
@@ -895,6 +929,14 @@ export class SocketHandlerManager {
 			try {
 				this.authManager.ensureFullAccess(socket);
 				const { producerId } = data;
+				const ownerCheck = this.assertProducerOwnership(
+					producerId,
+					socket.userId,
+				);
+				if (!ownerCheck.ok) {
+					callback({ success: false, error: ownerCheck.error });
+					return;
+				}
 				const paused = await this.mediasoup.pauseProducer(producerId);
 
 				callback({ success: true, paused });
@@ -911,6 +953,14 @@ export class SocketHandlerManager {
 			try {
 				this.authManager.ensureFullAccess(socket);
 				const { producerId } = data;
+				const ownerCheck = this.assertProducerOwnership(
+					producerId,
+					socket.userId,
+				);
+				if (!ownerCheck.ok) {
+					callback({ success: false, error: ownerCheck.error });
+					return;
+				}
 				const resumed = await this.mediasoup.resumeProducer(producerId);
 
 				callback({ success: true, resumed });
@@ -922,6 +972,26 @@ export class SocketHandlerManager {
 				callback({ success: false, error: (error as Error).message });
 			}
 		});
+	}
+
+	private assertProducerOwnership(
+		producerId: string,
+		userId: string,
+	): { ok: true } | { ok: false; error: string } {
+		const producerData = this.mediasoup.getProducerData(producerId);
+		if (!producerData) {
+			return { ok: false, error: 'Producer not found' };
+		}
+		if (producerData.peerId !== userId) {
+			loggers.socketHandler.warn(
+				'Producer ownership mismatch: user %s attempted to operate producer %s owned by %s',
+				userId,
+				producerId,
+				producerData.peerId,
+			);
+			return { ok: false, error: 'Not the owner of this producer' };
+		}
+		return { ok: true };
 	}
 
 	private enforceE2EEJoinPolicy(

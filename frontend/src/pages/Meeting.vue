@@ -147,6 +147,7 @@
 						@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 						:meetingId="meetingId"
 						:meetingTitle="meetingTitle"
+						:e2eeFingerprint="e2eeFingerprint"
 						:currentUser="currentUser.currentUser.value"
 						:cameraPermissionGranted="mediaState.cameraPermissionGranted"
 						:microphonePermissionGranted="mediaState.microphonePermissionGranted"
@@ -174,7 +175,7 @@
 			<RejectionOverlay v-if="isRejected && isGuestSession" @leave="goHome" />
 		</template>
 
-		<!-- Legacy v1 E2EE passphrase dialog removed; v2 uses ECDH handshake. -->
+		<!-- Legacy passphrase dialog removed; E2EE uses ECDH handshake. -->
 
 		<!-- Chat notifications -->
 		<ChatNotificationQueue
@@ -243,6 +244,7 @@ import {
 import { session } from "../data/session";
 import { useSocket } from "../socket";
 import { deviceManager } from "../utils/media/DeviceManager";
+import { formatFingerprint } from "../utils/media/e2ee";
 import type { Participant } from "../utils/media/ParticipantManager";
 
 // Router
@@ -358,6 +360,12 @@ const sfuConnection = useSFUConnection({
 	onActiveSpeakerChanged: (participantIds: string[]) => {
 		participantStore.activeSpeakerIds = participantIds;
 	},
+});
+
+const e2eeFingerprint = computed(() => {
+	const pub = sfuConnection.sfuClient?.connectionDetails?.e2eeHostPublicKey;
+	if (!pub) return "";
+	return formatFingerprint(pub);
 });
 
 // --- Media Controls ---
@@ -743,7 +751,6 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-
 	window.removeEventListener("keydown", keyboardShortcuts.handleKeyDown);
 	window.removeEventListener("keyup", keyboardShortcuts.handleKeyUp);
 	document.removeEventListener("fullscreenchange", syncFullscreenState);

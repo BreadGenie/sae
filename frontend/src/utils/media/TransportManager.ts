@@ -7,9 +7,10 @@ import type { Consumer, Producer } from "mediasoup-client/types";
 import type { SFUClient } from "../SFUClient";
 import { resolveCodecStrategy } from "./codecStrategy";
 import {
-	hasV2MeetingContext,
-	setupReceiverTransformV2,
-	setupSenderTransformV2,
+	hasMeetingContext,
+	preCreateReceiverStreams,
+	setupReceiverTransform,
+	setupSenderTransform,
 } from "./e2ee";
 import {
 	audioCodecOptions,
@@ -58,6 +59,7 @@ type ConsumerParams = {
 	appData?: {
 		type?: string;
 	};
+	senderId?: number;
 };
 
 type RouterCapabilities = {
@@ -189,9 +191,15 @@ export class TransportManager {
 	}
 
 	private shouldEnableE2EETransforms(): boolean {
-		return (
-			Boolean(this.sfuClient?.isV2E2EERequired?.()) && hasV2MeetingContext()
-		);
+		return Boolean(this.sfuClient?.isE2EERequired?.()) && hasMeetingContext();
+	}
+
+	private assertE2EEContextReady(operation: string): void {
+		if (this.sfuClient?.isE2EERequired?.() && !hasMeetingContext()) {
+			throw new Error(
+				`Cannot ${operation}: E2EE is required but meeting context is not ready`,
+			);
+		}
 	}
 
 	private extractRouterRtpCapabilities(response: unknown): RouterCapabilities {
@@ -223,6 +231,7 @@ export class TransportManager {
 
 	async createSendTransport() {
 		if (this.sendTransport) return this.sendTransport;
+		this.assertE2EEContextReady("create send transport");
 		if (!this.device) await this.initializeDevice();
 		if (!this.device) throw new Error("Device failed to initialize");
 		const client = this.getClient();
@@ -298,6 +307,7 @@ export class TransportManager {
 
 	async createReceiveTransport() {
 		if (this.recvTransport) return this.recvTransport;
+		this.assertE2EEContextReady("create receive transport");
 		if (!this.device) await this.initializeDevice();
 		if (!this.device) throw new Error("Device failed to initialize");
 		const client = this.getClient();
@@ -442,21 +452,23 @@ export class TransportManager {
 
 		const producer = await this.sendTransport.produce(produceOptions);
 		const e2eeGate = this.shouldEnableE2EETransforms();
-		const e2eeV2Required = this.sfuClient?.isV2E2EERequired?.() ?? false;
-		const hasContext = hasV2MeetingContext();
-		console.log("[E2EE v2] createProducer gate", {
+		const e2eeRequired = this.sfuClient?.isE2EERequired?.() ?? false;
+		const hasContext = hasMeetingContext();
+		console.log("[E2EE] createProducer gate", {
 			e2eeGate,
-			e2eeV2Required,
+			e2eeRequired,
 			hasContext,
 			hasRtpSender: !!producer.rtpSender,
 			kind: track?.kind,
+			senderId: this.sfuClient?.getOwnSenderId?.() ?? 0,
 		});
 		if (e2eeGate && producer.rtpSender) {
 			try {
 				const senderId = this.sfuClient?.getOwnSenderId?.() ?? 0;
-				await setupSenderTransformV2(producer.rtpSender, senderId);
+				const mediaType = track?.kind ?? "video";
+				await setupSenderTransform(producer.rtpSender, senderId, mediaType);
 			} catch (error) {
-				console.warn("Failed to setup E2EE v2 sender transform:", error);
+				console.warn("Failed to setup E2EE sender transform:", error);
 			}
 		}
 
@@ -496,17 +508,26 @@ export class TransportManager {
 			rawConsumerParams.isScreen ||
 			rawConsumerParams?.appData?.type === "screen"
 		);
+		const e2eeWanted = this.shouldEnableE2EETransforms();
 
 		let consumer: Consumer | null = null;
 		let firstError: unknown = null;
 		try {
-			const consumeArgs = {
+			const consumeArgs: Record<string, unknown> = {
 				id: rawConsumerParams.id,
 				producerId: rawConsumerParams.producerId,
 				kind: rawConsumerParams.kind,
 				rtpParameters: rawConsumerParams.rtpParameters,
 				...(isScreen ? { appData: { type: "screen" } } : {}),
 			};
+			if (e2eeWanted) {
+				consumeArgs.onRtpReceiver = (receiver: RTCRtpReceiver) => {
+					console.log("[E2EE] onRtpReceiver callback fired", {
+						producerId: rawConsumerParams.producerId,
+					});
+					preCreateReceiverStreams(receiver);
+				};
+			}
 			consumer = await recvTransport.consume(consumeArgs);
 		} catch (err) {
 			firstError = err;
@@ -520,19 +541,26 @@ export class TransportManager {
 			});
 
 		if (consumer) {
-			const e2eeGate = this.shouldEnableE2EETransforms();
-			const e2eeV2Required = this.sfuClient?.isV2E2EERequired?.() ?? false;
-			const hasContext = hasV2MeetingContext();
-			console.log("[E2EE v2] createConsumer gate", {
-				e2eeGate,
-				e2eeV2Required,
+			const e2eeRequired = this.sfuClient?.isE2EERequired?.() ?? false;
+			const hasContext = hasMeetingContext();
+			console.log("[E2EE] createConsumer gate", {
+				e2eeGate: e2eeWanted,
+				e2eeRequired,
 				hasContext,
 				hasRtpReceiver: !!consumer.rtpReceiver,
 				producerId: rawConsumerParams.producerId,
+				remoteSenderId: rawConsumerParams.senderId,
+				mediaType: rawConsumerParams.kind,
 			});
-			if (e2eeGate && consumer.rtpReceiver) {
+			if (e2eeWanted && consumer.rtpReceiver) {
 				try {
-					await setupReceiverTransformV2(consumer.rtpReceiver);
+					const remoteSenderId = rawConsumerParams.senderId ?? 0;
+					const mediaType = rawConsumerParams.kind ?? "video";
+					await setupReceiverTransform(
+						consumer.rtpReceiver,
+						remoteSenderId,
+						mediaType,
+					);
 				} catch (error) {
 					console.warn("Failed to setup E2EE receiver transform:", error);
 				}

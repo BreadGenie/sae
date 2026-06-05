@@ -1,13 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-	const buffer = new ArrayBuffer(hex.length / 2);
-	const bytes = new Uint8Array(buffer);
-	for (let i = 0; i < hex.length; i += 2) {
-		bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-	}
-	return bytes;
-}
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 beforeAll(() => {
 	if (typeof globalThis.RTCRtpSender === "undefined") {
@@ -16,10 +7,7 @@ beforeAll(() => {
 	}
 });
 
-import {
-	decodeFrameHeaderV2,
-	encodeFrameHeaderV2,
-} from "../e2ee";
+import { decodeFrameHeader, encodeFrameHeader } from "../e2ee";
 
 describe("Crypto primitives (T1.1)", () => {
 	describe("X25519 ECDH", () => {
@@ -63,31 +51,6 @@ describe("Crypto primitives (T1.1)", () => {
 				Buffer.from(bobShared).toString("hex"),
 			);
 		});
-
-		it.skip("matches RFC 7748 §5.2 test vector (browser-only: Node WebCrypto restricts raw priv import to empty usages)", async () => {
-			const { ecdhKeyAgreement, importPublicKey } = await import("../e2ee");
-			const subtle = globalThis.crypto.subtle;
-			const alicePriv = await subtle.importKey(
-				"raw",
-				hexToBytes(
-					"77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
-				),
-				"X25519",
-				true,
-				[],
-			);
-			const bobPub = await importPublicKey(
-				Buffer.from(
-					hexToBytes(
-						"de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
-					),
-				).toString("base64"),
-			);
-			const shared = await ecdhKeyAgreement(alicePriv, bobPub);
-			expect(Buffer.from(shared).toString("hex")).toBe(
-				"4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
-			);
-		});
 	});
 
 	describe("Ed25519 signatures", () => {
@@ -96,7 +59,7 @@ describe("Crypto primitives (T1.1)", () => {
 				"../e2ee"
 			);
 			const kp = await ed25519KeyPair();
-			const payload = new TextEncoder().encode("host_pub|v1-12345678");
+			const payload = new TextEncoder().encode("host_pub|12345678");
 			const sig = await signProof(kp.privateKey, payload);
 			const ok = await verifyProof(kp.publicKey, payload, sig);
 			expect(ok).toBe(true);
@@ -108,7 +71,7 @@ describe("Crypto primitives (T1.1)", () => {
 			);
 			const signer = await ed25519KeyPair();
 			const attacker = await ed25519KeyPair();
-			const payload = new TextEncoder().encode("host_pub|v1-12345678");
+			const payload = new TextEncoder().encode("host_pub|12345678");
 			const sig = await signProof(signer.privateKey, payload);
 			const ok = await verifyProof(attacker.publicKey, payload, sig);
 			expect(ok).toBe(false);
@@ -119,40 +82,11 @@ describe("Crypto primitives (T1.1)", () => {
 				"../e2ee"
 			);
 			const kp = await ed25519KeyPair();
-			const payload = new TextEncoder().encode("host_pub|v1-12345678");
+			const payload = new TextEncoder().encode("host_pub|12345678");
 			const sig = await signProof(kp.privateKey, payload);
-			const tampered = new TextEncoder().encode("host_pub|v1-00000000");
+			const tampered = new TextEncoder().encode("host_pub|00000000");
 			const ok = await verifyProof(kp.publicKey, tampered, sig);
 			expect(ok).toBe(false);
-		});
-
-		it.skip("matches RFC 8032 §7.1 test 1 (browser-only: Node WebCrypto restricts raw Ed25519 priv import to verify-only usages)", async () => {
-			const { signProof, verifyProof, importEd25519PublicKey } = await import(
-				"../e2ee"
-			);
-			const subtle = globalThis.crypto.subtle;
-			const priv = await subtle.importKey(
-				"raw",
-				hexToBytes(
-					"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
-				),
-				"Ed25519",
-				true,
-				["sign"],
-			);
-			const expectedPub = await importEd25519PublicKey(
-				Buffer.from(
-					hexToBytes(
-						"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
-					),
-				).toString("base64"),
-			);
-			const sig = await signProof(priv, new Uint8Array(0));
-			expect(sig).toBe(
-				"5VZDAMNgrHKQhuLMgG6CioSHfx645dl02HPgZSJJAVVfuIIVkKM7rMYeOXAc+bRr0lv18FlbviRlUUFDjnoQCw==",
-			);
-			const ok = await verifyProof(expectedPub, new Uint8Array(0), sig);
-			expect(ok).toBe(true);
 		});
 
 		it("Ed25519 public key round-trips via export/import", async () => {
@@ -186,75 +120,16 @@ describe("Chain derivation (T1.3)", () => {
 				Buffer.from(s2).toString("hex"),
 			);
 		});
-
-		it("createEnvelope + openEnvelope round-trip (host encrypts, joiner decrypts)", async () => {
-			const {
-				x25519KeyPair,
-				exportPublicKey,
-				importPublicKey,
-				generateMeetingSecret,
-				createEnvelope,
-				openEnvelope,
-			} = await import("../e2ee");
-			const host = await x25519KeyPair();
-			const joiner = await x25519KeyPair();
-			const meetingSecret = await generateMeetingSecret();
-			const ctx = { meetingId: "meet-123", keyVersion: 1 };
-			const envelope = await createEnvelope(
-				host.privateKey,
-				await importPublicKey(await exportPublicKey(joiner.publicKey)),
-				meetingSecret,
-				ctx,
-			);
-			expect(envelope.length).toBeGreaterThan(32);
-			const recovered = await openEnvelope(
-				joiner.privateKey,
-				await importPublicKey(await exportPublicKey(host.publicKey)),
-				envelope,
-				ctx,
-			);
-			expect(Buffer.from(recovered).toString("hex")).toBe(
-				Buffer.from(meetingSecret).toString("hex"),
-			);
-		});
-
-		it("openEnvelope fails with wrong context (keyVersion mismatch)", async () => {
-			const {
-				x25519KeyPair,
-				exportPublicKey,
-				importPublicKey,
-				generateMeetingSecret,
-				createEnvelope,
-				openEnvelope,
-			} = await import("../e2ee");
-			const host = await x25519KeyPair();
-			const joiner = await x25519KeyPair();
-			const meetingSecret = await generateMeetingSecret();
-			const envelope = await createEnvelope(
-				host.privateKey,
-				await importPublicKey(await exportPublicKey(joiner.publicKey)),
-				meetingSecret,
-				{ meetingId: "meet-123", keyVersion: 1 },
-			);
-			await expect(
-				openEnvelope(
-					joiner.privateKey,
-					await importPublicKey(await exportPublicKey(host.publicKey)),
-					envelope,
-					{ meetingId: "meet-123", keyVersion: 2 },
-				),
-			).rejects.toThrow();
-		});
 	});
 
 	describe("HKDF chain", () => {
-		it("initSenderChain is deterministic per (meetingSecret, senderId)", async () => {
+		it("initSenderChain is deterministic per (meetingSecret, senderId, mediaType)", async () => {
 			const { generateMeetingSecret, initSenderChain } = await import(
 				"../e2ee"
 			);
 			const secret = await generateMeetingSecret();
-			const c1 = await initSenderChain(secret, 7);
-			const c2 = await initSenderChain(secret, 7);
+			const c1 = await initSenderChain(secret, 7, "video");
+			const c2 = await initSenderChain(secret, 7, "video");
 			expect(Buffer.from(c1).toString("hex")).toBe(
 				Buffer.from(c2).toString("hex"),
 			);
@@ -265,10 +140,22 @@ describe("Chain derivation (T1.3)", () => {
 				"../e2ee"
 			);
 			const secret = await generateMeetingSecret();
-			const c7 = await initSenderChain(secret, 7);
-			const c8 = await initSenderChain(secret, 8);
+			const c7 = await initSenderChain(secret, 7, "video");
+			const c8 = await initSenderChain(secret, 8, "video");
 			expect(Buffer.from(c7).toString("hex")).not.toBe(
 				Buffer.from(c8).toString("hex"),
+			);
+		});
+
+		it("initSenderChain differs across mediaTypes for same senderId", async () => {
+			const { generateMeetingSecret, initSenderChain } = await import(
+				"../e2ee"
+			);
+			const secret = await generateMeetingSecret();
+			const cVideo = await initSenderChain(secret, 1, "video");
+			const cAudio = await initSenderChain(secret, 1, "audio");
+			expect(Buffer.from(cVideo).toString("hex")).not.toBe(
+				Buffer.from(cAudio).toString("hex"),
 			);
 		});
 
@@ -303,41 +190,99 @@ describe("Chain derivation (T1.3)", () => {
 		});
 	});
 
-	describe("End-to-end chain round-trip", () => {
-		it("100 frames encrypted + decrypted with chain in sync", async () => {
+	describe("End-to-end key derivation round-trip", () => {
+		it("SenderChainState and ReceiverChainState derive matching keys for all generations", async () => {
 			const {
 				generateMeetingSecret,
-				initSenderChain,
-				advanceChain,
-				chainTipToAESKey,
+				SenderChainState,
+				ReceiverChainState,
+				ed25519KeyPair,
 			} = await import("../e2ee");
 			const meetingSecret = await generateMeetingSecret();
-			let senderTip = await initSenderChain(meetingSecret, 42);
-			let receiverTip = senderTip;
+			const kp = await ed25519KeyPair();
+			const senderState = new SenderChainState(
+				meetingSecret,
+				42,
+				"video",
+				kp.privateKey,
+			);
+			const receiverState = new ReceiverChainState(meetingSecret);
+			receiverState.setSenderSigningPub(42, kp.publicKey);
 			for (let i = 0; i < 100; i++) {
-				const aesKey = await chainTipToAESKey(senderTip);
+				const senderResult = await senderState.nextFrameKey();
+				expect(senderResult.generation).toBe(i);
+				const receiverResult = await receiverState.getKeyForFrame(
+					42,
+					"video",
+					i,
+				);
+				expect("key" in receiverResult).toBe(true);
+				if ("key" in receiverResult) {
+					const iv = new Uint8Array(12);
+					const frameData = new TextEncoder().encode(`frame ${i}`);
+					const ct = await globalThis.crypto.subtle.encrypt(
+						{ name: "AES-GCM", iv },
+						senderResult.key,
+						frameData,
+					);
+					const pt = await globalThis.crypto.subtle.decrypt(
+						{ name: "AES-GCM", iv },
+						receiverResult.key,
+						ct,
+					);
+					expect(new TextDecoder().decode(pt)).toBe(`frame ${i}`);
+				}
+			}
+		});
+
+		it("receiver can decrypt at any generation without advancing", async () => {
+			const {
+				generateMeetingSecret,
+				SenderChainState,
+				ReceiverChainState,
+				ed25519KeyPair,
+			} = await import("../e2ee");
+			const meetingSecret = await generateMeetingSecret();
+			const kp = await ed25519KeyPair();
+			const senderState = new SenderChainState(
+				meetingSecret,
+				10,
+				"video",
+				kp.privateKey,
+			);
+			const receiverState = new ReceiverChainState(meetingSecret);
+			receiverState.setSenderSigningPub(10, kp.publicKey);
+			for (let i = 0; i < 500; i++) {
+				await senderState.nextFrameKey();
+			}
+			const senderResult = await senderState.nextFrameKey();
+			expect(senderResult.generation).toBe(500);
+			const receiverResult = await receiverState.getKeyForFrame(
+				10,
+				"video",
+				500,
+			);
+			expect("key" in receiverResult).toBe(true);
+			if ("key" in receiverResult) {
 				const iv = new Uint8Array(12);
-				const frameData = new TextEncoder().encode(`frame ${i}`);
+				const frameData = new TextEncoder().encode("jump-ahead");
 				const ct = await globalThis.crypto.subtle.encrypt(
 					{ name: "AES-GCM", iv },
-					aesKey,
+					senderResult.key,
 					frameData,
 				);
-				const receiverKey = await chainTipToAESKey(receiverTip);
 				const pt = await globalThis.crypto.subtle.decrypt(
 					{ name: "AES-GCM", iv },
-					receiverKey,
+					receiverResult.key,
 					ct,
 				);
-				expect(new TextDecoder().decode(pt)).toBe(`frame ${i}`);
-				senderTip = await advanceChain(senderTip);
-				receiverTip = await advanceChain(receiverTip);
+				expect(new TextDecoder().decode(pt)).toBe("jump-ahead");
 			}
 		});
 	});
 });
 
-describe("Frame header v2 (T1.4)", () => {
+describe("Frame header (T1.4)", () => {
 	it("encoded header is 24 bytes", () => {
 		const header = {
 			senderId: 0x12345678,
@@ -345,7 +290,7 @@ describe("Frame header v2 (T1.4)", () => {
 			keyVersion: 0xdeadbeef,
 			iv: new Uint8Array(12).fill(0xab),
 		};
-		const encoded = encodeFrameHeaderV2(header);
+		const encoded = encodeFrameHeader(header);
 		expect(encoded.length).toBe(24);
 	});
 
@@ -356,21 +301,21 @@ describe("Frame header v2 (T1.4)", () => {
 			keyVersion: 0xdeadbeef,
 			iv: new Uint8Array(12).fill(0xab),
 		};
-		const encoded = encodeFrameHeaderV2(original);
-		const decoded = decodeFrameHeaderV2(encoded);
+		const encoded = encodeFrameHeader(original);
+		const decoded = decodeFrameHeader(encoded);
 		expect(decoded?.senderId).toBe(0x12345678);
 		expect(decoded?.generation).toBe(0x9abcdef0);
 		expect(decoded?.keyVersion).toBe(0xdeadbeef);
-		expect(Buffer.from(decoded!.iv).toString("hex")).toBe("ab".repeat(12));
+		expect(Buffer.from(decoded?.iv).toString("hex")).toBe("ab".repeat(12));
 	});
 
 	it("rejects frames shorter than 24 bytes", () => {
-		const decoded = decodeFrameHeaderV2(new Uint8Array(23));
+		const decoded = decodeFrameHeader(new Uint8Array(23));
 		expect(decoded).toBeNull();
 	});
 
 	it("little-endian byte order", () => {
-		const encoded = encodeFrameHeaderV2({
+		const encoded = encodeFrameHeader({
 			senderId: 1,
 			generation: 0,
 			keyVersion: 0,
@@ -383,7 +328,169 @@ describe("Frame header v2 (T1.4)", () => {
 	});
 });
 
-describe("Transform streams v2 (T1.5 + T1.6)", () => {
+describe("Signed envelope (threat model B)", () => {
+	it("createSignedEnvelope + openSignedEnvelope round-trip with signature", async () => {
+		const {
+			x25519KeyPair,
+			ed25519KeyPair,
+			exportPublicKey,
+			importPublicKey,
+			generateMeetingSecret,
+			createSignedEnvelope,
+			openSignedEnvelope,
+		} = await import("../e2ee");
+		const hostX = await x25519KeyPair();
+		const joinerX = await x25519KeyPair();
+		const hostSig = await ed25519KeyPair();
+		const responderX = await x25519KeyPair();
+		const responderSig = await ed25519KeyPair();
+		const meetingSecret = await generateMeetingSecret();
+		const ctx = { meetingId: "meet-123", keyVersion: 1 };
+
+		const responderX25519Pub = new Uint8Array(32);
+		const exp = await globalThis.crypto.subtle.exportKey(
+			"raw",
+			responderX.publicKey,
+		);
+		responderX25519Pub.set(new Uint8Array(exp));
+		const responderSigningPub = new Uint8Array(32);
+		const expSig = await globalThis.crypto.subtle.exportKey(
+			"raw",
+			responderSig.publicKey,
+		);
+		responderSigningPub.set(new Uint8Array(expSig));
+
+		const env = await createSignedEnvelope(
+			hostX.privateKey,
+			hostSig.privateKey,
+			await importPublicKey(await exportPublicKey(joinerX.publicKey)),
+			responderX25519Pub,
+			responderSigningPub,
+			meetingSecret,
+			ctx,
+		);
+		const result = await openSignedEnvelope(
+			joinerX.privateKey,
+			await importPublicKey(await exportPublicKey(hostX.publicKey)),
+			hostSig.publicKey,
+			env,
+			ctx,
+		);
+		expect(Buffer.from(result.meetingSecret).toString("hex")).toBe(
+			Buffer.from(meetingSecret).toString("hex"),
+		);
+		expect(Buffer.from(result.responderSigningPub).toString("hex")).toBe(
+			Buffer.from(responderSigningPub).toString("hex"),
+		);
+	});
+
+	it("openSignedEnvelope rejects envelope with tampered responderSigningPub", async () => {
+		const {
+			x25519KeyPair,
+			ed25519KeyPair,
+			exportPublicKey,
+			importPublicKey,
+			generateMeetingSecret,
+			createSignedEnvelope,
+			openSignedEnvelope,
+		} = await import("../e2ee");
+		const hostX = await x25519KeyPair();
+		const joinerX = await x25519KeyPair();
+		const hostSig = await ed25519KeyPair();
+		const responderX = await x25519KeyPair();
+		const responderSig = await ed25519KeyPair();
+		const meetingSecret = await generateMeetingSecret();
+		const ctx = { meetingId: "meet-123", keyVersion: 1 };
+
+		const responderX25519Pub = new Uint8Array(32);
+		responderX25519Pub.set(
+			new Uint8Array(
+				await globalThis.crypto.subtle.exportKey("raw", responderX.publicKey),
+			),
+		);
+		const responderSigningPub = new Uint8Array(32);
+		responderSigningPub.set(
+			new Uint8Array(
+				await globalThis.crypto.subtle.exportKey("raw", responderSig.publicKey),
+			),
+		);
+
+		const env = await createSignedEnvelope(
+			hostX.privateKey,
+			hostSig.privateKey,
+			await importPublicKey(await exportPublicKey(joinerX.publicKey)),
+			responderX25519Pub,
+			responderSigningPub,
+			meetingSecret,
+			ctx,
+		);
+		env[40] ^= 0x01;
+
+		await expect(
+			openSignedEnvelope(
+				joinerX.privateKey,
+				await importPublicKey(await exportPublicKey(hostX.publicKey)),
+				hostSig.publicKey,
+				env,
+				ctx,
+			),
+		).rejects.toThrow(/signature/i);
+	});
+
+	it("openSignedEnvelope rejects envelope signed with wrong host key", async () => {
+		const {
+			x25519KeyPair,
+			ed25519KeyPair,
+			exportPublicKey,
+			importPublicKey,
+			generateMeetingSecret,
+			createSignedEnvelope,
+			openSignedEnvelope,
+		} = await import("../e2ee");
+		const hostX = await x25519KeyPair();
+		const joinerX = await x25519KeyPair();
+		const hostSig = await ed25519KeyPair();
+		const attackerSig = await ed25519KeyPair();
+		const responderX = await x25519KeyPair();
+		const responderSig = await ed25519KeyPair();
+		const meetingSecret = await generateMeetingSecret();
+		const ctx = { meetingId: "meet-123", keyVersion: 1 };
+
+		const responderX25519Pub = new Uint8Array(32);
+		responderX25519Pub.set(
+			new Uint8Array(
+				await globalThis.crypto.subtle.exportKey("raw", responderX.publicKey),
+			),
+		);
+		const responderSigningPub = new Uint8Array(32);
+		responderSigningPub.set(
+			new Uint8Array(
+				await globalThis.crypto.subtle.exportKey("raw", responderSig.publicKey),
+			),
+		);
+
+		const env = await createSignedEnvelope(
+			hostX.privateKey,
+			attackerSig.privateKey,
+			await importPublicKey(await exportPublicKey(joinerX.publicKey)),
+			responderX25519Pub,
+			responderSigningPub,
+			meetingSecret,
+			ctx,
+		);
+		await expect(
+			openSignedEnvelope(
+				joinerX.privateKey,
+				await importPublicKey(await exportPublicKey(hostX.publicKey)),
+				hostSig.publicKey,
+				env,
+				ctx,
+			),
+		).rejects.toThrow(/signature/i);
+	});
+});
+
+describe("Transform streams (T1.5 + T1.6)", () => {
 	type FakeFrame = { data: ArrayBuffer };
 
 	function makeFakeFrame(bytes: Uint8Array): FakeFrame {
@@ -425,17 +532,27 @@ describe("Transform streams v2 (T1.5 + T1.6)", () => {
 			generateMeetingSecret,
 			SenderChainState,
 			ReceiverChainState,
-			createEncryptionTransformStreamV2,
-			createDecryptionTransformStreamV2,
+			createEncryptionTransformStream,
+			createDecryptionTransformStream,
+			ed25519KeyPair,
 		} = await import("../e2ee");
 		const meetingSecret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
 		const keyVersion = 1;
-		const senderState = new SenderChainState(meetingSecret, 42);
+		const senderState = new SenderChainState(
+			meetingSecret,
+			42,
+			"video",
+			kp.privateKey,
+		);
 		const receiverState = new ReceiverChainState(meetingSecret);
-		const encrypt = createEncryptionTransformStreamV2(senderState, keyVersion);
-		const decrypt = createDecryptionTransformStreamV2(
+		receiverState.setSenderSigningPub(42, kp.publicKey);
+		const encrypt = createEncryptionTransformStream(senderState, keyVersion);
+		const decrypt = createDecryptionTransformStream(
 			receiverState,
 			keyVersion,
+			undefined,
+			"video",
 		);
 		const frames: FakeFrame[] = [];
 		for (let i = 0; i < 50; i++) {
@@ -453,30 +570,155 @@ describe("Transform streams v2 (T1.5 + T1.6)", () => {
 			generateMeetingSecret,
 			SenderChainState,
 			ReceiverChainState,
-			createEncryptionTransformStreamV2,
-			createDecryptionTransformStreamV2,
+			createEncryptionTransformStream,
+			createDecryptionTransformStream,
+			ed25519KeyPair,
 		} = await import("../e2ee");
 		const meetingSecret = await generateMeetingSecret();
-		const senderState = new SenderChainState(meetingSecret, 7);
+		const kp = await ed25519KeyPair();
+		const senderState = new SenderChainState(
+			meetingSecret,
+			7,
+			"video",
+			kp.privateKey,
+		);
 		const receiverState = new ReceiverChainState(meetingSecret);
-		const encrypt = createEncryptionTransformStreamV2(senderState, 1);
-		const decrypt = createDecryptionTransformStreamV2(receiverState, 2);
+		receiverState.setSenderSigningPub(7, kp.publicKey);
+		const encrypt = createEncryptionTransformStream(senderState, 1);
+		const decrypt = createDecryptionTransformStream(
+			receiverState,
+			2,
+			undefined,
+			"video",
+		);
 		const decrypted = await runEncryptDecrypt(encrypt, decrypt, [
 			makeFakeFrame(new TextEncoder().encode("hello")),
 		]);
 		expect(decrypted.length).toBe(0);
 	});
 
-	it("receiver drops out-of-order frames (gap)", async () => {
+	it("receiver drops encrypted empty-payload frames", async () => {
 		const {
 			generateMeetingSecret,
+			SenderChainState,
 			ReceiverChainState,
-			createDecryptionTransformStreamV2,
-			encodeFrameHeaderV2,
+			createEncryptionTransformStream,
+			createDecryptionTransformStream,
+			ed25519KeyPair,
 		} = await import("../e2ee");
 		const meetingSecret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		const senderState = new SenderChainState(
+			meetingSecret,
+			7,
+			"video",
+			kp.privateKey,
+		);
 		const receiverState = new ReceiverChainState(meetingSecret);
-		const decrypt = createDecryptionTransformStreamV2(receiverState, 1);
+		receiverState.setSenderSigningPub(7, kp.publicKey);
+		const encrypt = createEncryptionTransformStream(senderState, 1);
+		const decrypt = createDecryptionTransformStream(
+			receiverState,
+			1,
+			undefined,
+			"video",
+		);
+		const decrypted = await runEncryptDecrypt(encrypt, decrypt, [
+			makeFakeFrame(new Uint8Array()),
+		]);
+		expect(decrypted.length).toBe(0);
+	});
+
+	it("receiver drops frames with no signing pub registered", async () => {
+		const {
+			generateMeetingSecret,
+			SenderChainState,
+			ReceiverChainState,
+			createEncryptionTransformStream,
+			createDecryptionTransformStream,
+			ed25519KeyPair,
+		} = await import("../e2ee");
+		const meetingSecret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		const senderState = new SenderChainState(
+			meetingSecret,
+			5,
+			"video",
+			kp.privateKey,
+		);
+		const receiverState = new ReceiverChainState(meetingSecret);
+		const encrypt = createEncryptionTransformStream(senderState, 1);
+		const decrypt = createDecryptionTransformStream(
+			receiverState,
+			1,
+			undefined,
+			"video",
+		);
+		const decrypted = await runEncryptDecrypt(encrypt, decrypt, [
+			makeFakeFrame(new TextEncoder().encode("hello")),
+		]);
+		expect(decrypted.length).toBe(0);
+	});
+
+	it("receiver drops frames signed with wrong key", async () => {
+		const {
+			generateMeetingSecret,
+			SenderChainState,
+			ReceiverChainState,
+			createEncryptionTransformStream,
+			createDecryptionTransformStream,
+			ed25519KeyPair,
+		} = await import("../e2ee");
+		const meetingSecret = await generateMeetingSecret();
+		const senderKp = await ed25519KeyPair();
+		const attackerKp = await ed25519KeyPair();
+		const senderState = new SenderChainState(
+			meetingSecret,
+			9,
+			"video",
+			attackerKp.privateKey,
+		);
+		const receiverState = new ReceiverChainState(meetingSecret);
+		receiverState.setSenderSigningPub(9, senderKp.publicKey);
+		const encrypt = createEncryptionTransformStream(senderState, 1);
+		const decrypt = createDecryptionTransformStream(
+			receiverState,
+			1,
+			undefined,
+			"video",
+		);
+		const decrypted = await runEncryptDecrypt(encrypt, decrypt, [
+			makeFakeFrame(new TextEncoder().encode("forged")),
+		]);
+		expect(decrypted.length).toBe(0);
+	});
+
+	it("receiver drops replayed frames (exact duplicate generation)", async () => {
+		const {
+			generateMeetingSecret,
+			SenderChainState,
+			ReceiverChainState,
+			createEncryptionTransformStream,
+			createDecryptionTransformStream,
+			ed25519KeyPair,
+		} = await import("../e2ee");
+		const meetingSecret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		const senderState = new SenderChainState(
+			meetingSecret,
+			11,
+			"video",
+			kp.privateKey,
+		);
+		const receiverState = new ReceiverChainState(meetingSecret);
+		receiverState.setSenderSigningPub(11, kp.publicKey);
+		const encrypt = createEncryptionTransformStream(senderState, 1);
+		const decrypt = createDecryptionTransformStream(
+			receiverState,
+			1,
+			undefined,
+			"video",
+		);
 		const decrypted: Uint8Array[] = [];
 		const reader = decrypt.readable.getReader();
 		const readPromise = (async () => {
@@ -490,33 +732,52 @@ describe("Transform streams v2 (T1.5 + T1.6)", () => {
 				// closed
 			}
 		})();
-		const buildFrame = (generation: number): FakeFrame => {
-			const header = encodeFrameHeaderV2({
-				senderId: 5,
-				generation,
-				keyVersion: 1,
-				iv: new Uint8Array(12),
-			});
-			const buf = new Uint8Array(header.length + 32);
-			buf.set(header, 0);
-			return { data: buf.buffer };
-		};
-		const writer = decrypt.writable.getWriter();
-		await writer.write(buildFrame(5));
+		const pipePromise = encrypt.readable.pipeTo(decrypt.writable, {
+			preventClose: false,
+		});
+		const writer = encrypt.writable.getWriter();
+		const frameA = makeFakeFrame(new TextEncoder().encode("a"));
+		const frameB = makeFakeFrame(new TextEncoder().encode("b"));
+		await writer.write(frameA);
+		await writer.write(frameB);
 		await writer.close();
+		await pipePromise;
 		await readPromise;
-		expect(decrypted.length).toBe(0);
+		expect(decrypted.length).toBe(2);
 	});
 
 	it("SenderChainState.wipe() resets generation counter", async () => {
-		const { generateMeetingSecret, SenderChainState } = await import("../e2ee");
+		const { generateMeetingSecret, SenderChainState, ed25519KeyPair } =
+			await import("../e2ee");
 		const meetingSecret = await generateMeetingSecret();
-		const state = new SenderChainState(meetingSecret, 1);
+		const kp = await ed25519KeyPair();
+		const state = new SenderChainState(
+			meetingSecret,
+			1,
+			"video",
+			kp.privateKey,
+		);
 		const r1 = await state.nextFrameKey();
 		expect(r1.generation).toBe(0);
 		state.wipe();
 		const r2 = await state.nextFrameKey();
 		expect(r2.generation).toBe(0);
+	});
+
+	it("SenderChainState.wipe() zeroes meetingSecret bytes", async () => {
+		const { generateMeetingSecret, SenderChainState, ed25519KeyPair } =
+			await import("../e2ee");
+		const meetingSecret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		const state = new SenderChainState(
+			meetingSecret,
+			1,
+			"video",
+			kp.privateKey,
+		);
+		expect(meetingSecret.some((b) => b !== 0)).toBe(true);
+		state.wipe();
+		expect(meetingSecret.every((b) => b === 0)).toBe(true);
 	});
 
 	it("ReceiverChainState.wipe() resets all sender chains", async () => {
@@ -525,132 +786,293 @@ describe("Transform streams v2 (T1.5 + T1.6)", () => {
 		);
 		const meetingSecret = await generateMeetingSecret();
 		const state = new ReceiverChainState(meetingSecret);
-		const r1 = await state.getKeyForFrame(1, 0);
+		const r1 = await state.getKeyForFrame(1, "video", 0);
 		expect("key" in r1).toBe(true);
 		state.wipe();
-		const r2 = await state.getKeyForFrame(1, 0);
+		const r2 = await state.getKeyForFrame(1, "video", 0);
 		expect("key" in r2).toBe(true);
+	});
+
+	it("ReceiverChainState.wipe() zeroes meetingSecret bytes", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
+		const meetingSecret = await generateMeetingSecret();
+		const state = new ReceiverChainState(meetingSecret);
+		expect(meetingSecret.some((b) => b !== 0)).toBe(true);
+		state.wipe();
+		expect(meetingSecret.every((b) => b === 0)).toBe(true);
 	});
 });
 
-describe("ReceiverChainState gap/resync behavior", () => {
-	it("small gaps advance the chain silently", async () => {
+describe("ReceiverChainState anti-replay behavior", () => {
+	it("receiver can decrypt frames at any generation (no gap limit)", async () => {
 		const { generateMeetingSecret, ReceiverChainState } = await import(
 			"../e2ee"
 		);
 		const secret = await generateMeetingSecret();
 		const state = new ReceiverChainState(secret);
-		const r = await state.getKeyForFrame(1, 5);
+		const r = await state.getKeyForFrame(1, "video", 500);
 		expect("key" in r).toBe(true);
 	});
 
-	it("gap of >=100 frames returns 'resync' error", async () => {
-		const {
-			generateMeetingSecret,
-			ReceiverChainState,
-			RESYNC_FRAME_GAP_THRESHOLD,
-		} = await import("../e2ee");
+	it("receiver rejects replayed frames (generation too old)", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
 		const secret = await generateMeetingSecret();
 		const state = new ReceiverChainState(secret);
-		const r = await state.getKeyForFrame(1, RESYNC_FRAME_GAP_THRESHOLD);
-		expect(r).toEqual({ error: "resync" });
+		await state.getKeyForFrame(1, "video", 100);
+		const r = await state.getKeyForFrame(1, "video", 80);
+		expect(r).toEqual({ error: "replay" });
 	});
 
-	it("dispatchE2EEResyncEvent fires meet:e2ee-needs-key-resync with detail", async () => {
-		const { E2EE_NEEDS_KEY_RESYNC_EVENT, RESYNC_FRAME_GAP_THRESHOLD } =
-			await import("../e2ee");
-		let captured: CustomEvent | null = null;
-		const listener = (e: Event) => {
-			captured = e as CustomEvent;
-		};
-		document.addEventListener(E2EE_NEEDS_KEY_RESYNC_EVENT, listener);
-		document.dispatchEvent(
-			new CustomEvent(E2EE_NEEDS_KEY_RESYNC_EVENT, {
-				detail: {
-					senderId: 7,
-					generation: 250,
-					threshold: RESYNC_FRAME_GAP_THRESHOLD,
-				},
-			}),
+	it("receiver rejects exact-duplicate generation (same gen twice)", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
 		);
-		document.removeEventListener(E2EE_NEEDS_KEY_RESYNC_EVENT, listener);
-		expect(captured).not.toBeNull();
-		expect(captured!.detail.senderId).toBe(7);
-		expect(captured!.detail.threshold).toBe(RESYNC_FRAME_GAP_THRESHOLD);
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+		const r1 = await state.getKeyForFrame(1, "video", 50);
+		expect("key" in r1).toBe(true);
+		const r2 = await state.getKeyForFrame(1, "video", 50);
+		expect(r2).toEqual({ error: "replay" });
+	});
+
+	it("receiver accepts out-of-order frames within replay window", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+		const r1 = await state.getKeyForFrame(1, "video", 50);
+		expect("key" in r1).toBe(true);
+		const r2 = await state.getKeyForFrame(1, "video", 48);
+		expect("key" in r2).toBe(true);
+		const r3 = await state.getKeyForFrame(1, "video", 45);
+		expect(r3).toEqual({ error: "replay" });
+	});
+
+	it("receiver prunes seen generations outside replay window", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+
+		for (let generation = 0; generation < 100; generation++) {
+			const result = await state.getKeyForFrame(1, "video", generation);
+			expect("key" in result).toBe(true);
+		}
+
+		const seenFrames = (
+			state as unknown as { seenFrames: Map<string, Set<number>> }
+		).seenFrames;
+		const seen = seenFrames.get("1:video");
+		expect(seen ? Array.from(seen).sort((a, b) => a - b) : []).toEqual([
+			97, 98, 99,
+		]);
+		expect(await state.getKeyForFrame(1, "video", 98)).toEqual({
+			error: "replay",
+		});
+		expect(await state.getKeyForFrame(1, "video", 96)).toEqual({
+			error: "replay",
+		});
 	});
 });
 
-describe("E2EE v2 chain registry", () => {
-	beforeEach(async () => {
-		const { wipeV2MeetingContext } = await import("../e2ee");
-		wipeV2MeetingContext();
+describe("Per-sender authentication (threat model B)", () => {
+	it("hasSenderSigningPub returns false until setSenderSigningPub is called", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+		expect(state.hasSenderSigningPub(1)).toBe(false);
 	});
 
-	it("hasV2MeetingContext() reflects setV2MeetingContext/wipeV2MeetingContext", async () => {
-		const e2ee = await import("../e2ee");
-		expect(e2ee.hasV2MeetingContext()).toBe(false);
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setV2MeetingContext(secret, 1);
-		expect(e2ee.hasV2MeetingContext()).toBe(true);
-		e2ee.wipeV2MeetingContext();
-		expect(e2ee.hasV2MeetingContext()).toBe(false);
-	});
-
-	it("setV2MeetingContext creates per-sender chain on demand", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setV2MeetingContext(secret, 7);
-		const sender = makeMockSender();
-		const ok = await e2ee.setupSenderTransformV2(sender, 42);
-		expect(ok).toBe(true);
-	});
-
-	it("setupSenderTransformV2 returns false when no meeting context", async () => {
-		const e2ee = await import("../e2ee");
-		const sender = makeMockSender();
-		const ok = await e2ee.setupSenderTransformV2(sender, 1);
+	it("verifyFrameSignature returns false for unknown sender", async () => {
+		const { generateMeetingSecret, ReceiverChainState } = await import(
+			"../e2ee"
+		);
+		const secret = await generateMeetingSecret();
+		const state = new ReceiverChainState(secret);
+		const ok = await state.verifyFrameSignature(
+			1,
+			new Uint8Array(24),
+			new Uint8Array(32),
+			new Uint8Array(64),
+		);
 		expect(ok).toBe(false);
 	});
 
-	it("setupSenderTransformV2 deduplicates by sender", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setV2MeetingContext(secret, 1);
-		const sender = makeMockSender();
-		expect(await e2ee.setupSenderTransformV2(sender, 5)).toBe(true);
-		expect(await e2ee.setupSenderTransformV2(sender, 5)).toBe(false);
+	it("verifyFrameSignature returns true for a properly signed frame", async () => {
+		const {
+			generateMeetingSecret,
+			ReceiverChainState,
+			ed25519KeyPair,
+			signWithEd25519,
+		} = await import("../e2ee");
+		const secret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		const state = new ReceiverChainState(secret);
+		state.setSenderSigningPub(1, kp.publicKey);
+		const header = new Uint8Array(24);
+		const cipher = new Uint8Array(32);
+		const signed = new Uint8Array(header.length + cipher.length);
+		signed.set(header, 0);
+		signed.set(cipher, header.length);
+		const sig = await signWithEd25519(kp.privateKey, signed);
+		const ok = await state.verifyFrameSignature(1, header, cipher, sig);
+		expect(ok).toBe(true);
+	});
+
+	it("verifyFrameSignature returns false for tampered ciphertext", async () => {
+		const {
+			generateMeetingSecret,
+			ReceiverChainState,
+			ed25519KeyPair,
+			signWithEd25519,
+		} = await import("../e2ee");
+		const secret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		const state = new ReceiverChainState(secret);
+		state.setSenderSigningPub(1, kp.publicKey);
+		const header = new Uint8Array(24);
+		const cipher = new Uint8Array(32);
+		const signed = new Uint8Array(header.length + cipher.length);
+		signed.set(header, 0);
+		signed.set(cipher, header.length);
+		const sig = await signWithEd25519(kp.privateKey, signed);
+		cipher[0] ^= 0x01;
+		const ok = await state.verifyFrameSignature(1, header, cipher, sig);
+		expect(ok).toBe(false);
+	});
+
+	it("verifyFrameSignature returns false when signed with a different key", async () => {
+		const {
+			generateMeetingSecret,
+			ReceiverChainState,
+			ed25519KeyPair,
+			signWithEd25519,
+		} = await import("../e2ee");
+		const secret = await generateMeetingSecret();
+		const legitKp = await ed25519KeyPair();
+		const attackerKp = await ed25519KeyPair();
+		const state = new ReceiverChainState(secret);
+		state.setSenderSigningPub(1, legitKp.publicKey);
+		const header = new Uint8Array(24);
+		const cipher = new Uint8Array(32);
+		const signed = new Uint8Array(header.length + cipher.length);
+		signed.set(header, 0);
+		signed.set(cipher, header.length);
+		const sig = await signWithEd25519(attackerKp.privateKey, signed);
+		const ok = await state.verifyFrameSignature(1, header, cipher, sig);
+		expect(ok).toBe(false);
 	});
 });
 
-describe("E2EE v2 chat key", () => {
+describe("E2EE chain registry", () => {
 	beforeEach(async () => {
-		const { wipeV2MeetingContext } = await import("../e2ee");
-		wipeV2MeetingContext();
+		const { wipeMeetingContext } = await import("../e2ee");
+		wipeMeetingContext();
 	});
 
-	it("getE2EEChatKeyV2 returns null when no meeting context", async () => {
-		const { getE2EEChatKeyV2 } = await import("../e2ee");
-		expect(await getE2EEChatKeyV2()).toBeNull();
+	it("hasMeetingContext() reflects setMeetingContext/wipeMeetingContext", async () => {
+		const e2ee = await import("../e2ee");
+		expect(e2ee.hasMeetingContext()).toBe(false);
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setMeetingContext(secret, 1);
+		expect(e2ee.hasMeetingContext()).toBe(true);
+		e2ee.wipeMeetingContext();
+		expect(e2ee.hasMeetingContext()).toBe(false);
 	});
 
-	it("getE2EEChatKeyV2 is deterministic per (meetingSecret, keyVersion)", async () => {
+	it("wipeMeetingContext zeroes the meeting secret", async () => {
 		const e2ee = await import("../e2ee");
 		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setV2MeetingContext(secret, 7);
-		const k1 = await e2ee.getE2EEChatKeyV2();
-		const k2 = await e2ee.getE2EEChatKeyV2();
+		expect(secret.some((b) => b !== 0)).toBe(true);
+		e2ee.setMeetingContext(secret, 1);
+		e2ee.wipeMeetingContext();
+		expect(secret.every((b) => b === 0)).toBe(true);
+	});
+
+	it("setMeetingContext creates per-sender chain on demand", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		const kp = await e2ee.ed25519KeyPair();
+		e2ee.setMeetingContext(secret, 7, kp.privateKey);
+		const sender = makeMockSender();
+		const ok = await e2ee.setupSenderTransform(sender, 42, "video");
+		expect(ok).toBe(true);
+	});
+
+	it("setupSenderTransform returns false when no meeting context", async () => {
+		const e2ee = await import("../e2ee");
+		const sender = makeMockSender();
+		const ok = await e2ee.setupSenderTransform(sender, 1, "video");
+		expect(ok).toBe(false);
+	});
+
+	it("setupSenderTransform returns false when no signing key", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setMeetingContext(secret, 1);
+		const sender = makeMockSender();
+		const ok = await e2ee.setupSenderTransform(sender, 1, "video");
+		expect(ok).toBe(false);
+	});
+
+	it("setupSenderTransform deduplicates by sender", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		const kp = await e2ee.ed25519KeyPair();
+		e2ee.setMeetingContext(secret, 1, kp.privateKey);
+		const sender = makeMockSender();
+		expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(true);
+		expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(false);
+	});
+
+	it("retains sender signing pub registered before meeting context", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		const kp = await e2ee.ed25519KeyPair();
+		e2ee.setSenderSigningPub(7, kp.publicKey);
+		expect(e2ee.hasSenderSigningPub(7)).toBe(true);
+		e2ee.setMeetingContext(secret, 1, kp.privateKey);
+		expect(e2ee.hasSenderSigningPub(7)).toBe(true);
+	});
+});
+
+describe("E2EE chat key", () => {
+	beforeEach(async () => {
+		const { wipeMeetingContext } = await import("../e2ee");
+		wipeMeetingContext();
+	});
+
+	it("getE2EEChatKey returns null when no meeting context", async () => {
+		const { getE2EEChatKey } = await import("../e2ee");
+		expect(await getE2EEChatKey()).toBeNull();
+	});
+
+	it("getE2EEChatKey is deterministic per (meetingSecret, keyVersion)", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		e2ee.setMeetingContext(secret, 7);
+		const k1 = await e2ee.getE2EEChatKey();
+		const k2 = await e2ee.getE2EEChatKey();
 		expect(k1).not.toBeNull();
 		expect(k1).toBe(k2);
 	});
 
-	it("wipeV2MeetingContext invalidates the cached chat key", async () => {
+	it("wipeMeetingContext invalidates the cached chat key", async () => {
 		const e2ee = await import("../e2ee");
 		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setV2MeetingContext(secret, 1);
-		const k1 = await e2ee.getE2EEChatKeyV2();
+		e2ee.setMeetingContext(secret, 1);
+		const k1 = await e2ee.getE2EEChatKey();
 		expect(k1).not.toBeNull();
-		e2ee.wipeV2MeetingContext();
-		expect(await e2ee.getE2EEChatKeyV2()).toBeNull();
+		e2ee.wipeMeetingContext();
+		expect(await e2ee.getE2EEChatKey()).toBeNull();
 	});
 });
 

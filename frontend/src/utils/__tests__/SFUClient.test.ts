@@ -521,12 +521,12 @@ describe("E2EE signaling payloads", () => {
 		client.connectionDetails.e2eeKeyVersion = null;
 		client.setE2EERequired(true, {
 			hostPublicKey: "D".repeat(44),
-			keyVersion: "v1-abcd1234",
+			keyVersion: "abcd1234",
 		});
-		expect(client.isV2E2EERequired()).toBe(true);
+		expect(client.isE2EERequired()).toBe(true);
 		expect(client.connectionDetails.e2eeHostPublicKey).toBe("D".repeat(44));
-		expect(client.connectionDetails.e2eeKeyVersion).toBe("v1-abcd1234");
-		expect(client.getE2EEKeyVersion()).toBe("v1-abcd1234");
+		expect(client.connectionDetails.e2eeKeyVersion).toBe("abcd1234");
+		expect(client.getE2EEKeyVersion()).toBe("abcd1234");
 	});
 });
 
@@ -544,6 +544,8 @@ describe("disconnect", () => {
 			codecStrategy: "svc",
 			e2eeRequired: false,
 			e2eeHostPublicKey: null,
+			e2eeHostSigningPublicKey: null,
+			e2eeKeyVersion: null,
 		};
 		client.disconnect();
 		expect(client.connected).toBe(false);

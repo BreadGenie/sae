@@ -24,7 +24,7 @@ def _b64(raw: bytes) -> str:
 
 
 class IntegrationTestE2EEProof(IntegrationTestCase):
-	"""Validation tests for the v2 E2EE proof + host pubkey flow.
+	"""Validation tests for the E2EE proof + host pubkey flow.
 
 	Generates an ed25519 auth keypair + an X25519 public key (32 random bytes
 	acting as a stand-in) to exercise the server-side signature verification
@@ -76,10 +76,10 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			doc.insert(ignore_permissions=True)
 
 	def test_validators(self):
-		self.assertTrue(_is_valid_e2ee_version("v1-abcd1234"))
-		self.assertTrue(_is_valid_e2ee_version("v12-deadbeef"))
-		self.assertFalse(_is_valid_e2ee_version("v0-abcd1234"))
-		self.assertFalse(_is_valid_e2ee_version("v-1234"))
+		self.assertTrue(_is_valid_e2ee_version("abcd1234"))
+		self.assertTrue(_is_valid_e2ee_version("deadbeef"))
+		self.assertFalse(_is_valid_e2ee_version("abc"))  # too short
+		self.assertFalse(_is_valid_e2ee_version("abcdefgh"))  # non-hex
 		self.assertFalse(_is_valid_e2ee_version("garbage"))
 
 		good_sig = _b64(b"\x00" * 64)
@@ -109,7 +109,7 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		auth_pub_b64 = _b64(auth_pub.public_bytes_raw())
 		host_x25519_pub = b"\x22" * 32
 		host_x25519_pub_b64 = _b64(host_x25519_pub)
-		version = "v1-12345678"
+		version = "12345678"
 		device_id = "test-device-1"
 
 		message = host_x25519_pub + version.encode("utf-8")
@@ -146,7 +146,7 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			_verify_e2ee_proof_signature(
 				sig_b64,
 				host_x25519_pub_b64,
-				"v1-deadbeef",
+				"deadbeef",
 				device_id,
 				self.host_email,
 			)
@@ -179,8 +179,9 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			convert_meeting_to_e2ee(
 				meeting_id=meeting.name,
 				e2ee_key_proof="not-a-valid-base64-sig",
-				e2ee_key_version="v1-12345678",
+				e2ee_key_version="12345678",
 				e2ee_host_public_key=_b64(b"\x33" * 32),
+				e2ee_host_signing_public_key=_b64(b"\x44" * 32),
 				e2ee_device_id="laptop",
 			)
 
@@ -189,7 +190,9 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
 		host_pub = b"\x44" * 32
 		host_pub_b64 = _b64(host_pub)
-		version = "v1-abcdef01"
+		host_signing_pub = b"\x55" * 32
+		host_signing_pub_b64 = _b64(host_signing_pub)
+		version = "abcdef01"
 		device_id = "laptop-2026"
 		message = host_pub + version.encode("utf-8")
 		sig_b64 = _b64(auth_priv.sign(message))
@@ -212,6 +215,7 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			e2ee_key_proof=sig_b64,
 			e2ee_key_version=version,
 			e2ee_host_public_key=host_pub_b64,
+			e2ee_host_signing_public_key=host_signing_pub_b64,
 			e2ee_device_id=device_id,
 		)
 
@@ -223,7 +227,92 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		self.assertTrue(meeting.e2ee_enabled)
 		self.assertEqual(meeting.e2ee_key_version, version)
 		self.assertEqual(meeting.e2ee_host_public_key, host_pub_b64)
+		self.assertEqual(meeting.e2ee_host_signing_public_key, host_signing_pub_b64)
 		self.assertEqual(meeting.e2ee_key_proof, sig_b64)
+
+	def test_convert_meeting_to_e2ee_rotates_existing_epoch(self):
+		auth_priv = Ed25519PrivateKey.generate()
+		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
+		device_id = "laptop-2026-rotate"
+		self._set_device_keys(self.host_email, device_id, auth_pub_b64)
+
+		frappe.set_user(self.host_email)
+		meeting = frappe.get_doc(
+			{
+				"doctype": "Sae Meeting",
+				"meeting_type": "open",
+				"allow_guest": 1,
+			}
+		)
+		meeting.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("Sae Meeting", meeting.name, ignore_permissions=True))
+
+		first_host_pub = b"\x44" * 32
+		first_version = "abcdef01"
+		first_sig = _b64(auth_priv.sign(first_host_pub + first_version.encode("utf-8")))
+		convert_meeting_to_e2ee(
+			meeting_id=meeting.name,
+			e2ee_key_proof=first_sig,
+			e2ee_key_version=first_version,
+			e2ee_host_public_key=_b64(first_host_pub),
+			e2ee_host_signing_public_key=_b64(b"\x55" * 32),
+			e2ee_device_id=device_id,
+		)
+
+		second_host_pub = b"\x66" * 32
+		second_signing_pub_b64 = _b64(b"\x77" * 32)
+		second_version = "fedcba09"
+		second_sig = _b64(auth_priv.sign(second_host_pub + second_version.encode("utf-8")))
+		result = convert_meeting_to_e2ee(
+			meeting_id=meeting.name,
+			e2ee_key_proof=second_sig,
+			e2ee_key_version=second_version,
+			e2ee_host_public_key=_b64(second_host_pub),
+			e2ee_host_signing_public_key=second_signing_pub_b64,
+			e2ee_device_id=device_id,
+		)
+
+		self.assertTrue(result["e2ee_enabled"])
+		self.assertEqual(result["e2ee_key_version"], second_version)
+		self.assertEqual(result["e2ee_host_public_key"], _b64(second_host_pub))
+
+		meeting.reload()
+		self.assertEqual(meeting.e2ee_key_version, second_version)
+		self.assertEqual(meeting.e2ee_host_public_key, _b64(second_host_pub))
+		self.assertEqual(meeting.e2ee_host_signing_public_key, second_signing_pub_b64)
+		self.assertEqual(meeting.e2ee_key_proof, second_sig)
+
+	def test_convert_meeting_to_e2ee_rejects_missing_signing_pubkey(self):
+		auth_priv = Ed25519PrivateKey.generate()
+		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
+		host_pub = b"\x66" * 32
+		host_pub_b64 = _b64(host_pub)
+		version = "abcdef02"
+		device_id = "laptop-2026-no-sig"
+		message = host_pub + version.encode("utf-8")
+		sig_b64 = _b64(auth_priv.sign(message))
+
+		self._set_device_keys(self.host_email, device_id, auth_pub_b64)
+
+		frappe.set_user(self.host_email)
+		meeting = frappe.get_doc(
+			{
+				"doctype": "Sae Meeting",
+				"meeting_type": "open",
+				"allow_guest": 1,
+			}
+		)
+		meeting.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("Sae Meeting", meeting.name, ignore_permissions=True))
+
+		with self.assertRaises(frappe.ValidationError):
+			convert_meeting_to_e2ee(
+				meeting_id=meeting.name,
+				e2ee_key_proof=sig_b64,
+				e2ee_key_version=version,
+				e2ee_host_public_key=host_pub_b64,
+				e2ee_device_id=device_id,
+			)
 
 	def test_register_e2ee_device_persists_pubkey(self):
 		auth_priv = Ed25519PrivateKey.generate()

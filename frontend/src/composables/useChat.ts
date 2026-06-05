@@ -1,6 +1,6 @@
 import { toast } from "frappe-ui";
 import audioNotificationManager from "../utils/audioNotifications";
-import { getE2EEChatKeyV2, hasV2MeetingContext } from "../utils/media/e2ee";
+import { getE2EEChatKey, hasMeetingContext } from "../utils/media/e2ee";
 import type { SFUClient } from "../utils/SFUClient";
 import type { ChatMessage, ChatStore } from "./useChatStore";
 import type { CurrentUser } from "./useCurrentUser";
@@ -62,7 +62,7 @@ async function decryptChatMessage(
 }
 
 function shouldEncryptChat(): boolean {
-	return hasV2MeetingContext();
+	return hasMeetingContext();
 }
 
 export function useChat(deps: {
@@ -73,7 +73,7 @@ export function useChat(deps: {
 	const { chatStore, currentUser, sfuClient } = deps;
 
 	async function getChatKey(): Promise<CryptoKey | null> {
-		return getE2EEChatKeyV2();
+		return getE2EEChatKey();
 	}
 
 	const setupChatEvents = (notificationQueue: unknown) => {
@@ -88,7 +88,7 @@ export function useChat(deps: {
 				const key = await getChatKey();
 				if (!key) {
 					console.warn(
-						"E2EE chat: received encrypted message but no v2 meeting context set",
+						"E2EE chat: received encrypted message but no meeting context set",
 					);
 					plaintext = "[Encrypted message]";
 				} else {

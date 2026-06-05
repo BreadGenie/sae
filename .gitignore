@@ -60,3 +60,7 @@ meet/public/node_modules
 #Frappe
 
 meet/www/meet.html
+
+# E2EE PR — generated / tooling artifacts
+.opencode/
+test-results/
