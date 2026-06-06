@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setMeetingContext, wipeMeetingContext } from "../e2ee";
 import { TransportManager } from "../TransportManager";
 
 vi.mock("../codecStrategy", () => ({
@@ -9,6 +10,7 @@ import { resolveCodecStrategy } from "../codecStrategy";
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	wipeMeetingContext();
 });
 
 function createManager() {
@@ -18,6 +20,8 @@ function createManager() {
 function mockSfuClient(getCodecStrategy?: () => string) {
 	return {
 		getCodecStrategy: getCodecStrategy ?? (() => "svc"),
+		getE2EEMode: vi.fn(() => "none"),
+		isE2EERequired: vi.fn(() => false),
 		getRouterRtpCapabilities: vi.fn(),
 		createWebRtcTransport: vi.fn(),
 		connectWebRtcTransport: vi.fn(),
@@ -134,6 +138,64 @@ describe("getVideoEncodingConfig", () => {
 		expect(config.decision.scalabilityMode).toBeNull();
 		expect(config.encodings).toHaveLength(1);
 		expect(config.encodings[0].maxBitrate).toBe(2_000_000);
+	});
+});
+
+describe("E2EE transport options", () => {
+	it("enables legacy encodedInsertableStreams only for legacy mode", () => {
+		setMeetingContext(new Uint8Array(32) as Uint8Array<ArrayBuffer>, 1);
+		const manager = createManager();
+		manager.sfuClient = {
+			...mockSfuClient(),
+			isE2EERequired: vi.fn(() => true),
+			getE2EEMode: vi.fn(() => "insertable-streams"),
+		} as never;
+
+		const result = (manager as unknown as Record<string, unknown>)
+			.shouldEnableLegacyEncodedInsertableStreams as () => boolean;
+
+		expect(result.call(manager)).toBe(true);
+	});
+
+	it("does not enable legacy encodedInsertableStreams for RTCRtpScriptTransform", () => {
+		setMeetingContext(new Uint8Array(32) as Uint8Array<ArrayBuffer>, 1);
+		const manager = createManager();
+		manager.sfuClient = {
+			...mockSfuClient(),
+			isE2EERequired: vi.fn(() => true),
+			getE2EEMode: vi.fn(() => "rtp-script-transform"),
+		} as never;
+
+		const result = (manager as unknown as Record<string, unknown>)
+			.shouldEnableLegacyEncodedInsertableStreams as () => boolean;
+
+		expect(result.call(manager)).toBe(false);
+	});
+
+	it("passes sender transform setup through onRtpSender before produce resolves", async () => {
+		setMeetingContext(new Uint8Array(32) as Uint8Array<ArrayBuffer>, 1);
+		const manager = createManager();
+		manager.sfuClient = {
+			...mockSfuClient(),
+			isE2EERequired: vi.fn(() => true),
+			getE2EEMode: vi.fn(() => "rtp-script-transform"),
+			getOwnSenderId: vi.fn(() => 7),
+		} as never;
+		manager.device = { canProduce: vi.fn(() => true) } as never;
+		const produce = vi.fn(async () => ({ rtpSender: {} }));
+		manager.sendTransport = { produce } as never;
+
+		await manager.createProducer({
+			id: "track-1",
+			kind: "audio",
+			readyState: "live",
+		} as MediaStreamTrack);
+
+		expect(produce).toHaveBeenCalledWith(
+			expect.objectContaining({
+				onRtpSender: expect.any(Function),
+			}),
+		);
 	});
 });
 

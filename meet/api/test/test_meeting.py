@@ -36,6 +36,20 @@ class IntegrationTestMeetingApi(IntegrationTestCase):
 		self.assertTrue(result["auth_token"])
 		self.assertFalse(result["e2ee_required"])
 		self.assertIsNone(result["e2ee_host_public_key"])
+		self.assertIn("is_host", result)
+		self.assertFalse(result["is_host"])
+		self.assertIn("is_cohost", result)
+		self.assertFalse(result["is_cohost"])
+
+	def test_host_gets_is_host_from_sfu_connection_details(self):
+		self.meeting.add_user_to_table("members", self.host_email, save=True, ignore_permissions=True)
+
+		frappe.set_user(self.host_email)
+
+		result = get_sfu_connection_details(self.meeting.name)
+
+		self.assertTrue(result["is_host"])
+		self.assertFalse(result["is_cohost"])
 
 	def test_restricted_meeting_non_member_cannot_get_sfu_connection_details(self):
 		frappe.set_user(self.outsider_email)

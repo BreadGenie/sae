@@ -1,10 +1,23 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 beforeAll(() => {
 	if (typeof globalThis.RTCRtpSender === "undefined") {
 		globalThis.RTCRtpSender = class RTCRtpSender {} as never;
 		globalThis.RTCRtpReceiver = class RTCRtpReceiver {} as never;
 	}
+});
+
+afterEach(() => {
+	delete (
+		RTCRtpSender.prototype as unknown as {
+			createEncodedStreams?: () => unknown;
+		}
+	).createEncodedStreams;
+	delete (
+		RTCRtpReceiver.prototype as unknown as {
+			createEncodedStreams?: () => unknown;
+		}
+	).createEncodedStreams;
 });
 
 import { decodeFrameHeader, encodeFrameHeader } from "../e2ee";
@@ -286,7 +299,8 @@ describe("Frame header (T1.4)", () => {
 	it("encoded header is 24 bytes", () => {
 		const header = {
 			senderId: 0x12345678,
-			generation: 0x9abcdef0,
+			generation: 0x1abcdef0,
+			frameType: "key",
 			keyVersion: 0xdeadbeef,
 			iv: new Uint8Array(12).fill(0xab),
 		};
@@ -297,16 +311,31 @@ describe("Frame header (T1.4)", () => {
 	it("round-trips all fields", () => {
 		const original = {
 			senderId: 0x12345678,
-			generation: 0x9abcdef0,
+			generation: 0x1abcdef0,
+			frameType: "key",
 			keyVersion: 0xdeadbeef,
 			iv: new Uint8Array(12).fill(0xab),
 		};
 		const encoded = encodeFrameHeader(original);
 		const decoded = decodeFrameHeader(encoded);
 		expect(decoded?.senderId).toBe(0x12345678);
-		expect(decoded?.generation).toBe(0x9abcdef0);
+		expect(decoded?.generation).toBe(0x1abcdef0);
+		expect(decoded?.frameType).toBe("key");
 		expect(decoded?.keyVersion).toBe(0xdeadbeef);
 		expect(Buffer.from(decoded?.iv).toString("hex")).toBe("ab".repeat(12));
+	});
+
+	it("round-trips delta frame type", () => {
+		const encoded = encodeFrameHeader({
+			senderId: 1,
+			generation: 7,
+			frameType: "delta",
+			keyVersion: 1,
+			iv: new Uint8Array(12),
+		});
+		const decoded = decodeFrameHeader(encoded);
+		expect(decoded?.generation).toBe(7);
+		expect(decoded?.frameType).toBe("delta");
 	});
 
 	it("rejects frames shorter than 24 bytes", () => {
@@ -900,6 +929,7 @@ describe("Per-sender authentication (threat model B)", () => {
 		const ok = await state.verifyFrameSignature(
 			1,
 			new Uint8Array(24),
+			new Uint8Array(0),
 			new Uint8Array(32),
 			new Uint8Array(64),
 		);
@@ -918,12 +948,22 @@ describe("Per-sender authentication (threat model B)", () => {
 		const state = new ReceiverChainState(secret);
 		state.setSenderSigningPub(1, kp.publicKey);
 		const header = new Uint8Array(24);
+		const clearPrefix = new Uint8Array(0);
 		const cipher = new Uint8Array(32);
-		const signed = new Uint8Array(header.length + cipher.length);
+		const signed = new Uint8Array(
+			header.length + clearPrefix.length + cipher.length,
+		);
 		signed.set(header, 0);
-		signed.set(cipher, header.length);
+		signed.set(clearPrefix, header.length);
+		signed.set(cipher, header.length + clearPrefix.length);
 		const sig = await signWithEd25519(kp.privateKey, signed);
-		const ok = await state.verifyFrameSignature(1, header, cipher, sig);
+		const ok = await state.verifyFrameSignature(
+			1,
+			header,
+			clearPrefix,
+			cipher,
+			sig,
+		);
 		expect(ok).toBe(true);
 	});
 
@@ -939,13 +979,23 @@ describe("Per-sender authentication (threat model B)", () => {
 		const state = new ReceiverChainState(secret);
 		state.setSenderSigningPub(1, kp.publicKey);
 		const header = new Uint8Array(24);
+		const clearPrefix = new Uint8Array(0);
 		const cipher = new Uint8Array(32);
-		const signed = new Uint8Array(header.length + cipher.length);
+		const signed = new Uint8Array(
+			header.length + clearPrefix.length + cipher.length,
+		);
 		signed.set(header, 0);
-		signed.set(cipher, header.length);
+		signed.set(clearPrefix, header.length);
+		signed.set(cipher, header.length + clearPrefix.length);
 		const sig = await signWithEd25519(kp.privateKey, signed);
 		cipher[0] ^= 0x01;
-		const ok = await state.verifyFrameSignature(1, header, cipher, sig);
+		const ok = await state.verifyFrameSignature(
+			1,
+			header,
+			clearPrefix,
+			cipher,
+			sig,
+		);
 		expect(ok).toBe(false);
 	});
 
@@ -962,12 +1012,22 @@ describe("Per-sender authentication (threat model B)", () => {
 		const state = new ReceiverChainState(secret);
 		state.setSenderSigningPub(1, legitKp.publicKey);
 		const header = new Uint8Array(24);
+		const clearPrefix = new Uint8Array(0);
 		const cipher = new Uint8Array(32);
-		const signed = new Uint8Array(header.length + cipher.length);
+		const signed = new Uint8Array(
+			header.length + clearPrefix.length + cipher.length,
+		);
 		signed.set(header, 0);
-		signed.set(cipher, header.length);
+		signed.set(clearPrefix, header.length);
+		signed.set(cipher, header.length + clearPrefix.length);
 		const sig = await signWithEd25519(attackerKp.privateKey, signed);
-		const ok = await state.verifyFrameSignature(1, header, cipher, sig);
+		const ok = await state.verifyFrameSignature(
+			1,
+			header,
+			clearPrefix,
+			cipher,
+			sig,
+		);
 		expect(ok).toBe(false);
 	});
 });
@@ -1033,6 +1093,69 @@ describe("E2EE chain registry", () => {
 		expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(false);
 	});
 
+	it("setupSenderTransform can reinstall RTCRtpScriptTransform on a reused sender", async () => {
+		const e2ee = await import("../e2ee");
+		const secret = await e2ee.generateMeetingSecret();
+		const kp = await e2ee.ed25519KeyPair();
+		const originalSender = globalThis.RTCRtpSender;
+		const originalReceiver = globalThis.RTCRtpReceiver;
+		const originalScriptTransform = (
+			globalThis as typeof globalThis & { RTCRtpScriptTransform?: unknown }
+		).RTCRtpScriptTransform;
+		const originalWorker = globalThis.Worker;
+
+		try {
+			Object.defineProperty(globalThis, "RTCRtpSender", {
+				configurable: true,
+				writable: true,
+				value: { prototype: {} },
+			});
+			Object.defineProperty(globalThis, "RTCRtpReceiver", {
+				configurable: true,
+				writable: true,
+				value: { prototype: {} },
+			});
+			Object.defineProperty(globalThis, "RTCRtpScriptTransform", {
+				configurable: true,
+				writable: true,
+				value: function RTCRtpScriptTransform() {},
+			});
+			Object.defineProperty(globalThis, "Worker", {
+				configurable: true,
+				writable: true,
+				value: class Worker {
+					postMessage() {}
+				},
+			});
+			e2ee.setMeetingContext(secret, 1, kp.privateKey);
+			const sender = {} as RTCRtpSender;
+
+			expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(true);
+			expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(true);
+		} finally {
+			Object.defineProperty(globalThis, "RTCRtpSender", {
+				configurable: true,
+				writable: true,
+				value: originalSender,
+			});
+			Object.defineProperty(globalThis, "RTCRtpReceiver", {
+				configurable: true,
+				writable: true,
+				value: originalReceiver,
+			});
+			Object.defineProperty(globalThis, "RTCRtpScriptTransform", {
+				configurable: true,
+				writable: true,
+				value: originalScriptTransform,
+			});
+			Object.defineProperty(globalThis, "Worker", {
+				configurable: true,
+				writable: true,
+				value: originalWorker,
+			});
+		}
+	});
+
 	it("retains sender signing pub registered before meeting context", async () => {
 		const e2ee = await import("../e2ee");
 		const secret = await e2ee.generateMeetingSecret();
@@ -1090,6 +1213,11 @@ function makeMockSender(): RTCRtpSender {
 	} as unknown as RTCRtpSender;
 	(
 		RTCRtpSender.prototype as unknown as {
+			createEncodedStreams?: () => unknown;
+		}
+	).createEncodedStreams = () => ({ readable, writable });
+	(
+		RTCRtpReceiver.prototype as unknown as {
 			createEncodedStreams?: () => unknown;
 		}
 	).createEncodedStreams = () => ({ readable, writable });

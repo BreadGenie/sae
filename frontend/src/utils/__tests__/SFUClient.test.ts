@@ -357,6 +357,11 @@ describe("getConnectionDetails", () => {
 			codec_strategy: "svc",
 			e2ee_required: true,
 			e2ee_host_public_key: "A".repeat(44),
+			e2ee_host_signing_public_key: "S".repeat(44),
+			e2ee_host_user_id: "host@example.com",
+			e2ee_key_version: "abcd1234",
+			is_host: true,
+			is_cohost: false,
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-1");
@@ -365,6 +370,11 @@ describe("getConnectionDetails", () => {
 		expect(details.codecStrategy).toBe("svc");
 		expect(details.e2eeRequired).toBe(true);
 		expect(details.e2eeHostPublicKey).toBe("A".repeat(44));
+		expect(details.e2eeHostSigningPublicKey).toBe("S".repeat(44));
+		expect(details.e2eeHostUserId).toBe("host@example.com");
+		expect(details.e2eeKeyVersion).toBe("abcd1234");
+		expect(details.isHost).toBe(true);
+		expect(details.isCohost).toBe(false);
 		expect(frappeRequest).toHaveBeenCalledWith(
 			expect.objectContaining({
 				url: "meet.api.meeting.get_sfu_connection_details",
@@ -384,6 +394,7 @@ describe("getConnectionDetails", () => {
 			codec_strategy: "svc",
 			e2ee_required: true,
 			e2ee_host_public_key: "B".repeat(44),
+			e2ee_host_user_id: "host@example.com",
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-2", "guest-token");
@@ -392,6 +403,101 @@ describe("getConnectionDetails", () => {
 		expect(details.userData?.is_guest).toBe(true);
 		expect(details.e2eeRequired).toBe(true);
 		expect(details.e2eeHostPublicKey).toBe("B".repeat(44));
+		expect(details.e2eeHostUserId).toBe("host@example.com");
+	});
+});
+
+describe("connect refresh", () => {
+	it("re-fetches connection details when already connected", async () => {
+		const client = createClient();
+		client.connected = true;
+		client.connectionDetails = {
+			authToken: "stale-token",
+			meetingId: "meet-1",
+			userId: "usr-1",
+			sfuUrl: "https://sfu.example.com",
+			sfuPort: "443",
+			tokenExpiresAt: Date.now() + 3600_000,
+			codecStrategy: "simulcast",
+			e2eeRequired: false,
+			e2eeHostPublicKey: null,
+			e2eeHostSigningPublicKey: null,
+			e2eeHostUserId: null,
+			e2eeKeyVersion: null,
+			isHost: false,
+			isCohost: false,
+		};
+		const signalChannel = client.signalChannel;
+
+		vi.mocked(frappeRequest).mockResolvedValue({
+			auth_token: "fresh-token",
+			meeting_id: "meet-1",
+			user_id: "usr-1",
+			sfu_url: "https://sfu.example.com",
+			sfu_port: "443",
+			user_data: { name: "Alice" },
+			expires_in: 3600,
+			codec_strategy: "svc",
+			e2ee_required: true,
+			e2ee_host_public_key: "E".repeat(44),
+			e2ee_host_signing_public_key: "F".repeat(44),
+			e2ee_host_user_id: "host@example.com",
+			e2ee_key_version: "deadbeef",
+			is_host: true,
+			is_cohost: false,
+		});
+
+		await client.connect("meet-1");
+
+		expect(client.connectionDetails.authToken).toBe("fresh-token");
+		expect(client.connectionDetails.e2eeHostPublicKey).toBe("E".repeat(44));
+		expect(client.connectionDetails.e2eeHostSigningPublicKey).toBe(
+			"F".repeat(44),
+		);
+		expect(client.connectionDetails.e2eeHostUserId).toBe("host@example.com");
+		expect(client.connectionDetails.e2eeKeyVersion).toBe("deadbeef");
+		expect(client.connectionDetails.isHost).toBe(true);
+		expect(client.connectionDetails.isCohost).toBe(false);
+		expect(signalChannel.updateAuth).toHaveBeenCalledWith("fresh-token");
+	});
+
+	it("re-fetches guest connection details when already connected", async () => {
+		sessionStorage.setItem("guest_id", "guest-2");
+		sessionStorage.setItem("guest_name", "Guest Bob");
+		sessionStorage.setItem("guest_meeting_id", "meet-2");
+
+		const client = createClient();
+		client.connected = true;
+		client.connectionDetails = {
+			authToken: "stale-guest-token",
+			meetingId: "meet-2",
+			userId: "guest-2",
+			sfuUrl: "https://sfu.example.com",
+			sfuPort: "443",
+			tokenExpiresAt: Date.now() + 3600_000,
+			codecStrategy: "svc",
+			e2eeRequired: false,
+			e2eeHostPublicKey: null,
+			e2eeHostSigningPublicKey: null,
+			e2eeHostUserId: null,
+			e2eeKeyVersion: null,
+			isHost: false,
+			isCohost: false,
+		};
+
+		vi.mocked(frappeRequest).mockResolvedValue({
+			sfu_url: "https://sfu.example.com",
+			sfu_port: "443",
+			codec_strategy: "svc",
+			e2ee_required: true,
+			e2ee_host_public_key: "G".repeat(44),
+			e2ee_host_signing_public_key: "H".repeat(44),
+		});
+
+		await client.connect("meet-2", "guest-token-2");
+
+		expect(client.connectionDetails.e2eeRequired).toBe(true);
+		expect(client.connectionDetails.e2eeHostPublicKey).toBe("G".repeat(44));
 	});
 });
 
@@ -430,6 +536,13 @@ describe("E2EE signaling payloads", () => {
 				};
 			}
 		).RTCRtpSender;
+		const originalReceiver = (
+			globalThis as typeof globalThis & {
+				RTCRtpReceiver?: {
+					prototype?: { createEncodedStreams?: () => void };
+				};
+			}
+		).RTCRtpReceiver;
 
 		try {
 			(
@@ -443,6 +556,17 @@ describe("E2EE signaling payloads", () => {
 					createEncodedStreams: () => {},
 				},
 			} as unknown as typeof globalThis.RTCRtpSender;
+			(
+				globalThis as typeof globalThis & {
+					RTCRtpReceiver?: {
+						prototype?: { createEncodedStreams?: () => void };
+					};
+				}
+			).RTCRtpReceiver = {
+				prototype: {
+					createEncodedStreams: () => {},
+				},
+			} as unknown as typeof globalThis.RTCRtpReceiver;
 
 			const sendRequestSpy = vi
 				.spyOn(client, "sendRequest")
@@ -474,6 +598,83 @@ describe("E2EE signaling payloads", () => {
 					};
 				}
 			).RTCRtpSender = originalSender;
+			(
+				globalThis as typeof globalThis & {
+					RTCRtpReceiver?: {
+						prototype?: { createEncodedStreams?: () => void };
+					};
+				}
+			).RTCRtpReceiver = originalReceiver;
+		}
+	});
+
+	it("reports RTCRtpScriptTransform capability in join request", async () => {
+		const client = createClient();
+		client.connected = true;
+		client.connectionDetails.e2eeRequired = true;
+		client.connectionDetails.e2eeHostPublicKey = "host-pub-b64";
+
+		const originalSender = globalThis.RTCRtpSender;
+		const originalReceiver = globalThis.RTCRtpReceiver;
+		const originalScriptTransform = (
+			globalThis as typeof globalThis & { RTCRtpScriptTransform?: unknown }
+		).RTCRtpScriptTransform;
+
+		try {
+			Object.defineProperty(globalThis, "RTCRtpSender", {
+				configurable: true,
+				writable: true,
+				value: { prototype: {} },
+			});
+			Object.defineProperty(globalThis, "RTCRtpReceiver", {
+				configurable: true,
+				writable: true,
+				value: { prototype: {} },
+			});
+			Object.defineProperty(globalThis, "RTCRtpScriptTransform", {
+				configurable: true,
+				writable: true,
+				value: function RTCRtpScriptTransform() {},
+			});
+
+			const sendRequestSpy = vi
+				.spyOn(client, "sendRequest")
+				.mockResolvedValue({ success: true });
+
+			await client.joinRoom(
+				"room-1",
+				{ name: "Alice" },
+				{ audio_enabled: true },
+			);
+
+			expect(sendRequestSpy).toHaveBeenCalledWith(
+				"join_room",
+				expect.objectContaining({
+					e2ee: {
+						enabled: true,
+						capability: {
+							supported: true,
+							mode: "rtp-script-transform",
+						},
+					},
+				}),
+			);
+		} finally {
+			Object.defineProperty(globalThis, "RTCRtpSender", {
+				configurable: true,
+				writable: true,
+				value: originalSender,
+			});
+			Object.defineProperty(globalThis, "RTCRtpReceiver", {
+				configurable: true,
+				writable: true,
+				value: originalReceiver,
+			});
+			Object.defineProperty(globalThis, "RTCRtpScriptTransform", {
+				configurable: true,
+				writable: true,
+				value: originalScriptTransform,
+			});
 		}
 	});
 
@@ -545,7 +746,10 @@ describe("disconnect", () => {
 			e2eeRequired: false,
 			e2eeHostPublicKey: null,
 			e2eeHostSigningPublicKey: null,
+			e2eeHostUserId: null,
 			e2eeKeyVersion: null,
+			isHost: false,
+			isCohost: false,
 		};
 		client.disconnect();
 		expect(client.connected).toBe(false);

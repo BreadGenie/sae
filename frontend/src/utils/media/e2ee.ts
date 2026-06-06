@@ -9,6 +9,11 @@ type EncodedStreams = {
 	writableStream?: WritableStream;
 };
 
+type EncodedFrameLike = {
+	data: ArrayBuffer;
+	type?: string;
+};
+
 type SenderWithInsertableStreams = RTCRtpSender & {
 	createEncodedStreams?: () => EncodedStreams;
 };
@@ -16,6 +21,24 @@ type SenderWithInsertableStreams = RTCRtpSender & {
 type ReceiverWithInsertableStreams = RTCRtpReceiver & {
 	createEncodedStreams?: () => EncodedStreams;
 };
+
+type TransformableSender = RTCRtpSender & {
+	transform?: unknown;
+};
+
+type TransformableReceiver = RTCRtpReceiver & {
+	transform?: unknown;
+};
+
+type RTCRtpScriptTransformConstructor = new (
+	worker: Worker,
+	options: Record<string, unknown>,
+) => unknown;
+
+type E2EETransformCapability =
+	| "legacy-insertable-streams"
+	| "rtp-script-transform"
+	| "none";
 
 function getSubtle(): SubtleCrypto {
 	const subtle = globalThis.crypto?.subtle;
@@ -395,12 +418,21 @@ const FRAME_SIGNATURE_SIZE = 64;
 const FRAME_HEADER_TOTAL = FRAME_HEADER_FIXED_SIZE + FRAME_SIGNATURE_SIZE;
 const AES_GCM_TAG_SIZE = 16;
 const MIN_FRAME_PLAINTEXT_SIZE = 1;
+const FRAME_MAGIC = new Uint8Array([0x4d, 0x45, 0x32, 0x45]); // ME2E
+const EMPTY_FRAME_MAGIC = new Uint8Array(0);
 const MIN_SIGNED_ENCRYPTED_FRAME_SIZE =
-	FRAME_HEADER_TOTAL + AES_GCM_TAG_SIZE + MIN_FRAME_PLAINTEXT_SIZE;
+	FRAME_MAGIC.byteLength +
+	FRAME_HEADER_TOTAL +
+	AES_GCM_TAG_SIZE +
+	MIN_FRAME_PLAINTEXT_SIZE;
+const FRAME_GENERATION_KEYFRAME_FLAG = 0x80000000;
+const FRAME_GENERATION_MASK = 0x7fffffff;
+const VIDEO_CLEAR_PREFIX_SIZE = 1;
 
 type E2EEFrameHeader = {
 	senderId: number;
 	generation: number;
+	frameType?: string;
 	keyVersion: number;
 	iv: Uint8Array<ArrayBuffer>;
 };
@@ -408,8 +440,11 @@ type E2EEFrameHeader = {
 export function encodeFrameHeader(header: E2EEFrameHeader): Uint8Array {
 	const encoded = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
 	const view = new DataView(encoded.buffer);
+	const generation =
+		(header.generation & FRAME_GENERATION_MASK) |
+		(header.frameType === "key" ? FRAME_GENERATION_KEYFRAME_FLAG : 0);
 	view.setUint32(0, header.senderId, true);
-	view.setUint32(4, header.generation, true);
+	view.setUint32(4, generation, true);
 	view.setUint32(8, header.keyVersion, true);
 	encoded.set(header.iv.subarray(0, 12), 12);
 	return encoded;
@@ -426,9 +461,14 @@ export function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
 	);
 	const iv = new Uint8Array(12);
 	iv.set(data.subarray(12, 24));
+	const encodedGeneration = view.getUint32(4, true);
 	return {
 		senderId: view.getUint32(0, true),
-		generation: view.getUint32(4, true),
+		generation: encodedGeneration & FRAME_GENERATION_MASK,
+		frameType:
+			(encodedGeneration & FRAME_GENERATION_KEYFRAME_FLAG) !== 0
+				? "key"
+				: "delta",
 		keyVersion: view.getUint32(8, true),
 		iv,
 	};
@@ -436,9 +476,34 @@ export function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
 
 function buildSignedFramePayload(
 	headerFixed: Uint8Array<ArrayBuffer>,
+	clearPrefix: Uint8Array<ArrayBuffer>,
+	frameMagic: Uint8Array<ArrayBuffer>,
 	ciphertext: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-	return concatBytes([headerFixed, ciphertext]);
+	return concatBytes([headerFixed, clearPrefix, frameMagic, ciphertext]);
+}
+
+function hasFrameMagic(data: Uint8Array, offset: number): boolean {
+	if (data.length < offset + FRAME_MAGIC.byteLength) return false;
+	for (let i = 0; i < FRAME_MAGIC.byteLength; i += 1) {
+		if (data[offset + i] !== FRAME_MAGIC[i]) return false;
+	}
+	return true;
+}
+
+function getClearPrefixSize(mediaType: string): number {
+	return mediaType === "video" ? VIDEO_CLEAR_PREFIX_SIZE : 0;
+}
+
+function getClearPrefix(
+	data: ArrayBuffer,
+	prefixSize: number,
+): Uint8Array<ArrayBuffer> {
+	if (prefixSize === 0) return new Uint8Array(0);
+	const source = new Uint8Array(data);
+	const prefix = new Uint8Array(Math.min(prefixSize, source.byteLength));
+	prefix.set(source.subarray(0, prefix.byteLength));
+	return prefix;
 }
 
 export class SenderChainState {
@@ -473,9 +538,20 @@ export class SenderChainState {
 
 	async signFramePayload(
 		headerFixed: Uint8Array<ArrayBuffer>,
-		ciphertext: Uint8Array<ArrayBuffer>,
+		clearPrefix: Uint8Array<ArrayBuffer>,
+		frameMagicOrCiphertext: Uint8Array<ArrayBuffer>,
+		maybeCiphertext?: Uint8Array<ArrayBuffer>,
 	): Promise<Uint8Array<ArrayBuffer>> {
-		const signed = buildSignedFramePayload(headerFixed, ciphertext);
+		const frameMagic = maybeCiphertext
+			? frameMagicOrCiphertext
+			: EMPTY_FRAME_MAGIC;
+		const ciphertext = maybeCiphertext ?? frameMagicOrCiphertext;
+		const signed = buildSignedFramePayload(
+			headerFixed,
+			clearPrefix,
+			frameMagic,
+			ciphertext,
+		);
 		return signWithEd25519(this.signingPrivateKey, signed);
 	}
 
@@ -492,6 +568,10 @@ export class ReceiverChainState {
 	private readonly highWaterMark = new Map<string, number>();
 	private readonly signingPubs = new Map<number, CryptoKey>();
 	private readonly seenFrames = new Map<string, Set<number>>();
+	private readonly frameKeyCache = new Map<
+		string,
+		{ generation: number; key: CryptoKey }
+	>();
 
 	constructor(meetingSecret: Uint8Array<ArrayBuffer>) {
 		this.meetingSecret = meetingSecret;
@@ -530,24 +610,45 @@ export class ReceiverChainState {
 		}
 		seen.add(generation);
 		this.seenFrames.set(key, seen);
-		const aesKey = await deriveFrameKey(
-			this.meetingSecret,
-			senderId,
-			mediaType,
-			generation,
-		);
+		const cached = this.frameKeyCache.get(key);
+		let aesKey: CryptoKey;
+		if (cached && cached.generation === generation) {
+			aesKey = cached.key;
+		} else {
+			aesKey = await deriveFrameKey(
+				this.meetingSecret,
+				senderId,
+				mediaType,
+				generation,
+			);
+			this.frameKeyCache.set(key, { generation, key: aesKey });
+		}
 		return { key: aesKey };
 	}
 
 	async verifyFrameSignature(
 		senderId: number,
 		headerFixed: Uint8Array<ArrayBuffer>,
-		ciphertext: Uint8Array<ArrayBuffer>,
-		signature: Uint8Array<ArrayBuffer>,
+		clearPrefix: Uint8Array<ArrayBuffer>,
+		frameMagicOrCiphertext: Uint8Array<ArrayBuffer>,
+		ciphertextOrSignature: Uint8Array<ArrayBuffer>,
+		maybeSignature?: Uint8Array<ArrayBuffer>,
 	): Promise<boolean> {
 		const pub = this.signingPubs.get(senderId);
 		if (!pub) return false;
-		const signed = buildSignedFramePayload(headerFixed, ciphertext);
+		const frameMagic = maybeSignature
+			? frameMagicOrCiphertext
+			: EMPTY_FRAME_MAGIC;
+		const ciphertext = maybeSignature
+			? ciphertextOrSignature
+			: frameMagicOrCiphertext;
+		const signature = maybeSignature ?? ciphertextOrSignature;
+		const signed = buildSignedFramePayload(
+			headerFixed,
+			clearPrefix,
+			frameMagic,
+			ciphertext,
+		);
 		return verifyWithEd25519(pub, signature, signed);
 	}
 
@@ -556,6 +657,7 @@ export class ReceiverChainState {
 		this.highWaterMark.clear();
 		this.signingPubs.clear();
 		this.seenFrames.clear();
+		this.frameKeyCache.clear();
 	}
 }
 
@@ -566,6 +668,11 @@ export function createEncryptionTransformStream(
 	return new TransformStream({
 		async transform(encodedFrame, controller) {
 			const subtle = getSubtle();
+			const typedFrame = encodedFrame as EncodedFrameLike;
+			const clearPrefix = getClearPrefix(
+				typedFrame.data,
+				getClearPrefixSize(chainState.mediaType),
+			);
 			try {
 				const { key, generation } = await chainState.nextFrameKey();
 				const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
@@ -577,6 +684,7 @@ export function createEncryptionTransformStream(
 				const header = encodeFrameHeader({
 					senderId: chainState.senderId,
 					generation,
+					frameType: typedFrame.type,
 					keyVersion,
 					iv,
 				});
@@ -586,14 +694,31 @@ export function createEncryptionTransformStream(
 				cipherBytes.set(new Uint8Array(encrypted));
 				const signature = await chainState.signFramePayload(
 					headerBuf,
+					clearPrefix,
+					FRAME_MAGIC,
 					cipherBytes,
 				);
 				const totalSize =
-					headerBuf.length + signature.byteLength + cipherBytes.byteLength;
+					clearPrefix.byteLength +
+					FRAME_MAGIC.byteLength +
+					headerBuf.length +
+					signature.byteLength +
+					cipherBytes.byteLength;
 				const newData = new Uint8Array(totalSize);
-				newData.set(headerBuf, 0);
-				newData.set(signature, headerBuf.length);
-				newData.set(cipherBytes, headerBuf.length + signature.byteLength);
+				newData.set(clearPrefix, 0);
+				newData.set(FRAME_MAGIC, clearPrefix.byteLength);
+				newData.set(headerBuf, clearPrefix.byteLength + FRAME_MAGIC.byteLength);
+				newData.set(
+					signature,
+					clearPrefix.byteLength + FRAME_MAGIC.byteLength + headerBuf.length,
+				);
+				newData.set(
+					cipherBytes,
+					clearPrefix.byteLength +
+						FRAME_MAGIC.byteLength +
+						headerBuf.length +
+						signature.byteLength,
+				);
 				encodedFrame.data = newData.buffer;
 				controller.enqueue(encodedFrame);
 			} catch (error) {
@@ -613,10 +738,23 @@ export function createDecryptionTransformStream(
 		async transform(encodedFrame, controller) {
 			const subtle = getSubtle();
 			const data = new Uint8Array(encodedFrame.data);
-			if (data.length < MIN_SIGNED_ENCRYPTED_FRAME_SIZE) {
+			const clearPrefixSize = getClearPrefixSize(mediaType);
+			if (data.length < clearPrefixSize + MIN_SIGNED_ENCRYPTED_FRAME_SIZE) {
 				return;
 			}
-			const header = decodeFrameHeader(data);
+			const clearPrefix = data.slice(0, clearPrefixSize);
+			const magicOffset = clearPrefixSize;
+			if (!hasFrameMagic(data, magicOffset)) {
+				return;
+			}
+			const frameMagic = data.slice(
+				magicOffset,
+				magicOffset + FRAME_MAGIC.byteLength,
+			);
+			const headerOffset = magicOffset + FRAME_MAGIC.byteLength;
+			const headerEnd = headerOffset + FRAME_HEADER_FIXED_SIZE;
+			const signatureEnd = headerOffset + FRAME_HEADER_TOTAL;
+			const header = decodeFrameHeader(data.subarray(headerOffset, headerEnd));
 			if (!header) {
 				return;
 			}
@@ -630,12 +768,14 @@ export function createDecryptionTransformStream(
 				return;
 			}
 			const headerFixed = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
-			headerFixed.set(data.subarray(0, FRAME_HEADER_FIXED_SIZE));
-			const signature = data.slice(FRAME_HEADER_FIXED_SIZE, FRAME_HEADER_TOTAL);
-			const ciphertext = data.slice(FRAME_HEADER_TOTAL);
+			headerFixed.set(data.subarray(headerOffset, headerEnd));
+			const signature = data.slice(headerEnd, signatureEnd);
+			const ciphertext = data.slice(signatureEnd);
 			const sigOk = await chainState.verifyFrameSignature(
 				header.senderId,
 				headerFixed,
+				clearPrefix,
+				frameMagic,
 				ciphertext,
 				signature,
 			);
@@ -704,6 +844,7 @@ const pendingSenders = new Set<PendingSender>();
 const pendingReceivers = new Set<PendingReceiver>();
 const activeSenderTransforms = new WeakSet<RTCRtpSender>();
 const activeReceiverTransforms = new WeakSet<RTCRtpReceiver>();
+const scriptTransformWorkers = new Set<Worker>();
 
 export function setMeetingContext(
 	meetingSecretArg: Uint8Array<ArrayBuffer>,
@@ -728,6 +869,9 @@ export function setSenderSigningPub(
 ): void {
 	senderSigningPubs.set(senderId, signingPub);
 	receiverChain?.setSenderSigningPub(senderId, signingPub);
+	for (const worker of scriptTransformWorkers) {
+		worker.postMessage({ type: "addSenderSigningPub", senderId, signingPub });
+	}
 }
 
 export function hasSenderSigningPub(senderId: number): boolean {
@@ -753,6 +897,10 @@ export function wipeMeetingContext(): void {
 	pendingSenders.clear();
 	pendingReceivers.clear();
 	senderSigningPubs.clear();
+	for (const worker of scriptTransformWorkers) {
+		worker.postMessage({ type: "wipe" });
+	}
+	scriptTransformWorkers.clear();
 	chatKeyCache = null;
 }
 
@@ -828,17 +976,81 @@ function getOrCreateReceiverChain(): ReceiverChainState | null {
 	return receiverChain;
 }
 
-function hasInsertableStreamSupport(): boolean {
+function hasLegacyInsertableStreamSupport(): boolean {
 	if (typeof globalThis.RTCRtpSender === "undefined") return false;
 	if (typeof globalThis.RTCRtpReceiver === "undefined") return false;
 	try {
-		const proto = globalThis.RTCRtpSender.prototype as unknown as {
+		const senderProto = globalThis.RTCRtpSender.prototype as unknown as {
 			createEncodedStreams?: () => unknown;
 		};
-		return typeof proto.createEncodedStreams === "function";
+		const receiverProto = globalThis.RTCRtpReceiver.prototype as unknown as {
+			createEncodedStreams?: () => unknown;
+		};
+		return (
+			Object.hasOwn(senderProto, "createEncodedStreams") &&
+			Object.hasOwn(receiverProto, "createEncodedStreams") &&
+			typeof senderProto.createEncodedStreams === "function" &&
+			typeof receiverProto.createEncodedStreams === "function"
+		);
 	} catch {
 		return false;
 	}
+}
+
+function getRTCRtpScriptTransform(): RTCRtpScriptTransformConstructor | null {
+	return (
+		(
+			globalThis as typeof globalThis & {
+				RTCRtpScriptTransform?: RTCRtpScriptTransformConstructor;
+			}
+		).RTCRtpScriptTransform ?? null
+	);
+}
+
+export function getE2EETransformCapability(): E2EETransformCapability {
+	if (hasLegacyInsertableStreamSupport()) return "legacy-insertable-streams";
+	if (getRTCRtpScriptTransform()) return "rtp-script-transform";
+	return "none";
+}
+
+function createE2EEWorker(): Worker {
+	const worker = new Worker(
+		new URL("./e2eeTransformWorker.ts", import.meta.url),
+		{
+			type: "module",
+		},
+	);
+	scriptTransformWorkers.add(worker);
+	return worker;
+}
+
+function postTransformWorkerPrewarm(
+	worker: Worker,
+	payload: {
+		mediaType: string;
+		senderSigningPubs?: Array<[number, CryptoKey]>;
+	},
+): void {
+	try {
+		worker.postMessage({
+			type: "prewarm",
+			mediaType: payload.mediaType,
+			senderSigningPubs: payload.senderSigningPubs ?? [],
+		});
+	} catch {
+		// best-effort: a failed pre-warm post is not fatal
+	}
+}
+
+function installScriptTransform(
+	target: TransformableSender | TransformableReceiver,
+	options: Record<string, unknown>,
+): Worker | null {
+	const RTCRtpScriptTransform = getRTCRtpScriptTransform();
+	if (!RTCRtpScriptTransform) return null;
+	const worker = createE2EEWorker();
+	target.transform = new RTCRtpScriptTransform(worker, options);
+	return worker;
 }
 
 const preCreatedReceiverStreams = new WeakMap<
@@ -850,11 +1062,15 @@ const preCreatedReceiverStreams = new WeakMap<
 >();
 
 export function preCreateReceiverStreams(receiver: RTCRtpReceiver): boolean {
-	if (!hasInsertableStreamSupport()) {
+	const capability = getE2EETransformCapability();
+	if (capability === "none") {
 		console.warn(
 			"[E2EE] preCreateReceiverStreams: no insertable stream support",
 		);
 		return false;
+	}
+	if (capability === "rtp-script-transform") {
+		return true;
 	}
 	if (preCreatedReceiverStreams.has(receiver)) {
 		return true;
@@ -883,10 +1099,17 @@ export async function setupSenderTransform(
 	senderId: number,
 	mediaType: string,
 ): Promise<boolean> {
-	if (!sender || activeSenderTransforms.has(sender)) {
+	if (!sender) {
 		return false;
 	}
-	if (!hasInsertableStreamSupport()) {
+	const capability = getE2EETransformCapability();
+	if (
+		activeSenderTransforms.has(sender) &&
+		capability !== "rtp-script-transform"
+	) {
+		return false;
+	}
+	if (capability === "none") {
 		console.warn(
 			"[E2EE] setupSenderTransform: insertable stream support missing",
 		);
@@ -899,6 +1122,28 @@ export async function setupSenderTransform(
 		);
 		pendingSenders.add({ sender, senderId, mediaType });
 		return false;
+	}
+	const senderKeyVersion = keyVersion;
+	if (senderKeyVersion == null) return false;
+	if (capability === "rtp-script-transform") {
+		if (!meetingSecret || !senderSigningPriv) {
+			pendingSenders.add({ sender, senderId, mediaType });
+			return false;
+		}
+		const worker = installScriptTransform(sender as TransformableSender, {
+			direction: "send",
+			meetingSecret: new Uint8Array(meetingSecret),
+			keyVersion: senderKeyVersion,
+			senderId,
+			mediaType,
+			senderSigningPrivateKey: senderSigningPriv,
+		});
+		const installed = worker !== null;
+		if (installed) {
+			activeSenderTransforms.add(sender);
+			postTransformWorkerPrewarm(worker as Worker, { mediaType });
+		}
+		return installed;
 	}
 	const chain = getOrCreateSenderChain(senderId, mediaType);
 	if (!chain) {
@@ -921,8 +1166,6 @@ export async function setupSenderTransform(
 	const readable = streams.readable || streams.readableStream;
 	const writable = streams.writable || streams.writableStream;
 	if (!readable || !writable) return false;
-	const senderKeyVersion = keyVersion;
-	if (senderKeyVersion == null) return false;
 	try {
 		readable
 			.pipeThrough(createEncryptionTransformStream(chain, senderKeyVersion))
@@ -954,7 +1197,8 @@ export async function setupReceiverTransform(
 		});
 		return false;
 	}
-	if (!hasInsertableStreamSupport()) {
+	const capability = getE2EETransformCapability();
+	if (capability === "none") {
 		console.warn("[E2EE] setupReceiverTransform: no insertable stream support");
 		return false;
 	}
@@ -964,6 +1208,26 @@ export async function setupReceiverTransform(
 	}
 	const receiverKeyVersion = keyVersion;
 	if (receiverKeyVersion == null) return false;
+	if (capability === "rtp-script-transform") {
+		if (!meetingSecret) return false;
+		const worker = installScriptTransform(receiver as TransformableReceiver, {
+			direction: "recv",
+			meetingSecret: new Uint8Array(meetingSecret),
+			keyVersion: receiverKeyVersion,
+			senderId,
+			mediaType,
+			senderSigningPubs: Array.from(senderSigningPubs.entries()),
+		});
+		const installed = worker !== null;
+		if (installed) {
+			activeReceiverTransforms.add(receiver);
+			postTransformWorkerPrewarm(worker as Worker, {
+				mediaType,
+				senderSigningPubs: Array.from(senderSigningPubs.entries()),
+			});
+		}
+		return installed;
+	}
 	const chain = getOrCreateReceiverChain();
 	if (!chain) {
 		console.warn("[E2EE] setupReceiverTransform: chain is null");

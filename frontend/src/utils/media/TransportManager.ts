@@ -112,6 +112,10 @@ async function applyScreenShareSenderPreferences(producer: {
 	await sender.setParameters(parameters);
 }
 
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class TransportManager {
 	sendTransport: TransportLike | null;
 	recvTransport: TransportLike | null;
@@ -194,6 +198,13 @@ export class TransportManager {
 		return Boolean(this.sfuClient?.isE2EERequired?.()) && hasMeetingContext();
 	}
 
+	private shouldEnableLegacyEncodedInsertableStreams(): boolean {
+		return (
+			this.shouldEnableE2EETransforms() &&
+			this.sfuClient?.getE2EEMode?.() === "insertable-streams"
+		);
+	}
+
 	private assertE2EEContextReady(operation: string): void {
 		if (this.sfuClient?.isE2EERequired?.() && !hasMeetingContext()) {
 			throw new Error(
@@ -236,10 +247,11 @@ export class TransportManager {
 		if (!this.device) throw new Error("Device failed to initialize");
 		const client = this.getClient();
 		const rawTransportParams = await client.createWebRtcTransport("send");
-		const shouldEnableE2EE = this.shouldEnableE2EETransforms();
+		const shouldEnableLegacyInsertableStreams =
+			this.shouldEnableLegacyEncodedInsertableStreams();
 
 		const additionalSettings: Record<string, unknown> = {};
-		if (shouldEnableE2EE) {
+		if (shouldEnableLegacyInsertableStreams) {
 			additionalSettings.encodedInsertableStreams = true;
 		}
 
@@ -312,10 +324,11 @@ export class TransportManager {
 		if (!this.device) throw new Error("Device failed to initialize");
 		const client = this.getClient();
 		const rawTransportParams = await client.createWebRtcTransport("recv");
-		const shouldEnableE2EE = this.shouldEnableE2EETransforms();
+		const shouldEnableLegacyInsertableStreams =
+			this.shouldEnableLegacyEncodedInsertableStreams();
 
 		const additionalSettings: Record<string, unknown> = {};
-		if (shouldEnableE2EE) {
+		if (shouldEnableLegacyInsertableStreams) {
 			additionalSettings.encodedInsertableStreams = true;
 		}
 
@@ -401,9 +414,13 @@ export class TransportManager {
 			appData: safeAppData,
 		});
 
+		const e2eeWantedBeforeProduce = this.shouldEnableE2EETransforms();
 		const produceOptions: Record<string, unknown> = {
 			track,
-			appData: safeAppData,
+			appData: {
+				...safeAppData,
+				e2eeStartPaused: e2eeWantedBeforeProduce,
+			},
 			// Keep the underlying track alive when this producer is closed.
 			// mediasoup-client defaults stopTracks=true and calls track.stop()
 			// in Producer.close(), which would kill the background-effects
@@ -415,6 +432,26 @@ export class TransportManager {
 			// off (see useMediaControls.onUnmounted / switchInputDevice).
 			stopTracks: false,
 		};
+		let senderTransformSetupStarted = false;
+		const setupProducerSenderTransform = async (
+			sender: RTCRtpSender | undefined,
+		) => {
+			if (!e2eeWantedBeforeProduce || !sender || senderTransformSetupStarted) {
+				return false;
+			}
+			senderTransformSetupStarted = true;
+			const senderId = this.sfuClient?.getOwnSenderId?.() ?? 0;
+			const mediaType = track?.kind ?? "video";
+			return setupSenderTransform(sender, senderId, mediaType).catch(
+				(error) => {
+					console.warn("Failed to setup E2EE sender transform:", error);
+					return false;
+				},
+			);
+		};
+		if (e2eeWantedBeforeProduce) {
+			produceOptions.onRtpSender = setupProducerSenderTransform;
+		}
 
 		if (track?.kind === "video") {
 			const source = safeAppData.type === "screen" ? "screen" : "camera";
@@ -441,6 +478,7 @@ export class TransportManager {
 			produceOptions.codecOptions = videoCodecOptions;
 			produceOptions.appData = {
 				...safeAppData,
+				e2eeStartPaused: e2eeWantedBeforeProduce,
 				codecStrategy: encodingConfig.decision.strategy,
 				scalabilityMode: encodingConfig.decision.scalabilityMode,
 			};
@@ -463,13 +501,10 @@ export class TransportManager {
 			senderId: this.sfuClient?.getOwnSenderId?.() ?? 0,
 		});
 		if (e2eeGate && producer.rtpSender) {
-			try {
-				const senderId = this.sfuClient?.getOwnSenderId?.() ?? 0;
-				const mediaType = track?.kind ?? "video";
-				await setupSenderTransform(producer.rtpSender, senderId, mediaType);
-			} catch (error) {
-				console.warn("Failed to setup E2EE sender transform:", error);
-			}
+			await setupProducerSenderTransform(producer.rtpSender);
+		}
+		if (e2eeWantedBeforeProduce) {
+			await this.sfuClient?.resumeProducer?.(producer.id);
 		}
 
 		if (safeAppData.type === "screen") {
@@ -561,12 +596,49 @@ export class TransportManager {
 						remoteSenderId,
 						mediaType,
 					);
+					if (rawConsumerParams.producerId) {
+						const label = `e2ee-perf|${rawConsumerParams.producerId}`;
+						console.timeLog(label, "receiver-transform-setup-done", {
+							senderId: remoteSenderId,
+							mediaType,
+						});
+					}
+					if (mediaType === "video") {
+						void this.requestConsumerKeyFrameBurst(
+							consumer.id,
+							rawConsumerParams.producerId,
+						);
+					}
 				} catch (error) {
 					console.warn("Failed to setup E2EE receiver transform:", error);
 				}
 			}
 		}
 		return consumer;
+	}
+
+	private async requestConsumerKeyFrameBurst(
+		consumerId: string,
+		producerId: string,
+	): Promise<void> {
+		const delays = [0, 120, 350, 800];
+		for (const delay of delays) {
+			if (delay > 0) {
+				await sleep(delay);
+			}
+			try {
+				const result =
+					await this.sfuClient?.requestConsumerKeyFrame?.(consumerId);
+				console.log("[E2EE] consumer keyframe requested", {
+					producerId,
+					consumerId,
+					delay,
+					result,
+				});
+			} catch (error) {
+				console.warn("Failed to request E2EE consumer keyframe:", error);
+			}
+		}
 	}
 
 	getDeviceCapabilities() {

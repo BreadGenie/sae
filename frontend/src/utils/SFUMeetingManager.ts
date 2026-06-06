@@ -108,17 +108,17 @@ export class SFUMeetingManager {
 		audioStream: MediaStream | null = null,
 	): Promise<void> {
 		console.log("Reconfiguring media for E2EE");
-
-		this.initialSyncInProgress = true;
+		this.connectionManager.initialSyncInProgress = true;
 
 		try {
-			const hadVideo = !!this.mediaHandler.videoProducer;
-			const hadAudio = !!this.mediaHandler.audioProducer;
+			const mediaHandler = this.mediaManager.mediaHandler;
+			const hadVideo = !!mediaHandler.videoProducer;
+			const hadAudio = !!mediaHandler.audioProducer;
 
-			this.mediaHandler.cleanup();
+			mediaHandler.cleanup();
 			this.consumerManager.clear();
-			this.processedConsumers.clear();
-			this.bufferedProducerEvents = [];
+			this.mediaManager.processedConsumers.clear();
+			this.connectionManager.bufferedProducerEvents = [];
 			this.transportManager.cleanup();
 
 			await this.transportManager.initializeDevice();
@@ -127,21 +127,15 @@ export class SFUMeetingManager {
 			if (hadVideo || hadAudio) {
 				await this.transportManager.createSendTransport();
 
-				// videoStream may be the processed (background-effects) stream
-				// so remote participants keep seeing the host with their BG
-				// effects after the E2EE reconfigure. audioStream is the raw
-				// local stream because the processed stream has no audio.
 				if (hadVideo && videoStream) {
 					const videoTrack = videoStream.getVideoTracks()[0];
 					if (videoTrack) {
 						try {
 							const videoProducer = await this.transportManager.createProducer(
 								videoTrack,
-								{
-									type: "camera",
-								},
+								{ type: "camera" },
 							);
-							this.mediaHandler.setProducers({ videoProducer });
+							mediaHandler.setProducers({ videoProducer });
 						} catch (error) {
 							console.warn(
 								"Failed to re-publish video after E2EE conversion:",
@@ -157,12 +151,10 @@ export class SFUMeetingManager {
 						try {
 							const audioProducer = await this.transportManager.createProducer(
 								audioTrack,
-								{
-									type: "microphone",
-								},
+								{ type: "microphone" },
 							);
 							if (audioProducer) {
-								this.mediaHandler.setProducers({ audioProducer });
+								mediaHandler.setProducers({ audioProducer });
 							}
 						} catch (error) {
 							console.warn(
@@ -175,13 +167,12 @@ export class SFUMeetingManager {
 			}
 
 			await this.setupExistingParticipants();
-
 			console.log("E2EE reconfiguration completed");
 		} catch (error) {
 			console.error("E2EE reconfiguration failed:", error);
 			throw error;
 		} finally {
-			this.initialSyncInProgress = false;
+			this.connectionManager.initialSyncInProgress = false;
 		}
 	}
 

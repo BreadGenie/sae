@@ -322,9 +322,11 @@ export function useSFUConnection(deps: {
 
 	const setupSFUConnection = async (
 		guestName: string | null = null,
-		isHost = false,
-		isCohost = false,
+		initialIsHost = false,
+		initialIsCohost = false,
 	) => {
+		let isHost = initialIsHost;
+		let isCohost = initialIsCohost;
 		isCurrentTabHost.value = isHost;
 		if (connectionState.isSetupComplete) {
 			connectionState.isInPreview = false;
@@ -347,6 +349,14 @@ export function useSFUConnection(deps: {
 
 			await manager.connect(connectionState.guestAuthToken);
 			connectionState.codecStrategy = sfuClient.getCodecStrategy() || "svc";
+			if (!guestName) {
+				const effectiveIsHost = sfuClient.connectionDetails.isHost || isHost;
+				const effectiveIsCohost =
+					sfuClient.connectionDetails.isCohost || isCohost;
+				isHost = effectiveIsHost;
+				isCohost = effectiveIsCohost;
+				isCurrentTabHost.value = isHost;
+			}
 
 			if (sfuClient.isE2EERequired()) {
 				if (!sfuClient.isInsertableStreamsSupported()) {
@@ -404,8 +414,9 @@ export function useSFUConnection(deps: {
 				const hostPub = sfuClient.connectionDetails.e2eeHostPublicKey;
 				const hostSigningPubB64 =
 					sfuClient.connectionDetails.e2eeHostSigningPublicKey ?? "";
+				const hostUserId = sfuClient.connectionDetails.e2eeHostUserId;
 				const keyVersion = sfuClient.connectionDetails.e2eeKeyVersion ?? "";
-				if (hostPub && hostSigningPubB64) {
+				if (hostPub && (hostSigningPubB64 || hostUserId)) {
 					void startHandshakeAsJoiner(hostPub, hostSigningPubB64, keyVersion);
 					try {
 						await waitForHandshakeComplete(10000);
@@ -715,7 +726,9 @@ export function useSFUConnection(deps: {
 		const versionNumber = parseKeyVersion(keyVersionString);
 		keyVersion.value = versionNumber;
 		hostX25519PubB64.value = hostX25519PubB64Param;
-		hostSigningPubKey.value = await importEd25519PublicKey(hostSigningPubB64);
+		hostSigningPubKey.value = hostSigningPubB64
+			? await importEd25519PublicKey(hostSigningPubB64)
+			: null;
 		await announceSigningKey();
 	};
 
@@ -726,6 +739,7 @@ export function useSFUConnection(deps: {
 		toSenderId?: number;
 		envelope?: string;
 		responderX25519Pub?: string;
+		responderSigningPublicKey?: string;
 	}) => {
 		console.log("[E2EE] handleHandshakeEnvelope received", {
 			fromParticipantId: data.fromParticipantId,
@@ -743,13 +757,23 @@ export function useSFUConnection(deps: {
 		if (
 			!joinerX25519Priv.value ||
 			!responderPubB64 ||
-			!hostSigningPubKey.value ||
 			keyVersion.value == null
 		) {
 			return;
 		}
 		const ownParticipantId = currentUser.currentUser.value?.user_id || "";
 		if (data.toParticipantId && data.toParticipantId !== ownParticipantId) {
+			return;
+		}
+		if (!hostSigningPubKey.value && data.responderSigningPublicKey) {
+			const trustedHostId = sfuClient.connectionDetails.e2eeHostUserId;
+			if (trustedHostId && data.fromParticipantId === trustedHostId) {
+				hostSigningPubKey.value = await importEd25519PublicKey(
+					data.responderSigningPublicKey,
+				);
+			}
+		}
+		if (!hostSigningPubKey.value) {
 			return;
 		}
 		const kp: CryptoKeyPair = {
@@ -895,6 +919,7 @@ export function useSFUConnection(deps: {
 			toSenderId: data.fromSenderId,
 			envelope,
 			responderX25519Pub: responderPubB64,
+			responderSigningPublicKey: identitySigningPubB64.value,
 		});
 	};
 
@@ -945,6 +970,7 @@ export function useSFUConnection(deps: {
 			if (sfuClient) {
 				sfuClient.setE2EERequired(true, {
 					hostPublicKey: pubB64,
+					hostSigningPublicKey: identitySigningPubB64.value ?? null,
 					keyVersion: detail.keyVersion,
 				});
 			}
@@ -972,6 +998,7 @@ export function useSFUConnection(deps: {
 				// state before re-joining so transport setup installs transforms.
 				sfuClient.setE2EERequired(true, {
 					hostPublicKey: pubB64,
+					hostSigningPublicKey: identitySigningPubB64.value ?? null,
 					keyVersion: detail.keyVersion,
 				});
 
@@ -1220,6 +1247,7 @@ export function useSFUConnection(deps: {
 		// join with "E2EE is required for this room".
 		sfuClient?.setE2EERequired(Boolean(data.e2ee_host_public_key), {
 			hostPublicKey: data.e2ee_host_public_key ?? null,
+			hostSigningPublicKey: data.e2ee_host_signing_public_key ?? null,
 			keyVersion: data.e2ee_key_version ?? null,
 		});
 
@@ -1443,8 +1471,12 @@ export function useSFUConnection(deps: {
 			connectionState.guestSfuUrl = null;
 			connectionState.guestSfuPort = null;
 
-			const response = await joinMeetingAPI.fetch();
-			const joinResult = response as Record<string, unknown>;
+			const response = (await joinMeetingAPI.fetch()) as
+				| Record<string, unknown>
+				| { message?: Record<string, unknown> };
+			const joinResult = (
+				"message" in response && response.message ? response.message : response
+			) as Record<string, unknown>;
 
 			if (joinResult.status === "waiting_for_approval") {
 				lobbyStore.isWaitingForApproval = true;

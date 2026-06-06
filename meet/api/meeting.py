@@ -151,6 +151,29 @@ def _get_e2ee_host_signing_public_key(meeting_id: str) -> str | None:
 	return str(pk) if pk else None
 
 
+def _assert_e2ee_metadata_complete(meeting_id: str) -> None:
+	"""Raise ValidationError if an E2EE meeting is missing required metadata.
+
+	Covers the fields the frontend needs to initialise the joiner handshake.
+	"""
+	if not _is_e2ee_enabled(meeting_id):
+		return
+
+	missing: list[str] = []
+	if not _get_e2ee_host_public_key(meeting_id):
+		missing.append("e2ee_host_public_key")
+	if not _get_e2ee_key_version(meeting_id):
+		missing.append("e2ee_key_version")
+	if not _get_e2ee_host_signing_public_key(meeting_id):
+		missing.append("e2ee_host_signing_public_key")
+
+	if missing:
+		frappe.throw(
+			f"E2EE metadata incomplete for meeting {meeting_id}: {', '.join(missing)}",
+			frappe.ValidationError,
+		)
+
+
 def _get_e2ee_metadata(meeting_id: str) -> dict:
 	metadata = {
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
@@ -230,17 +253,24 @@ def get_sfu_connection_details(meeting_id: str) -> dict:
 		**_get_e2ee_metadata(meeting_id),
 	)
 
+	e2ee_host_public_key = _get_e2ee_host_public_key(meeting_id)
+	e2ee_host_signing_public_key = _get_e2ee_host_signing_public_key(meeting_id)
+	e2ee_key_version = _get_e2ee_key_version(meeting_id)
+
 	return {
 		"sfu_url": sfu_config["sfu_server_url"],
 		"sfu_port": sfu_config["sfu_server_port"],
 		"auth_token": auth_token,
 		"user_id": user,
 		"meeting_id": meeting_id,
+		"is_host": is_host,
+		"is_cohost": is_cohost,
 		"codec_strategy": _get_codec_strategy(),
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
-		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
-		"e2ee_host_signing_public_key": _get_e2ee_host_signing_public_key(meeting_id),
-		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
+		"e2ee_host_public_key": e2ee_host_public_key,
+		"e2ee_host_signing_public_key": e2ee_host_signing_public_key,
+		"e2ee_host_user_id": meeting.owner,
+		"e2ee_key_version": e2ee_key_version,
 		"user_data": {
 			"name": user_fullname,
 			"email": user,
@@ -404,6 +434,7 @@ def refresh_sfu_token(meeting_id: str) -> dict:
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"e2ee_host_signing_public_key": _get_e2ee_host_signing_public_key(meeting_id),
+		"e2ee_host_user_id": meeting.owner,
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 	}
 
@@ -674,6 +705,7 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 
 	if not frappe.db.exists("Sae Meeting", meeting_id):
 		frappe.throw(_("Meeting not found"))
+	meeting: SaeMeeting = frappe.get_doc("Sae Meeting", meeting_id)
 
 	return {
 		"sfu_url": sfu_config["sfu_server_url"],
@@ -682,6 +714,7 @@ def get_guest_sfu_connection_details(meeting_id: str, guest_token: str) -> dict:
 		"e2ee_required": _is_e2ee_enabled(meeting_id),
 		"e2ee_host_public_key": _get_e2ee_host_public_key(meeting_id),
 		"e2ee_host_signing_public_key": _get_e2ee_host_signing_public_key(meeting_id),
+		"e2ee_host_user_id": meeting.owner,
 		"e2ee_key_version": _get_e2ee_key_version(meeting_id),
 	}
 
@@ -886,6 +919,7 @@ def convert_meeting_to_e2ee(
 		"e2ee_enabled": bool(getattr(meeting, "e2ee_enabled", False)),
 		"e2ee_key_version": getattr(meeting, "e2ee_key_version", None),
 		"e2ee_host_public_key": getattr(meeting, "e2ee_host_public_key", None),
+		"e2ee_host_signing_public_key": getattr(meeting, "e2ee_host_signing_public_key", None),
 	}
 
 

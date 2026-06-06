@@ -9,12 +9,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from frappe.tests import IntegrationTestCase
 
 from meet.api.meeting import (
+	_assert_e2ee_metadata_complete,
 	_is_valid_e2ee_device_id,
 	_is_valid_e2ee_host_public_key,
 	_is_valid_e2ee_proof,
 	_is_valid_e2ee_version,
 	_verify_e2ee_proof_signature,
 	convert_meeting_to_e2ee,
+	get_sfu_connection_details,
 	register_e2ee_device,
 )
 
@@ -222,6 +224,7 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 		self.assertTrue(result["e2ee_enabled"])
 		self.assertEqual(result["e2ee_key_version"], version)
 		self.assertEqual(result["e2ee_host_public_key"], host_pub_b64)
+		self.assertEqual(result["e2ee_host_signing_public_key"], host_signing_pub_b64)
 
 		meeting.reload()
 		self.assertTrue(meeting.e2ee_enabled)
@@ -314,6 +317,62 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 				e2ee_device_id=device_id,
 			)
 
+	def test_convert_meeting_to_e2ee_rejects_tampered_signing_pubkey(self):
+		auth_priv = Ed25519PrivateKey.generate()
+		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
+		host_pub = b"\x66" * 32
+		host_pub_b64 = _b64(host_pub)
+		version = "abcdef02"
+		device_id = "laptop-2026-tamper"
+		message = host_pub + version.encode("utf-8")
+		sig_b64 = _b64(auth_priv.sign(message))
+
+		self._set_device_keys(self.host_email, device_id, auth_pub_b64)
+
+		frappe.set_user(self.host_email)
+		meeting = frappe.get_doc(
+			{
+				"doctype": "Sae Meeting",
+				"meeting_type": "open",
+				"allow_guest": 1,
+			}
+		)
+		meeting.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("Sae Meeting", meeting.name, ignore_permissions=True))
+
+		# Wrong size (31 bytes)
+		with self.assertRaises(frappe.ValidationError):
+			convert_meeting_to_e2ee(
+				meeting_id=meeting.name,
+				e2ee_key_proof=sig_b64,
+				e2ee_key_version=version,
+				e2ee_host_public_key=host_pub_b64,
+				e2ee_host_signing_public_key=_b64(b"\x55" * 31),
+				e2ee_device_id=device_id,
+			)
+
+		# Non-base64
+		with self.assertRaises(frappe.ValidationError):
+			convert_meeting_to_e2ee(
+				meeting_id=meeting.name,
+				e2ee_key_proof=sig_b64,
+				e2ee_key_version=version,
+				e2ee_host_public_key=host_pub_b64,
+				e2ee_host_signing_public_key="not-base64@@",
+				e2ee_device_id=device_id,
+			)
+
+		# Empty string
+		with self.assertRaises(frappe.ValidationError):
+			convert_meeting_to_e2ee(
+				meeting_id=meeting.name,
+				e2ee_key_proof=sig_b64,
+				e2ee_key_version=version,
+				e2ee_host_public_key=host_pub_b64,
+				e2ee_host_signing_public_key="",
+				e2ee_device_id=device_id,
+			)
+
 	def test_register_e2ee_device_persists_pubkey(self):
 		auth_priv = Ed25519PrivateKey.generate()
 		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
@@ -363,3 +422,120 @@ class IntegrationTestE2EEProof(IntegrationTestCase):
 			register_e2ee_device(device_id="good-id", ed25519_public_key="not_base64@@@")
 		with self.assertRaises(frappe.ValidationError):
 			register_e2ee_device(device_id="good-id", ed25519_public_key=_b64(b"\x00" * 31))
+
+	def test_assert_e2ee_metadata_complete_passes_for_complete_meeting(self):
+		meeting = self._make_e2ee_meeting()
+		_assert_e2ee_metadata_complete(meeting.name)
+
+	def test_assert_e2ee_metadata_complete_skips_non_e2ee(self):
+		frappe.set_user(self.host_email)
+		meeting = frappe.get_doc({"doctype": "Sae Meeting", "meeting_type": "open", "allow_guest": 1})
+		meeting.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("Sae Meeting", meeting.name, ignore_permissions=True))
+		_assert_e2ee_metadata_complete(meeting.name)
+
+	def test_assert_e2ee_metadata_complete_fails_when_signing_key_missing(self):
+		auth_priv = Ed25519PrivateKey.generate()
+		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
+		version = "abcdef01"
+		device_id = "missing-signing"
+		self._set_device_keys(self.host_email, device_id, auth_pub_b64)
+
+		frappe.set_user(self.host_email)
+		meeting = frappe.get_doc({"doctype": "Sae Meeting", "meeting_type": "open", "allow_guest": 1})
+		meeting.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("Sae Meeting", meeting.name, ignore_permissions=True))
+
+		host_pub = b"\x44" * 32
+		message = host_pub + version.encode("utf-8")
+		sig_b64 = _b64(auth_priv.sign(message))
+
+		# Enable E2EE but then null out the signing key to simulate an
+		# incomplete epoch (e.g. from before the field was added).
+		convert_meeting_to_e2ee(
+			meeting_id=meeting.name,
+			e2ee_key_proof=sig_b64,
+			e2ee_key_version=version,
+			e2ee_host_public_key=_b64(host_pub),
+			e2ee_host_signing_public_key=_b64(b"\x55" * 32),
+			e2ee_device_id=device_id,
+		)
+		frappe.db.set_value("Sae Meeting", meeting.name, "e2ee_host_signing_public_key", None)
+
+		with self.assertRaises(frappe.ValidationError):
+			_assert_e2ee_metadata_complete(meeting.name)
+
+	def test_get_sfu_connection_details_returns_all_e2ee_metadata(self):
+		old_secret = frappe.conf.get("sfu_secret")
+		frappe.conf.sfu_secret = "test-sfu-secret"
+		try:
+			meeting = self._make_e2ee_meeting()
+
+			frappe.set_user(self.host_email)
+			meeting.add_user_to_table("members", self.host_email, save=True, ignore_permissions=True)
+
+			result = get_sfu_connection_details(meeting.name)
+
+			self.assertIn("e2ee_required", result)
+			self.assertTrue(result["e2ee_required"])
+			self.assertIn("e2ee_host_public_key", result)
+			self.assertIsNotNone(result["e2ee_host_public_key"])
+			self.assertIn("e2ee_host_signing_public_key", result)
+			self.assertIsNotNone(result["e2ee_host_signing_public_key"])
+			self.assertIn("e2ee_host_user_id", result)
+			self.assertEqual(result["e2ee_host_user_id"], self.host_email)
+			self.assertIn("e2ee_key_version", result)
+			self.assertIsNotNone(result["e2ee_key_version"])
+			self.assertIn("is_host", result)
+			self.assertTrue(result["is_host"])
+			self.assertIn("is_cohost", result)
+		finally:
+			if old_secret:
+				frappe.conf.sfu_secret = old_secret
+			else:
+				frappe.conf.pop("sfu_secret", None)
+
+	def test_get_sfu_connection_details_non_member_cannot_access(self):
+		old_secret = frappe.conf.get("sfu_secret")
+		frappe.conf.sfu_secret = "test-sfu-secret"
+		try:
+			meeting = self._make_e2ee_meeting()
+
+			outsider_email = "outsider-e2ee@example.com"
+			self._ensure_user(outsider_email, "Outsider")
+			frappe.set_user(outsider_email)
+
+			with self.assertRaises(frappe.PermissionError):
+				get_sfu_connection_details(meeting.name)
+		finally:
+			if old_secret:
+				frappe.conf.sfu_secret = old_secret
+			else:
+				frappe.conf.pop("sfu_secret", None)
+
+	def _make_e2ee_meeting(self):
+		auth_priv = Ed25519PrivateKey.generate()
+		auth_pub_b64 = _b64(auth_priv.public_key().public_bytes_raw())
+		version = "abcdef01"
+		device_id = "contract-test"
+		self._set_device_keys(self.host_email, device_id, auth_pub_b64)
+
+		frappe.set_user(self.host_email)
+		meeting = frappe.get_doc({"doctype": "Sae Meeting", "meeting_type": "open", "allow_guest": 1})
+		meeting.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("Sae Meeting", meeting.name, ignore_permissions=True))
+
+		host_pub_b64 = _b64(b"\x77" * 32)
+		host_sign_b64 = _b64(b"\x88" * 32)
+		message = b"\x77" * 32 + version.encode("utf-8")
+		sig_b64 = _b64(auth_priv.sign(message))
+
+		convert_meeting_to_e2ee(
+			meeting_id=meeting.name,
+			e2ee_key_proof=sig_b64,
+			e2ee_key_version=version,
+			e2ee_host_public_key=host_pub_b64,
+			e2ee_host_signing_public_key=host_sign_b64,
+			e2ee_device_id=device_id,
+		)
+		return meeting

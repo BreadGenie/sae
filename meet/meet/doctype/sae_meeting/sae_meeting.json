@@ -14,8 +14,9 @@
    "e2ee_enabled",
    "e2ee_key_proof",
    "e2ee_key_version",
-   "e2ee_host_public_key",
-   "users_section",
+    "e2ee_host_public_key",
+    "e2ee_host_signing_public_key",
+    "users_section",
    "co_hosts",
    "members",
    "banned_users",
@@ -73,11 +74,17 @@
    "read_only": 1
   },
   {
-   "fieldname": "members",
-   "fieldtype": "Table",
-   "label": "Members",
-   "options": "Sae Meeting User",
-   "read_only": 1
+    "fieldname": "e2ee_host_signing_public_key",
+    "fieldtype": "Data",
+    "label": "E2EE Host Signing Public Key (Ed25519, base64)",
+    "read_only": 1
+  },
+  {
+    "fieldname": "members",
+    "fieldtype": "Table",
+    "label": "Members",
+    "options": "Sae Meeting User",
+    "read_only": 1
   },
   {
    "fieldname": "co_hosts",

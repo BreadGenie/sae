@@ -11,6 +11,11 @@
 					<label class="text-sm font-medium text-gray-700">Meeting URL</label>
 					<ClickToCopyField :textContent="meetingUrl" :breakLines="false" />
 				</div>
+
+				<div v-if="e2eeFingerprint" class="space-y-2">
+					<label class="text-sm font-medium text-gray-700">E2EE Fingerprint</label>
+					<ClickToCopyField :textContent="e2eeFingerprint" :breakLines="false" />
+				</div>
 			</div>
 		</template>
 	</Dialog>
@@ -25,6 +30,7 @@ const props = defineProps<{
 	modelValue?: boolean;
 	meetingId: string;
 	meetingTitle?: string;
+	e2eeFingerprint?: string;
 }>();
 
 const emit = defineEmits<{
