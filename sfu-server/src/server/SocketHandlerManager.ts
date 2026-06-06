@@ -253,6 +253,7 @@ export class SocketHandlerManager {
 				signingPublicKey?: string;
 				envelope?: string;
 				responderX25519Pub?: string;
+				responderSigningPublicKey?: string;
 			}) => {
 				try {
 					if (socket.scope !== 'full') {
@@ -266,6 +267,7 @@ export class SocketHandlerManager {
 					const signingPublicKey = payload.signingPublicKey;
 					const envelope = payload.envelope;
 					const responderX25519Pub = payload.responderX25519Pub;
+					const responderSigningPublicKey = payload.responderSigningPublicKey;
 
 					if (!fromParticipantId || fromSenderId === undefined) return;
 
@@ -292,6 +294,7 @@ export class SocketHandlerManager {
 							toSenderId: payload.toSenderId,
 							envelope,
 							responderX25519Pub,
+							responderSigningPublicKey,
 						});
 						return;
 					}
@@ -772,12 +775,14 @@ export class SocketHandlerManager {
 				this.authManager.ensureFullAccess(socket);
 				this.enforceE2EEMediaPolicy(socket);
 				const { transportId, rtpParameters, kind, appData = {} } = data;
+				const startPaused = !!appData.e2eeStartPaused;
 				const producer = await this.mediasoup.createProducer(
 					transportId,
 					rtpParameters,
 					kind,
 					appData,
 					socket.senderId ?? 0,
+					startPaused,
 				);
 
 				const isScreen =
@@ -792,7 +797,7 @@ export class SocketHandlerManager {
 					participantId: socket.userId,
 					producerId: producer.id,
 					kind: producer.kind,
-					paused: false, // New producers start unpaused
+					paused: startPaused,
 					isScreen: isScreen,
 				});
 			} catch (error) {
@@ -919,6 +924,31 @@ export class SocketHandlerManager {
 			} catch (error) {
 				loggers.socketHandler.warn(
 					'Error updating consumer preferences: %s',
+					(error as Error).message,
+				);
+				callback({ success: false, error: (error as Error).message });
+			}
+		});
+
+		socket.on('request_consumer_keyframe', async (data, callback) => {
+			try {
+				this.authManager.ensureFullAccess(socket);
+				const { consumerId } = data;
+				const consumerData = this.mediasoup.getConsumerData(consumerId);
+				if (!consumerData) {
+					callback({ success: false, error: 'Consumer not found' });
+					return;
+				}
+				if (consumerData.peerId !== socket.userId) {
+					callback({ success: false, error: 'Consumer ownership mismatch' });
+					return;
+				}
+				const requested =
+					await this.mediasoup.requestConsumerKeyFrame(consumerId);
+				callback({ success: true, requested });
+			} catch (error) {
+				loggers.socketHandler.error(
+					'Error requesting consumer key frame: %s',
 					(error as Error).message,
 				);
 				callback({ success: false, error: (error as Error).message });
