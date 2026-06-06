@@ -10,54 +10,71 @@ import {
 import { useE2EEHandshake } from "../useE2EEHandshake";
 
 describe("useE2EEHandshake", () => {
-	it("host-signed envelope opens for a joiner", async () => {
-		const { beginJoinerHandshake, openJoinerEnvelope, buildResponderEnvelope } =
-			useE2EEHandshake();
-
-		const joiner = await beginJoinerHandshake("joiner-1", 2, "ignored");
-
-		const responderKp = await x25519KeyPair();
-		const responderX25519PubB64 = await exportPublicKey(responderKp.publicKey);
-		const responderX25519PubBytes = new Uint8Array(
-			await crypto.subtle.exportKey("raw", responderKp.publicKey),
-		);
-
-		const responderSigningKp = await ed25519KeyPair();
-		const responderSigningPubB64 = await exportEd25519PublicKey(
-			responderSigningKp.publicKey,
-		);
-		const responderSigningPubBytes = new Uint8Array(
-			await crypto.subtle.exportKey("raw", responderSigningKp.publicKey),
-		);
-
-		const meetingSecret = await generateMeetingSecret();
-
-		const envelope = await buildResponderEnvelope(
-			responderKp.privateKey,
-			responderSigningKp.privateKey,
-			await exportPublicKey(joiner.joinKeyPair.publicKey),
-			responderX25519PubBytes,
-			responderSigningPubBytes,
-			meetingSecret,
-			{ meetingId: "vscl-sabe-ykvp", keyVersion: 1 },
-		);
-
-		const responderSigningPub = await crypto.subtle.importKey(
+	async function importEd25519PublicKey(
+		rawBytes: Uint8Array,
+	): Promise<CryptoKey> {
+		return crypto.subtle.importKey(
 			"raw",
-			new Uint8Array(
-				await crypto.subtle.exportKey("raw", responderSigningKp.publicKey),
-			),
+			rawBytes as BufferSource,
 			{ name: "Ed25519" },
 			true,
 			["verify"],
 		);
+	}
+
+	async function makeHostKeyMaterial() {
+		const hostX25519KeyPair = await x25519KeyPair();
+		const hostX25519PublicKey = await exportPublicKey(
+			hostX25519KeyPair.publicKey,
+		);
+		const hostX25519PublicKeyBytes = new Uint8Array(
+			await crypto.subtle.exportKey("raw", hostX25519KeyPair.publicKey),
+		);
+
+		const hostSigningKeyPair = await ed25519KeyPair();
+		const hostSigningPublicKeyBase64 = await exportEd25519PublicKey(
+			hostSigningKeyPair.publicKey,
+		);
+		const hostSigningPublicKeyBytes = new Uint8Array(
+			await crypto.subtle.exportKey("raw", hostSigningKeyPair.publicKey),
+		);
+
+		return {
+			hostX25519KeyPair,
+			hostX25519PublicKey,
+			hostX25519PublicKeyBytes,
+			hostSigningKeyPair,
+			hostSigningPublicKeyBase64,
+			hostSigningPublicKeyBytes,
+		};
+	}
+
+	it("host-signed envelope opens for a joiner and recovers the meeting secret", async () => {
+		const { beginJoinerHandshake, openJoinerEnvelope, buildHostEnvelope } =
+			useE2EEHandshake();
+
+		const joiner = await beginJoinerHandshake("joiner-1", 2, "ignored");
+		const host = await makeHostKeyMaterial();
+
+		const meetingSecret = await generateMeetingSecret();
+		const context = { meetingId: "vscl-sabe-ykvp", keyVersion: 1 };
+
+		const envelope = await buildHostEnvelope(
+			host.hostX25519KeyPair.privateKey,
+			host.hostSigningKeyPair.privateKey,
+			await exportPublicKey(joiner.joinKeyPair.publicKey),
+			host.hostX25519PublicKeyBytes,
+			host.hostSigningPublicKeyBytes,
+			meetingSecret,
+			context,
+		);
 
 		const result = await openJoinerEnvelope(
 			joiner.joinKeyPair,
-			responderX25519PubB64,
-			responderSigningPub,
+			host.hostX25519PublicKey,
+			await importEd25519PublicKey(host.hostSigningPublicKeyBytes),
 			envelope,
-			{ meetingId: "vscl-sabe-ykvp", keyVersion: 1 },
+			context,
 		);
 
 		const got = new Uint8Array(result.meetingSecret);
@@ -66,63 +83,38 @@ describe("useE2EEHandshake", () => {
 		expect(got.every((b, i) => b === want[i])).toBe(true);
 
 		const recoveredSigning = await exportEd25519PublicKey(
-			await crypto.subtle.importKey(
-				"raw",
-				new Uint8Array(result.responderSigningPub).buffer as ArrayBuffer,
-				{ name: "Ed25519" },
-				true,
-				["verify"],
-			),
+			await importEd25519PublicKey(new Uint8Array(result.hostSigningPublicKey)),
 		);
-		expect(recoveredSigning).toBe(responderSigningPubB64);
+		expect(recoveredSigning).toBe(host.hostSigningPublicKeyBase64);
 	});
 
-	it("envelope signed with a different responder signing key is rejected", async () => {
-		const { beginJoinerHandshake, openJoinerEnvelope, buildResponderEnvelope } =
+	it("rejects an envelope signed by a non-host key (regression for the responder/host rename)", async () => {
+		const { beginJoinerHandshake, openJoinerEnvelope, buildHostEnvelope } =
 			useE2EEHandshake();
+
 		const joiner = await beginJoinerHandshake("joiner-2", 3, "ignored");
-
-		const responderKp = await x25519KeyPair();
-		const responderX25519PubB64 = await exportPublicKey(responderKp.publicKey);
-		const responderX25519PubBytes = new Uint8Array(
-			await crypto.subtle.exportKey("raw", responderKp.publicKey),
-		);
-
-		const signingKp = await ed25519KeyPair();
-		const signingPubBytes = new Uint8Array(
-			await crypto.subtle.exportKey("raw", signingKp.publicKey),
-		);
-
+		const realHost = await makeHostKeyMaterial();
+		const attacker = await makeHostKeyMaterial();
 		const meetingSecret = await generateMeetingSecret();
+		const context = { meetingId: "vscl-sabe-ykvp", keyVersion: 1 };
 
-		const envelope = await buildResponderEnvelope(
-			responderKp.privateKey,
-			signingKp.privateKey,
+		const attackerEnvelope = await buildHostEnvelope(
+			attacker.hostX25519KeyPair.privateKey,
+			attacker.hostSigningKeyPair.privateKey,
 			await exportPublicKey(joiner.joinKeyPair.publicKey),
-			responderX25519PubBytes,
-			signingPubBytes,
+			attacker.hostX25519PublicKeyBytes,
+			attacker.hostSigningPublicKeyBytes,
 			meetingSecret,
-			{ meetingId: "vscl-sabe-ykvp", keyVersion: 1 },
-		);
-
-		const differentKp = await ed25519KeyPair();
-		const differentPub = await crypto.subtle.importKey(
-			"raw",
-			new Uint8Array(
-				await crypto.subtle.exportKey("raw", differentKp.publicKey),
-			),
-			{ name: "Ed25519" },
-			true,
-			["verify"],
+			context,
 		);
 
 		await expect(
 			openJoinerEnvelope(
 				joiner.joinKeyPair,
-				responderX25519PubB64,
-				differentPub,
-				envelope,
-				{ meetingId: "vscl-sabe-ykvp", keyVersion: 1 },
+				realHost.hostX25519PublicKey,
+				await importEd25519PublicKey(realHost.hostSigningPublicKeyBytes),
+				attackerEnvelope,
+				context,
 			),
 		).rejects.toThrow();
 	});

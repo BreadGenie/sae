@@ -5,7 +5,7 @@
 // The SFU is a relay only — it never sees the envelope contents.
 //
 // Under threat model B, the envelope is *signed* by the host's server-published
-// Ed25519 signing key. A self-supplied responder key is not a trust anchor.
+// Ed25519 signing key. A self-supplied key is not a trust anchor.
 //
 // Wire format (relayed through SFU's e2ee:handshake event):
 //   joiner   -> participants: { fromParticipantId, fromSenderId,
@@ -54,45 +54,47 @@ export function useE2EEHandshake() {
 
 	async function openJoinerEnvelope(
 		joinKeyPair: CryptoKeyPair,
-		responderX25519PubB64: string,
-		responderSigningPub: CryptoKey,
+		hostX25519PublicKeyBase64: string,
+		hostSigningPublicKey: CryptoKey,
 		envelope: string,
 		context: { meetingId: string; keyVersion: number },
 	): Promise<{
 		meetingSecret: Uint8Array<ArrayBuffer>;
-		responderSigningPub: Uint8Array<ArrayBuffer>;
+		hostSigningPublicKey: Uint8Array<ArrayBuffer>;
 	}> {
-		const responderPub = await importPublicKey(responderX25519PubB64);
+		const hostX25519PublicKey = await importPublicKey(
+			hostX25519PublicKeyBase64,
+		);
 		const envelopeBytes = base64ToBytes(envelope);
 		const result = await openSignedEnvelope(
 			joinKeyPair.privateKey,
-			responderPub,
-			responderSigningPub,
+			hostX25519PublicKey,
+			hostSigningPublicKey,
 			envelopeBytes,
 			context,
 		);
 		return {
 			meetingSecret: result.meetingSecret,
-			responderSigningPub: result.responderSigningPub,
+			hostSigningPublicKey: result.hostSigningPublicKey,
 		};
 	}
 
-	async function buildResponderEnvelope(
-		responderPriv: CryptoKey,
-		responderSigningPriv: CryptoKey,
-		joinerX25519PubB64: string,
-		responderX25519Pub: Uint8Array<ArrayBuffer>,
-		responderSigningPub: Uint8Array<ArrayBuffer>,
+	async function buildHostEnvelope(
+		hostX25519PrivateKey: CryptoKey,
+		hostSigningPrivateKey: CryptoKey,
+		joinerX25519PublicKeyBase64: string,
+		hostX25519PublicKey: Uint8Array<ArrayBuffer>,
+		hostSigningPublicKey: Uint8Array<ArrayBuffer>,
 		meetingSecret: Uint8Array<ArrayBuffer>,
 		context: { meetingId: string; keyVersion: number },
 	): Promise<string> {
-		const joinerPub = await importPublicKey(joinerX25519PubB64);
+		const joinerPub = await importPublicKey(joinerX25519PublicKeyBase64);
 		const envelopeBytes = await createSignedEnvelope(
-			responderPriv,
-			responderSigningPriv,
+			hostX25519PrivateKey,
+			hostSigningPrivateKey,
 			joinerPub,
-			responderX25519Pub,
-			responderSigningPub,
+			hostX25519PublicKey,
+			hostSigningPublicKey,
 			meetingSecret,
 			context,
 		);
@@ -102,7 +104,7 @@ export function useE2EEHandshake() {
 	return {
 		beginJoinerHandshake,
 		openJoinerEnvelope,
-		buildResponderEnvelope,
+		buildHostEnvelope,
 	};
 }
 

@@ -371,30 +371,30 @@ describe("Signed envelope (threat model B)", () => {
 		const hostX = await x25519KeyPair();
 		const joinerX = await x25519KeyPair();
 		const hostSig = await ed25519KeyPair();
-		const responderX = await x25519KeyPair();
-		const responderSig = await ed25519KeyPair();
+		const hostEnvelopeX25519KeyPair = await x25519KeyPair();
+		const hostEnvelopeSigningKeyPair = await ed25519KeyPair();
 		const meetingSecret = await generateMeetingSecret();
 		const ctx = { meetingId: "meet-123", keyVersion: 1 };
 
-		const responderX25519Pub = new Uint8Array(32);
+		const hostEnvelopeX25519PublicKey = new Uint8Array(32);
 		const exp = await globalThis.crypto.subtle.exportKey(
 			"raw",
-			responderX.publicKey,
+			hostEnvelopeX25519KeyPair.publicKey,
 		);
-		responderX25519Pub.set(new Uint8Array(exp));
-		const responderSigningPub = new Uint8Array(32);
+		hostEnvelopeX25519PublicKey.set(new Uint8Array(exp));
+		const hostEnvelopeSigningPublicKey = new Uint8Array(32);
 		const expSig = await globalThis.crypto.subtle.exportKey(
 			"raw",
-			responderSig.publicKey,
+			hostEnvelopeSigningKeyPair.publicKey,
 		);
-		responderSigningPub.set(new Uint8Array(expSig));
+		hostEnvelopeSigningPublicKey.set(new Uint8Array(expSig));
 
 		const env = await createSignedEnvelope(
 			hostX.privateKey,
 			hostSig.privateKey,
 			await importPublicKey(await exportPublicKey(joinerX.publicKey)),
-			responderX25519Pub,
-			responderSigningPub,
+			hostEnvelopeX25519PublicKey,
+			hostEnvelopeSigningPublicKey,
 			meetingSecret,
 			ctx,
 		);
@@ -408,8 +408,8 @@ describe("Signed envelope (threat model B)", () => {
 		expect(Buffer.from(result.meetingSecret).toString("hex")).toBe(
 			Buffer.from(meetingSecret).toString("hex"),
 		);
-		expect(Buffer.from(result.responderSigningPub).toString("hex")).toBe(
-			Buffer.from(responderSigningPub).toString("hex"),
+		expect(Buffer.from(result.hostSigningPublicKey).toString("hex")).toBe(
+			Buffer.from(hostEnvelopeSigningPublicKey).toString("hex"),
 		);
 	});
 
@@ -426,21 +426,27 @@ describe("Signed envelope (threat model B)", () => {
 		const hostX = await x25519KeyPair();
 		const joinerX = await x25519KeyPair();
 		const hostSig = await ed25519KeyPair();
-		const responderX = await x25519KeyPair();
-		const responderSig = await ed25519KeyPair();
+		const hostEnvelopeX25519KeyPair = await x25519KeyPair();
+		const hostEnvelopeSigningKeyPair = await ed25519KeyPair();
 		const meetingSecret = await generateMeetingSecret();
 		const ctx = { meetingId: "meet-123", keyVersion: 1 };
 
-		const responderX25519Pub = new Uint8Array(32);
-		responderX25519Pub.set(
+		const hostEnvelopeX25519PublicKey = new Uint8Array(32);
+		hostEnvelopeX25519PublicKey.set(
 			new Uint8Array(
-				await globalThis.crypto.subtle.exportKey("raw", responderX.publicKey),
+				await globalThis.crypto.subtle.exportKey(
+					"raw",
+					hostEnvelopeX25519KeyPair.publicKey,
+				),
 			),
 		);
-		const responderSigningPub = new Uint8Array(32);
-		responderSigningPub.set(
+		const hostEnvelopeSigningPublicKey = new Uint8Array(32);
+		hostEnvelopeSigningPublicKey.set(
 			new Uint8Array(
-				await globalThis.crypto.subtle.exportKey("raw", responderSig.publicKey),
+				await globalThis.crypto.subtle.exportKey(
+					"raw",
+					hostEnvelopeSigningKeyPair.publicKey,
+				),
 			),
 		);
 
@@ -448,8 +454,8 @@ describe("Signed envelope (threat model B)", () => {
 			hostX.privateKey,
 			hostSig.privateKey,
 			await importPublicKey(await exportPublicKey(joinerX.publicKey)),
-			responderX25519Pub,
-			responderSigningPub,
+			hostEnvelopeX25519PublicKey,
+			hostEnvelopeSigningPublicKey,
 			meetingSecret,
 			ctx,
 		);
@@ -480,21 +486,27 @@ describe("Signed envelope (threat model B)", () => {
 		const joinerX = await x25519KeyPair();
 		const hostSig = await ed25519KeyPair();
 		const attackerSig = await ed25519KeyPair();
-		const responderX = await x25519KeyPair();
-		const responderSig = await ed25519KeyPair();
+		const hostEnvelopeX25519KeyPair = await x25519KeyPair();
+		const hostEnvelopeSigningKeyPair = await ed25519KeyPair();
 		const meetingSecret = await generateMeetingSecret();
 		const ctx = { meetingId: "meet-123", keyVersion: 1 };
 
-		const responderX25519Pub = new Uint8Array(32);
-		responderX25519Pub.set(
+		const hostEnvelopeX25519PublicKey = new Uint8Array(32);
+		hostEnvelopeX25519PublicKey.set(
 			new Uint8Array(
-				await globalThis.crypto.subtle.exportKey("raw", responderX.publicKey),
+				await globalThis.crypto.subtle.exportKey(
+					"raw",
+					hostEnvelopeX25519KeyPair.publicKey,
+				),
 			),
 		);
-		const responderSigningPub = new Uint8Array(32);
-		responderSigningPub.set(
+		const hostEnvelopeSigningPublicKey = new Uint8Array(32);
+		hostEnvelopeSigningPublicKey.set(
 			new Uint8Array(
-				await globalThis.crypto.subtle.exportKey("raw", responderSig.publicKey),
+				await globalThis.crypto.subtle.exportKey(
+					"raw",
+					hostEnvelopeSigningKeyPair.publicKey,
+				),
 			),
 		);
 
@@ -502,8 +514,8 @@ describe("Signed envelope (threat model B)", () => {
 			hostX.privateKey,
 			attackerSig.privateKey,
 			await importPublicKey(await exportPublicKey(joinerX.publicKey)),
-			responderX25519Pub,
-			responderSigningPub,
+			hostEnvelopeX25519PublicKey,
+			hostEnvelopeSigningPublicKey,
 			meetingSecret,
 			ctx,
 		);

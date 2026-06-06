@@ -417,8 +417,8 @@ export type E2eeHandshakeEnvelope = {
 	x25519PublicKey?: string;
 	signingPublicKey?: string;
 	envelope?: string;
-	responderX25519Pub?: string;
-	responderSigningPublicKey?: string;
+	hostX25519PublicKey?: string;
+	hostSigningPublicKey?: string;
 };
 
 // Socket.IO module augmentation

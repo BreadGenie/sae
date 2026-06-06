@@ -127,7 +127,7 @@ export function useSFUConnection(deps: {
 	const joinerSigningPubBySenderId = new Map<number, string>();
 	const meetingSecret = shallowRef<Uint8Array<ArrayBuffer> | null>(null);
 	const keyVersion = shallowRef<number | null>(null);
-	const { openJoinerEnvelope, buildResponderEnvelope } = useE2EEHandshake();
+	const { openJoinerEnvelope, buildHostEnvelope } = useE2EEHandshake();
 	const { getIdentity: getDeviceIdentity } = useDeviceIdentity();
 	const E2EE_KEY_HOLDER_TIMEOUT_MESSAGE =
 		"The meeting host is not online to provide the E2EE key. Ask the host to stay online, or recreate the meeting.";
@@ -735,8 +735,8 @@ export function useSFUConnection(deps: {
 		toParticipantId?: string;
 		toSenderId?: number;
 		envelope?: string;
-		responderX25519Pub?: string;
-		responderSigningPublicKey?: string;
+		hostX25519PublicKey?: string;
+		hostSigningPublicKey?: string;
 	}) => {
 		console.log("[E2EE] handleHandshakeEnvelope received", {
 			fromParticipantId: data.fromParticipantId,
@@ -744,18 +744,19 @@ export function useSFUConnection(deps: {
 			ownParticipantId: currentUser.currentUser.value?.user_id,
 			hasEnvelope: !!data.envelope,
 			hasJoinerPriv: !!joinerX25519Priv.value,
-			hasResponderPub: !!(data.responderX25519Pub || hostX25519PubB64.value),
+			hasHostX25519Pub: !!(data.hostX25519PublicKey || hostX25519PubB64.value),
 			keyVersion: keyVersion.value,
 		});
 		if (!data.envelope) {
 			return;
 		}
-		const responderPubB64 = data.responderX25519Pub || hostX25519PubB64.value;
+		const hostX25519PublicKeyBase64 =
+			data.hostX25519PublicKey || hostX25519PubB64.value;
 		if (
 			!joinerX25519Priv.value ||
-			!responderPubB64 ||
+			!hostX25519PublicKeyBase64 ||
 			!hostX25519PubB64.value ||
-			responderPubB64 !== hostX25519PubB64.value ||
+			hostX25519PublicKeyBase64 !== hostX25519PubB64.value ||
 			keyVersion.value == null
 		) {
 			return;
@@ -773,12 +774,12 @@ export function useSFUConnection(deps: {
 		};
 		let result: {
 			meetingSecret: Uint8Array<ArrayBuffer>;
-			responderSigningPub: Uint8Array<ArrayBuffer>;
+			hostSigningPublicKey: Uint8Array<ArrayBuffer>;
 		};
 		try {
 			result = await openJoinerEnvelope(
 				kp,
-				responderPubB64,
+				hostX25519PublicKeyBase64,
 				hostSigningPubKey.value,
 				data.envelope,
 				{ meetingId, keyVersion: keyVersion.value },
@@ -787,14 +788,14 @@ export function useSFUConnection(deps: {
 			console.error("[E2EE] openJoinerEnvelope failed:", err);
 			return;
 		}
-		const responderSenderId = data.fromSenderId;
+		const envelopeSenderId = data.fromSenderId;
 		try {
 			const pub = await importEd25519PublicKey(
-				b64FromBytes(result.responderSigningPub),
+				b64FromBytes(result.hostSigningPublicKey),
 			);
-			setSenderSigningPub(responderSenderId, pub);
+			setSenderSigningPub(envelopeSenderId, pub);
 		} catch (err) {
-			console.error("[E2EE] failed to import responder signing pub:", err);
+			console.error("[E2EE] failed to import host signing public key:", err);
 			return;
 		}
 		meetingSecret.value = result.meetingSecret;
@@ -861,32 +862,32 @@ export function useSFUConnection(deps: {
 		}
 
 		const identity = await getDeviceIdentity();
-		const responderSigningPriv = identity.signingKeyPair.privateKey;
+		const hostSigningPrivateKey = identity.signingKeyPair.privateKey;
 		if (!identitySigningPubB64.value) {
 			identitySigningPubB64.value = identity.signingPublicKey;
 		}
 		if (!identitySigningPubB64.value) {
-			console.warn("[E2EE] handleJoinerHello: responder signing key missing");
+			console.warn("[E2EE] handleJoinerHello: host signing key missing");
 			return;
 		}
 
-		const responderPriv = hostX25519Priv.value;
-		const responderPubB64 = hostX25519PubB64.value ?? "";
-		if (!responderPubB64) {
+		const hostX25519PrivateKey = hostX25519Priv.value;
+		const hostX25519PublicKeyBase64 = hostX25519PubB64.value ?? "";
+		if (!hostX25519PublicKeyBase64) {
 			console.log(
 				"[E2EE] handleJoinerHello: host priv exists but pub not exported yet, returning",
 			);
 			return;
 		}
-		const responderX25519PubBytes = bytesFromB64(responderPubB64);
-		const responderSigningPubBytes = bytesFromB64(identitySigningPubB64.value);
+		const hostX25519PublicKeyBytes = bytesFromB64(hostX25519PublicKeyBase64);
+		const hostSigningPublicKeyBytes = bytesFromB64(identitySigningPubB64.value);
 
-		const envelope = await buildResponderEnvelope(
-			responderPriv,
-			responderSigningPriv,
+		const envelope = await buildHostEnvelope(
+			hostX25519PrivateKey,
+			hostSigningPrivateKey,
 			data.x25519PublicKey,
-			responderX25519PubBytes,
-			responderSigningPubBytes,
+			hostX25519PublicKeyBytes,
+			hostSigningPublicKeyBytes,
 			meetingSecret.value,
 			{ meetingId, keyVersion: keyVersion.value },
 		);
@@ -903,8 +904,8 @@ export function useSFUConnection(deps: {
 			toParticipantId: data.fromParticipantId,
 			toSenderId: data.fromSenderId,
 			envelope,
-			responderX25519Pub: responderPubB64,
-			responderSigningPublicKey: identitySigningPubB64.value,
+			hostX25519PublicKey: hostX25519PublicKeyBase64,
+			hostSigningPublicKey: identitySigningPubB64.value,
 		});
 	};
 
@@ -919,7 +920,7 @@ export function useSFUConnection(deps: {
 			toSenderId?: number;
 			x25519PublicKey?: string;
 			envelope?: string;
-			responderX25519Pub?: string;
+			hostX25519PublicKey?: string;
 		};
 		console.log("[E2EE] handleHandshakeMessage received", {
 			fromParticipantId: msg.fromParticipantId,

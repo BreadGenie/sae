@@ -284,8 +284,8 @@ export class SocketHandlerManager {
 				x25519PublicKey?: string;
 				signingPublicKey?: string;
 				envelope?: string;
-				responderX25519Pub?: string;
-				responderSigningPublicKey?: string;
+				hostX25519PublicKey?: string;
+				hostSigningPublicKey?: string;
 			}) => {
 				try {
 					if (socket.scope !== 'full') {
@@ -298,8 +298,8 @@ export class SocketHandlerManager {
 					const x25519PublicKey = payload.x25519PublicKey;
 					const signingPublicKey = payload.signingPublicKey;
 					const envelope = payload.envelope;
-					const responderX25519Pub = payload.responderX25519Pub;
-					const responderSigningPublicKey = payload.responderSigningPublicKey;
+					const hostX25519PublicKey = payload.hostX25519PublicKey;
+					const hostSigningPublicKey = payload.hostSigningPublicKey;
 
 					if (!fromParticipantId || fromSenderId === undefined) return;
 
@@ -308,8 +308,8 @@ export class SocketHandlerManager {
 							!this.isE2EEBase64Key(x25519PublicKey) ||
 							!this.isE2EEBase64Key(signingPublicKey) ||
 							envelope ||
-							responderX25519Pub ||
-							responderSigningPublicKey ||
+							hostX25519PublicKey ||
+							hostSigningPublicKey ||
 							payload.toSenderId !== undefined
 						) {
 							return;
@@ -327,8 +327,8 @@ export class SocketHandlerManager {
 						if (
 							!this.isE2EEEnvelope(envelope) ||
 							!this.isSenderId(payload.toSenderId) ||
-							!this.isE2EEBase64Key(responderX25519Pub) ||
-							!this.isE2EEBase64Key(responderSigningPublicKey) ||
+							!this.isE2EEBase64Key(hostX25519PublicKey) ||
+							!this.isE2EEBase64Key(hostSigningPublicKey) ||
 							x25519PublicKey ||
 							signingPublicKey
 						) {
@@ -345,8 +345,8 @@ export class SocketHandlerManager {
 							toParticipantId: targetParticipant,
 							toSenderId: payload.toSenderId,
 							envelope,
-							responderX25519Pub,
-							responderSigningPublicKey,
+							hostX25519PublicKey,
+							hostSigningPublicKey,
 						});
 						return;
 					}

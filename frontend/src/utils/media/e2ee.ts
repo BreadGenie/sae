@@ -258,8 +258,8 @@ async function deriveFrameKey(
 }
 
 interface OpenEnvelopeResult {
-	responderX25519Pub: Uint8Array<ArrayBuffer>;
-	responderSigningPub: Uint8Array<ArrayBuffer>;
+	hostX25519PublicKey: Uint8Array<ArrayBuffer>;
+	hostSigningPublicKey: Uint8Array<ArrayBuffer>;
 	meetingSecret: Uint8Array<ArrayBuffer>;
 }
 
@@ -293,8 +293,8 @@ export async function createSignedEnvelope(
 	hostPriv: CryptoKey,
 	hostSigningPriv: CryptoKey,
 	joinerPub: CryptoKey,
-	responderX25519Pub: Uint8Array<ArrayBuffer>,
-	responderSigningPub: Uint8Array<ArrayBuffer>,
+	hostX25519PublicKey: Uint8Array<ArrayBuffer>,
+	hostSigningPublicKey: Uint8Array<ArrayBuffer>,
 	meetingSecret: Uint8Array<ArrayBuffer>,
 	context: { meetingId: string; keyVersion: number },
 ): Promise<Uint8Array<ArrayBuffer>> {
@@ -313,8 +313,8 @@ export async function createSignedEnvelope(
 	cipherBytes.set(new Uint8Array(ciphertext));
 	const ctxBytes = encodeInfo(`|${context.meetingId}|${context.keyVersion}`);
 	const signedData = concatBytes([
-		responderX25519Pub,
-		responderSigningPub,
+		hostX25519PublicKey,
+		hostSigningPublicKey,
 		iv,
 		cipherBytes,
 		ctxBytes,
@@ -326,8 +326,8 @@ export async function createSignedEnvelope(
 			cipherBytes.byteLength +
 			ENVELOPE_SIGNATURE_SIZE,
 	);
-	result.set(responderX25519Pub, 0);
-	result.set(responderSigningPub, 32);
+	result.set(hostX25519PublicKey, 0);
+	result.set(hostSigningPublicKey, 32);
 	result.set(iv, ENVELOPE_HEADER_SIZE);
 	result.set(cipherBytes, ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE);
 	result.set(
@@ -347,8 +347,8 @@ export async function openSignedEnvelope(
 	if (signedEnvelope.byteLength < ENVELOPE_MIN_SIZE) {
 		throw new EnvelopeSignatureError("envelope too short");
 	}
-	const responderX25519Pub = signedEnvelope.slice(0, 32);
-	const responderSigningPub = signedEnvelope.slice(32, 64);
+	const hostX25519PublicKey = signedEnvelope.slice(0, 32);
+	const hostSigningPublicKey = signedEnvelope.slice(32, 64);
 	const iv = signedEnvelope.slice(
 		ENVELOPE_HEADER_SIZE,
 		ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE,
@@ -361,8 +361,8 @@ export async function openSignedEnvelope(
 	const signature = signedEnvelope.slice(cipherEnd);
 	const ctxBytes = encodeInfo(`|${context.meetingId}|${context.keyVersion}`);
 	const signedData = concatBytes([
-		responderX25519Pub,
-		responderSigningPub,
+		hostX25519PublicKey,
+		hostSigningPublicKey,
 		iv,
 		ciphertext,
 		ctxBytes,
@@ -384,8 +384,8 @@ export async function openSignedEnvelope(
 	const out = new Uint8Array(meetingSecret.byteLength);
 	out.set(new Uint8Array(meetingSecret));
 	return {
-		responderX25519Pub,
-		responderSigningPub,
+		hostX25519PublicKey,
+		hostSigningPublicKey,
 		meetingSecret: out,
 	};
 }
