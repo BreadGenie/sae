@@ -129,8 +129,10 @@ export function useSFUConnection(deps: {
 	const joinerSigningPubBySenderId = new Map<number, string>();
 	const meetingSecret = shallowRef<Uint8Array<ArrayBuffer> | null>(null);
 	const keyVersion = shallowRef<number | null>(null);
-	const { openJoinerEnvelope, buildHostEnvelope } = useE2EEHandshake();
+	const { openJoinerEnvelope, buildResponderEnvelope } = useE2EEHandshake();
 	const { getIdentity: getDeviceIdentity } = useDeviceIdentity();
+	const E2EE_KEY_HOLDER_TIMEOUT_MESSAGE =
+		"No online encrypted participant could provide the E2EE key. Ask someone already in the call to stay online, or recreate the meeting.";
 
 	const joinMeetingAPI = createResource({
 		url: "meet.api.meeting.join_meeting",
@@ -421,9 +423,9 @@ export function useSFUConnection(deps: {
 					try {
 						await waitForHandshakeComplete(10000);
 					} catch (error) {
-						throw new Error(
-							`E2EE handshake timed out: ${(error as Error).message}`,
-						);
+						throw new Error(E2EE_KEY_HOLDER_TIMEOUT_MESSAGE, {
+							cause: error,
+						});
 					}
 				} else {
 					throw new Error("E2EE is required but host key metadata is missing");
@@ -765,15 +767,10 @@ export function useSFUConnection(deps: {
 		if (data.toParticipantId && data.toParticipantId !== ownParticipantId) {
 			return;
 		}
-		if (!hostSigningPubKey.value && data.responderSigningPublicKey) {
-			const trustedHostId = sfuClient.connectionDetails.e2eeHostUserId;
-			if (trustedHostId && data.fromParticipantId === trustedHostId) {
-				hostSigningPubKey.value = await importEd25519PublicKey(
-					data.responderSigningPublicKey,
-				);
-			}
-		}
-		if (!hostSigningPubKey.value) {
+		const responderSigningPub = data.responderSigningPublicKey
+			? await importEd25519PublicKey(data.responderSigningPublicKey)
+			: hostSigningPubKey.value;
+		if (!responderSigningPub) {
 			return;
 		}
 		const kp: CryptoKeyPair = {
@@ -788,7 +785,7 @@ export function useSFUConnection(deps: {
 			result = await openJoinerEnvelope(
 				kp,
 				responderPubB64,
-				hostSigningPubKey.value,
+				responderSigningPub,
 				data.envelope,
 				{ meetingId, keyVersion: keyVersion.value },
 			);
@@ -866,9 +863,13 @@ export function useSFUConnection(deps: {
 			return;
 		}
 
-		const hostSigningPriv = hostSigningKey.value;
-		if (!hostSigningPriv) {
-			console.warn("[E2EE] handleJoinerHello: host signing key missing");
+		const identity = await getDeviceIdentity();
+		const responderSigningPriv = identity.signingKeyPair.privateKey;
+		if (!identitySigningPubB64.value) {
+			identitySigningPubB64.value = identity.signingPublicKey;
+		}
+		if (!identitySigningPubB64.value) {
+			console.warn("[E2EE] handleJoinerHello: responder signing key missing");
 			return;
 		}
 
@@ -896,9 +897,9 @@ export function useSFUConnection(deps: {
 			responderSigningPubBytes = bytesFromB64(identitySigningPubB64.value);
 		}
 
-		const envelope = await buildHostEnvelope(
+		const envelope = await buildResponderEnvelope(
 			responderPriv,
-			hostSigningPriv,
+			responderSigningPriv,
 			data.x25519PublicKey,
 			responderX25519PubBytes,
 			responderSigningPubBytes,
@@ -1236,6 +1237,7 @@ export function useSFUConnection(deps: {
 				await waitForHandshakeComplete(10000);
 			} catch (err) {
 				console.error("E2EE handshake (joiner) failed:", err);
+				toast.error(E2EE_KEY_HOLDER_TIMEOUT_MESSAGE);
 				return;
 			}
 		}

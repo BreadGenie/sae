@@ -353,7 +353,9 @@ class RecvState {
 		}
 		const clearPrefix = data.slice(0, clearPrefixSize);
 		const magicOffset = clearPrefixSize;
-		if (!hasFrameMagic(data, magicOffset)) return null;
+		if (!hasFrameMagic(data, magicOffset)) {
+			return null;
+		}
 		const frameMagic = data.slice(
 			magicOffset,
 			magicOffset + FRAME_MAGIC.byteLength,
@@ -362,9 +364,13 @@ class RecvState {
 		const headerEnd = headerOffset + FRAME_HEADER_FIXED_SIZE;
 		const signatureEnd = headerOffset + FRAME_HEADER_TOTAL;
 		const header = decodeFrameHeader(data.subarray(headerOffset, headerEnd));
-		if (!header || header.keyVersion !== expectedKeyVersion) return null;
+		if (!header || header.keyVersion !== expectedKeyVersion) {
+			return null;
+		}
 		const signingPub = this.signingPubs.get(header.senderId);
-		if (!signingPub) return null;
+		if (!signingPub) {
+			return null;
+		}
 		const headerFixed = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
 		headerFixed.set(data.subarray(headerOffset, headerEnd));
 		const signature = data.slice(headerEnd, signatureEnd);
@@ -404,11 +410,12 @@ class RecvState {
 			this.cacheFrameKey(header.senderId, mediaType, header.generation, key);
 		}
 		try {
-			frame.data = await subtle.decrypt(
+			const decrypted = await subtle.decrypt(
 				{ name: "AES-GCM", iv: header.iv },
 				key,
 				ciphertext,
 			);
+			frame.data = decrypted;
 		} catch {
 			return null;
 		}

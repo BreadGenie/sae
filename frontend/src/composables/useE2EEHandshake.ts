@@ -1,18 +1,18 @@
 // E2EE handshake signaling.
 //
-// The meeting host runs a fresh ECDH with every joiner to deliver the
-// meeting secret (per-joiner envelope). The SFU is a relay only — it
-// never sees the envelope contents.
+// A participant that already holds the meeting secret runs a fresh ECDH
+// with every joiner to deliver the meeting secret (per-joiner envelope).
+// The SFU is a relay only — it never sees the envelope contents.
 //
-// Under threat model B, the envelope is *signed* by the host's Ed25519
-// signing key so the joiner can verify the responder's signing public
-// key (used for per-frame authentication) is legitimate.
+// Under threat model B, the envelope is *signed* by the responder's Ed25519
+// signing key so the joiner can bind the delivered secret to that responder's
+// media signing key.
 //
 // Wire format (relayed through SFU's e2ee:handshake event):
-//   joiner -> host:  { fromParticipantId, fromSenderId,
-//                       x25519PublicKey, signingPublicKey }
-//   host   -> joiner: { fromParticipantId, fromSenderId, toParticipantId,
-//                       toSenderId, envelope }
+//   joiner   -> participants: { fromParticipantId, fromSenderId,
+//                               x25519PublicKey, signingPublicKey }
+//   responder -> joiner:      { fromParticipantId, fromSenderId,
+//                               toParticipantId, toSenderId, envelope }
 //
 // See docs/refactors/e2ee-modernization.md for the full protocol.
 
@@ -55,20 +55,20 @@ export function useE2EEHandshake() {
 
 	async function openJoinerEnvelope(
 		joinKeyPair: CryptoKeyPair,
-		hostX25519PubB64: string,
-		hostSigningPub: CryptoKey,
+		responderX25519PubB64: string,
+		responderSigningPub: CryptoKey,
 		envelope: string,
 		context: { meetingId: string; keyVersion: number },
 	): Promise<{
 		meetingSecret: Uint8Array<ArrayBuffer>;
 		responderSigningPub: Uint8Array<ArrayBuffer>;
 	}> {
-		const hostPub = await importPublicKey(hostX25519PubB64);
+		const responderPub = await importPublicKey(responderX25519PubB64);
 		const envelopeBytes = base64ToBytes(envelope);
 		const result = await openSignedEnvelope(
 			joinKeyPair.privateKey,
-			hostPub,
-			hostSigningPub,
+			responderPub,
+			responderSigningPub,
 			envelopeBytes,
 			context,
 		);
@@ -78,9 +78,9 @@ export function useE2EEHandshake() {
 		};
 	}
 
-	async function buildHostEnvelope(
-		hostPriv: CryptoKey,
-		hostSigningPriv: CryptoKey,
+	async function buildResponderEnvelope(
+		responderPriv: CryptoKey,
+		responderSigningPriv: CryptoKey,
 		joinerX25519PubB64: string,
 		responderX25519Pub: Uint8Array<ArrayBuffer>,
 		responderSigningPub: Uint8Array<ArrayBuffer>,
@@ -89,8 +89,8 @@ export function useE2EEHandshake() {
 	): Promise<string> {
 		const joinerPub = await importPublicKey(joinerX25519PubB64);
 		const envelopeBytes = await createSignedEnvelope(
-			hostPriv,
-			hostSigningPriv,
+			responderPriv,
+			responderSigningPriv,
 			joinerPub,
 			responderX25519Pub,
 			responderSigningPub,
@@ -103,7 +103,7 @@ export function useE2EEHandshake() {
 	return {
 		beginJoinerHandshake,
 		openJoinerEnvelope,
-		buildHostEnvelope,
+		buildResponderEnvelope,
 	};
 }
 

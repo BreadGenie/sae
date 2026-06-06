@@ -631,7 +631,7 @@ const handleE2EENeedsMediaRepublish = async () => {
 		mediaState.localStream = stream;
 		if (mediaState.isCameraOn) {
 			mediaState.cameraPermissionGranted = true;
-			await mediaControls.applyBackgroundEffectsToLocalStream(true);
+			await mediaControls.applyBackgroundEffectsToLocalStream();
 		}
 		if (mediaState.isMicOn) {
 			mediaState.microphonePermissionGranted = true;
