@@ -130,7 +130,7 @@ export function useSFUConnection(deps: {
 	const { openJoinerEnvelope, buildResponderEnvelope } = useE2EEHandshake();
 	const { getIdentity: getDeviceIdentity } = useDeviceIdentity();
 	const E2EE_KEY_HOLDER_TIMEOUT_MESSAGE =
-		"No online encrypted participant could provide the E2EE key. Ask someone already in the call to stay online, or recreate the meeting.";
+		"The meeting host is not online to provide the E2EE key. Ask the host to stay online, or recreate the meeting.";
 
 	const joinMeetingAPI = createResource({
 		url: "meet.api.meeting.join_meeting",
@@ -754,6 +754,8 @@ export function useSFUConnection(deps: {
 		if (
 			!joinerX25519Priv.value ||
 			!responderPubB64 ||
+			!hostX25519PubB64.value ||
+			responderPubB64 !== hostX25519PubB64.value ||
 			keyVersion.value == null
 		) {
 			return;
@@ -762,10 +764,7 @@ export function useSFUConnection(deps: {
 		if (data.toParticipantId && data.toParticipantId !== ownParticipantId) {
 			return;
 		}
-		const responderSigningPub = data.responderSigningPublicKey
-			? await importEd25519PublicKey(data.responderSigningPublicKey)
-			: hostSigningPubKey.value;
-		if (!responderSigningPub) {
+		if (!hostSigningPubKey.value) {
 			return;
 		}
 		const kp: CryptoKeyPair = {
@@ -780,7 +779,7 @@ export function useSFUConnection(deps: {
 			result = await openJoinerEnvelope(
 				kp,
 				responderPubB64,
-				responderSigningPub,
+				hostSigningPubKey.value,
 				data.envelope,
 				{ meetingId, keyVersion: keyVersion.value },
 			);
@@ -857,6 +856,9 @@ export function useSFUConnection(deps: {
 			});
 			return;
 		}
+		if (!hostX25519Priv.value) {
+			return;
+		}
 
 		const identity = await getDeviceIdentity();
 		const responderSigningPriv = identity.signingKeyPair.privateKey;
@@ -868,29 +870,16 @@ export function useSFUConnection(deps: {
 			return;
 		}
 
-		let responderPriv: CryptoKey;
-		let responderPubB64: string;
-		let responderX25519PubBytes: Uint8Array<ArrayBuffer>;
-		let responderSigningPubBytes: Uint8Array<ArrayBuffer>;
-
-		if (hostX25519Priv.value) {
-			responderPriv = hostX25519Priv.value;
-			responderPubB64 = hostX25519PubB64.value ?? "";
-			if (!responderPubB64) {
-				console.log(
-					"[E2EE] handleJoinerHello: host priv exists but pub not exported yet, returning",
-				);
-				return;
-			}
-			responderX25519PubBytes = bytesFromB64(responderPubB64);
-			responderSigningPubBytes = bytesFromB64(identitySigningPubB64.value);
-		} else {
-			const kp = await x25519KeyPair();
-			responderPriv = kp.privateKey;
-			responderPubB64 = await exportPublicKey(kp.publicKey);
-			responderX25519PubBytes = bytesFromB64(responderPubB64);
-			responderSigningPubBytes = bytesFromB64(identitySigningPubB64.value);
+		const responderPriv = hostX25519Priv.value;
+		const responderPubB64 = hostX25519PubB64.value ?? "";
+		if (!responderPubB64) {
+			console.log(
+				"[E2EE] handleJoinerHello: host priv exists but pub not exported yet, returning",
+			);
+			return;
 		}
+		const responderX25519PubBytes = bytesFromB64(responderPubB64);
+		const responderSigningPubBytes = bytesFromB64(identitySigningPubB64.value);
 
 		const envelope = await buildResponderEnvelope(
 			responderPriv,

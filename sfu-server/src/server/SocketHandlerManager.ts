@@ -3,6 +3,7 @@ import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type {
 	ChatMessage,
 	ClientToServerEvents,
+	E2eeHandshakeEnvelope,
 	ParticipantInfo,
 	PreviewParticipantInfo,
 	ReactionMessage,
@@ -241,6 +242,37 @@ export class SocketHandlerManager {
 		return undefined;
 	}
 
+	private isE2EEBase64Key(value: unknown): value is string {
+		return typeof value === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(value);
+	}
+
+	private isE2EEEnvelope(value: unknown): value is string {
+		return (
+			typeof value === 'string' &&
+			value.length <= 512 &&
+			/^[A-Za-z0-9+/]+={0,2}$/.test(value)
+		);
+	}
+
+	private isSenderId(value: unknown): value is number {
+		return (
+			typeof value === 'number' &&
+			Number.isInteger(value) &&
+			value >= 0 &&
+			value <= 0xffffffff
+		);
+	}
+
+	private emitE2EEHandshakeToParticipant(
+		roomId: string,
+		participantId: string,
+		data: E2eeHandshakeEnvelope,
+	): void {
+		const socket = this.findSocketByParticipantId(roomId, participantId);
+		if (!socket || !this.fullAccessSockets.get(roomId)?.has(socket.id)) return;
+		socket.emit('e2ee:handshake', data);
+	}
+
 	private setupE2eeHandshakeHandler(socket: Socket): void {
 		socket.on(
 			'e2ee:handshake',
@@ -271,7 +303,17 @@ export class SocketHandlerManager {
 
 					if (!fromParticipantId || fromSenderId === undefined) return;
 
-					if (x25519PublicKey && !envelope) {
+					if (x25519PublicKey || signingPublicKey) {
+						if (
+							!this.isE2EEBase64Key(x25519PublicKey) ||
+							!this.isE2EEBase64Key(signingPublicKey) ||
+							envelope ||
+							responderX25519Pub ||
+							responderSigningPublicKey ||
+							payload.toSenderId !== undefined
+						) {
+							return;
+						}
 						this.emitToFullAccessParticipants(roomId, 'e2ee:handshake', {
 							fromParticipantId,
 							fromSenderId,
@@ -281,13 +323,23 @@ export class SocketHandlerManager {
 						return;
 					}
 
-					if (envelope && payload.toSenderId !== undefined) {
+					if (envelope || payload.toSenderId !== undefined) {
+						if (
+							!this.isE2EEEnvelope(envelope) ||
+							!this.isSenderId(payload.toSenderId) ||
+							!this.isE2EEBase64Key(responderX25519Pub) ||
+							!this.isE2EEBase64Key(responderSigningPublicKey) ||
+							x25519PublicKey ||
+							signingPublicKey
+						) {
+							return;
+						}
 						const targetParticipant = this.resolveParticipantBySenderId(
 							roomId,
 							payload.toSenderId,
 						);
 						if (!targetParticipant) return;
-						this.emitToFullAccessParticipants(roomId, 'e2ee:handshake', {
+						this.emitE2EEHandshakeToParticipant(roomId, targetParticipant, {
 							fromParticipantId,
 							fromSenderId,
 							toParticipantId: targetParticipant,

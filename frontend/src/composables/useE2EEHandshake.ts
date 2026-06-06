@@ -1,18 +1,17 @@
 // E2EE handshake signaling.
 //
-// A participant that already holds the meeting secret runs a fresh ECDH
-// with every joiner to deliver the meeting secret (per-joiner envelope).
+// The host runs a fresh ECDH with every joiner to deliver the meeting
+// secret (per-joiner envelope).
 // The SFU is a relay only — it never sees the envelope contents.
 //
-// Under threat model B, the envelope is *signed* by the responder's Ed25519
-// signing key so the joiner can bind the delivered secret to that responder's
-// media signing key.
+// Under threat model B, the envelope is *signed* by the host's server-published
+// Ed25519 signing key. A self-supplied responder key is not a trust anchor.
 //
 // Wire format (relayed through SFU's e2ee:handshake event):
 //   joiner   -> participants: { fromParticipantId, fromSenderId,
 //                               x25519PublicKey, signingPublicKey }
-//   responder -> joiner:      { fromParticipantId, fromSenderId,
-//                               toParticipantId, toSenderId, envelope }
+//   host     -> joiner:      { fromParticipantId, fromSenderId,
+//                              toParticipantId, toSenderId, envelope }
 //
 // See docs/refactors/e2ee-modernization.md for the full protocol.
 

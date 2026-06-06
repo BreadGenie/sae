@@ -9,8 +9,8 @@ import {
 } from "../../utils/media/e2ee";
 import { useE2EEHandshake } from "../useE2EEHandshake";
 
-describe("useE2EEHandshake (T_responder)", () => {
-	it("responder-signed envelope opens for a joiner with a different X25519 responder key", async () => {
+describe("useE2EEHandshake", () => {
+	it("host-signed envelope opens for a joiner", async () => {
 		const { beginJoinerHandshake, openJoinerEnvelope, buildResponderEnvelope } =
 			useE2EEHandshake();
 
