@@ -390,14 +390,14 @@ export async function openSignedEnvelope(
 	};
 }
 
-export function featureDetectX25519(): boolean {
+export async function featureDetectX25519(): Promise<boolean> {
 	if (typeof globalThis.crypto?.subtle === "undefined") {
 		return false;
 	}
 	try {
 		const subtle = globalThis.crypto.subtle;
 		const test = new Uint8Array(32);
-		subtle.importKey("raw", test, "X25519", true, []);
+		await subtle.importKey("raw", test, "X25519", true, []);
 		return true;
 	} catch {
 		return false;

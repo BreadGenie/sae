@@ -13,11 +13,9 @@ import { getErrorMessage } from "../utils/error";
 import {
 	exportEd25519PublicKey,
 	exportPublicKey,
-	generateE2EEKeyVersion,
 	importEd25519PublicKey,
 	setMeetingContext,
 	setSenderSigningPub,
-	signProof,
 	wipeMeetingContext,
 	x25519KeyPair,
 } from "../utils/media/e2ee";
@@ -401,9 +399,6 @@ export function useSFUConnection(deps: {
 			if (sfuClient.isE2EERequired() && !meetingSecret.value) {
 				const identity = await getDeviceIdentity();
 				identitySigningPubB64.value = identity.signingPublicKey;
-				if (isHost) {
-					await rotateHostE2EEEpoch(identity);
-				}
 			}
 
 			// If E2EE was already enabled when we joined, kick off the
@@ -412,7 +407,7 @@ export function useSFUConnection(deps: {
 			// so without this trigger we'd be sitting in the room with
 			// `e2ee.enabled: true` in our join request but no
 			// meeting_secret yet, and no transform would install.
-			if (sfuClient.isE2EERequired() && !isHost && !meetingSecret.value) {
+			if (sfuClient.isE2EERequired() && !meetingSecret.value) {
 				const hostPub = sfuClient.connectionDetails.e2eeHostPublicKey;
 				const hostSigningPubB64 =
 					sfuClient.connectionDetails.e2eeHostSigningPublicKey ?? "";
@@ -1030,61 +1025,6 @@ export function useSFUConnection(deps: {
 			}
 		}
 	};
-
-	type E2EEDeviceIdentity = Awaited<ReturnType<typeof getDeviceIdentity>>;
-
-	async function ensureE2EEDeviceRegistered(identity: E2EEDeviceIdentity) {
-		await frappeRequest({
-			url: "meet.api.meeting.register_e2ee_device",
-			params: {
-				device_id: identity.deviceId,
-				ed25519_public_key: identity.authPublicKey,
-			},
-			method: "POST",
-		});
-	}
-
-	async function rotateHostE2EEEpoch(identity: E2EEDeviceIdentity) {
-		await ensureE2EEDeviceRegistered(identity);
-
-		const meetingKeyPair = await x25519KeyPair();
-		const meetingPublicKey = await exportPublicKey(meetingKeyPair.publicKey);
-		const keyVersionString = generateE2EEKeyVersion();
-		const pubRaw = bytesFromB64(meetingPublicKey);
-		const message = new Uint8Array(pubRaw.length + keyVersionString.length);
-		message.set(pubRaw, 0);
-		message.set(new TextEncoder().encode(keyVersionString), pubRaw.length);
-		const keyProof = await signProof(identity.authKeyPair.privateKey, message);
-		const hostSigningPublicKey = await exportEd25519PublicKey(
-			identity.signingKeyPair.publicKey,
-		);
-
-		await frappeRequest({
-			url: "meet.api.meeting.convert_meeting_to_e2ee",
-			params: {
-				meeting_id: meetingId,
-				e2ee_key_proof: keyProof,
-				e2ee_key_version: keyVersionString,
-				e2ee_host_public_key: meetingPublicKey,
-				e2ee_host_signing_public_key: hostSigningPublicKey,
-				e2ee_device_id: identity.deviceId,
-			},
-			method: "POST",
-		});
-
-		hostX25519Priv.value = meetingKeyPair.privateKey;
-		hostX25519PubB64.value = meetingPublicKey;
-		hostSigningKey.value = identity.signingKeyPair.privateKey;
-		identitySigningPubB64.value = hostSigningPublicKey;
-		keyVersion.value = parseKeyVersion(keyVersionString);
-		sfuClient.setE2EERequired(true, {
-			hostPublicKey: meetingPublicKey,
-			hostSigningPublicKey,
-			keyVersion: keyVersionString,
-		});
-
-		await generateHostMeetingSecret();
-	}
 
 	async function generateHostMeetingSecret() {
 		const ms = new Uint8Array(32);

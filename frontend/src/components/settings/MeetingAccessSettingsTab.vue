@@ -51,9 +51,9 @@
 					<Switch
 						class="w-full !px-0"
 						label="End-to-end encryption"
-						description="Convert this meeting to E2EE. The SFU sees only encrypted bytes; media is decrypted on participants' devices."
+						:description="e2eeDescription"
 						v-model="e2eeEnabled"
-						:disabled="isConvertingToE2EE || meetingDoc.updateSettings.loading || meetingDoc.get.loading || e2eeEnabled"
+						:disabled="isE2EEToggleDisabled"
 						data-testid="e2ee-toggle"
 					/>
 				</div>
@@ -80,6 +80,7 @@ import { useMeetingDoc } from "../../composables/useMeetingDoc";
 import {
 	exportEd25519PublicKey,
 	exportPublicKey,
+	featureDetectX25519,
 	formatFingerprint,
 	generateE2EEKeyVersion,
 	importEd25519PublicKey,
@@ -112,6 +113,7 @@ const e2eeEnabled = ref<boolean>(globalE2EEEnabled.value);
 const e2eeFingerprint = ref<string>("");
 const deviceId = ref<string>("");
 const isConvertingToE2EE = ref(false);
+const isX25519Supported = ref<boolean | null>(null);
 
 const meetingDoc = getMeetingDoc(props.meetingId);
 
@@ -119,8 +121,25 @@ const { getIdentity } = useDeviceIdentity();
 
 let detailsLoaded = false;
 
+const e2eeDescription = computed(() => {
+	if (isX25519Supported.value === false) {
+		return "E2EE requires X25519 support in WebCrypto. Update your browser to enable it.";
+	}
+	return "Convert this meeting to E2EE. The SFU sees only encrypted bytes; media is decrypted on participants' devices.";
+});
+
+const isE2EEToggleDisabled = computed(
+	() =>
+		isConvertingToE2EE.value ||
+		meetingDoc.updateSettings.loading ||
+		meetingDoc.get.loading ||
+		e2eeEnabled.value ||
+		isX25519Supported.value !== true,
+);
+
 onMounted(async () => {
 	try {
+		isX25519Supported.value = await featureDetectX25519();
 		allowGuest.value = globalAllowGuest.value;
 		meetingType.value = globalMeetingType.value;
 		if (meetingDoc.doc?.host_only_chat !== undefined) {
@@ -170,6 +189,12 @@ watch(e2eeEnabled, async (val, oldVal) => {
 	if (!detailsLoaded) return;
 	if (!val || oldVal) return;
 	if (isConvertingToE2EE.value) return;
+	if (!(await featureDetectX25519())) {
+		e2eeEnabled.value = false;
+		isX25519Supported.value = false;
+		toast.error("E2EE requires a newer browser with X25519 support.");
+		return;
+	}
 
 	isConvertingToE2EE.value = true;
 	try {
