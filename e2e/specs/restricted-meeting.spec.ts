@@ -1,8 +1,8 @@
 import { test, expect, joinFromPreview } from "../fixtures/test";
 
-test.describe("Restricted meeting", () => {
-	const lobbyTransitionTimeout = process.env.CI ? 60_000 : 30_000;
+const lobbyTransitionTimeout = process.env.CI ? 60_000 : 30_000;
 
+test.describe("Restricted meeting", () => {
 	test("guest waits for approval and host can admit from people panel", async ({
 		hostPage,
 		restrictedMeetingId,
