@@ -33,6 +33,7 @@ import {
 	signProof,
 	x25519KeyPair,
 } from "../../utils/media/e2ee";
+import { bytesFromBase64 } from "../../utils/media/e2eePrimitives";
 import ClickToCopyField from "../ClickToCopyField.vue";
 
 interface MeetingDocument {
@@ -155,9 +156,7 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		const keyVersion = generateE2EEKeyVersion();
 
 		// Build the signed proof: bytes(X25519_pub) || bytes(key_version_ascii)
-		const pubRaw = Uint8Array.from(atob(meetingPublicKey), (c) =>
-			c.charCodeAt(0),
-		);
+		const pubRaw = bytesFromBase64(meetingPublicKey);
 		const message = new Uint8Array(pubRaw.length + keyVersion.length);
 		message.set(pubRaw, 0);
 		message.set(new TextEncoder().encode(keyVersion), pubRaw.length);

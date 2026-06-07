@@ -1,3 +1,5 @@
+import { encodeInfo, INFO_FRAME_AT } from "./e2eePrimitives";
+
 const FRAME_HEADER_FIXED_SIZE = 24;
 const FRAME_SIGNATURE_SIZE = 64;
 const FRAME_HEADER_TOTAL = FRAME_HEADER_FIXED_SIZE + FRAME_SIGNATURE_SIZE;
@@ -65,13 +67,6 @@ async function warmSubtleCrypto(): Promise<void> {
 
 void warmSubtleCrypto();
 
-function encodeInfo(s: string): Uint8Array<ArrayBuffer> {
-	const src = new TextEncoder().encode(s);
-	const out = new Uint8Array(src.length);
-	out.set(src);
-	return out;
-}
-
 function encodeFrameHeader(header: E2EEFrameHeader): Uint8Array<ArrayBuffer> {
 	const encoded = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
 	const view = new DataView(encoded.buffer);
@@ -132,7 +127,7 @@ async function deriveFrameKey(
 ): Promise<CryptoKey> {
 	return hkdfToAESKey(
 		meetingSecret,
-		encodeInfo(`meet-e2ee|frame|${senderId}|${mediaType}|${generation}`),
+		encodeInfo(INFO_FRAME_AT(senderId, mediaType, generation)),
 	);
 }
 
@@ -589,5 +584,3 @@ self.addEventListener("rtctransform", (event: Event) => {
 
 	transformer.readable.pipeThrough(transform).pipeTo(transformer.writable);
 });
-
-export {};

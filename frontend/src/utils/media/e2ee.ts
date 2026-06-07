@@ -1,3 +1,16 @@
+import {
+	bufferToBase64,
+	bytesFromBase64,
+	encodeInfo,
+	INFO_AES,
+	INFO_CHAT,
+	INFO_ENVELOPE,
+	INFO_ENVELOPE_CONTEXT,
+	INFO_FRAME,
+	INFO_FRAME_AT,
+	INFO_SENDER,
+} from "./e2eePrimitives";
+
 function zeroUint8Array(arr: Uint8Array): void {
 	arr.fill(0);
 }
@@ -48,35 +61,9 @@ function getSubtle(): SubtleCrypto {
 	return subtle;
 }
 
-function bufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
-	const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-	let binary = "";
-	for (let i = 0; i < bytes.byteLength; i++) {
-		binary += String.fromCharCode(bytes[i]);
-	}
-	return btoa(binary);
-}
-
-function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
-	const binary = atob(b64);
-	const buffer = new ArrayBuffer(binary.length);
-	const bytes = new Uint8Array(buffer);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i);
-	}
-	return bytes;
-}
-
-function encodeInfo(s: string): Uint8Array<ArrayBuffer> {
-	const src = new TextEncoder().encode(s);
-	const out = new Uint8Array(src.length);
-	out.set(src);
-	return out;
-}
-
 export function formatFingerprint(publicKeyB64: string): string {
 	try {
-		const raw = Uint8Array.from(atob(publicKeyB64), (c) => c.charCodeAt(0));
+		const raw = bytesFromBase64(publicKeyB64);
 		const hex = Array.from(raw, (b) => b.toString(16).padStart(2, "0")).join(
 			"",
 		);
@@ -100,7 +87,7 @@ export async function exportPublicKey(key: CryptoKey): Promise<string> {
 }
 
 export async function importPublicKey(b64: string): Promise<CryptoKey> {
-	return getSubtle().importKey("raw", base64ToBytes(b64), "X25519", true, []);
+	return getSubtle().importKey("raw", bytesFromBase64(b64), "X25519", true, []);
 }
 
 export async function exportEd25519PublicKey(key: CryptoKey): Promise<string> {
@@ -111,7 +98,7 @@ export async function exportEd25519PublicKey(key: CryptoKey): Promise<string> {
 export async function importEd25519PublicKey(b64: string): Promise<CryptoKey> {
 	return getSubtle().importKey(
 		"raw",
-		base64ToBytes(b64),
+		bytesFromBase64(b64),
 		{ name: "Ed25519" },
 		true,
 		["verify"],
@@ -138,7 +125,7 @@ export async function verifyProof(
 	return getSubtle().verify(
 		{ name: "Ed25519" },
 		publicKey,
-		base64ToBytes(signatureB64),
+		bytesFromBase64(signatureB64),
 		payload,
 	);
 }
@@ -227,22 +214,19 @@ export async function initSenderChain(
 	senderId: number,
 	mediaType: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
-	return hkdfBits(
-		meetingSecret,
-		encodeInfo(`meet-e2ee|sender|${senderId}|${mediaType}`),
-	);
+	return hkdfBits(meetingSecret, encodeInfo(INFO_SENDER(senderId, mediaType)));
 }
 
 export async function advanceChain(
 	chainTip: Uint8Array<ArrayBuffer>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-	return hkdfBits(chainTip, encodeInfo("meet-e2ee|frame"));
+	return hkdfBits(chainTip, encodeInfo(INFO_FRAME));
 }
 
 export async function chainTipToAESKey(
 	chainTip: Uint8Array<ArrayBuffer>,
 ): Promise<CryptoKey> {
-	return hkdfToAESKey(chainTip, encodeInfo("meet-e2ee|aes"));
+	return hkdfToAESKey(chainTip, encodeInfo(INFO_AES));
 }
 
 async function deriveFrameKey(
@@ -251,9 +235,7 @@ async function deriveFrameKey(
 	mediaType: string,
 	generation: number,
 ): Promise<CryptoKey> {
-	const info = encodeInfo(
-		`meet-e2ee|frame|${senderId}|${mediaType}|${generation}`,
-	);
+	const info = encodeInfo(INFO_FRAME_AT(senderId, mediaType, generation));
 	return hkdfToAESKey(meetingSecret, info);
 }
 
@@ -299,9 +281,7 @@ export async function createSignedEnvelope(
 	context: { meetingId: string; keyVersion: number },
 ): Promise<Uint8Array<ArrayBuffer>> {
 	const shared = await ecdhKeyAgreement(hostPriv, joinerPub);
-	const info = encodeInfo(
-		`meet-e2ee|envelope|${context.meetingId}|${context.keyVersion}`,
-	);
+	const info = encodeInfo(INFO_ENVELOPE(context.meetingId, context.keyVersion));
 	const aesKey = await hkdfToAESKey(shared, info);
 	const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
 	const ciphertext = await getSubtle().encrypt(
@@ -311,7 +291,9 @@ export async function createSignedEnvelope(
 	);
 	const cipherBytes = new Uint8Array(ciphertext.byteLength);
 	cipherBytes.set(new Uint8Array(ciphertext));
-	const ctxBytes = encodeInfo(`|${context.meetingId}|${context.keyVersion}`);
+	const ctxBytes = encodeInfo(
+		INFO_ENVELOPE_CONTEXT(context.meetingId, context.keyVersion),
+	);
 	const signedData = concatBytes([
 		hostX25519PublicKey,
 		hostSigningPublicKey,
@@ -359,7 +341,9 @@ export async function openSignedEnvelope(
 		cipherEnd,
 	);
 	const signature = signedEnvelope.slice(cipherEnd);
-	const ctxBytes = encodeInfo(`|${context.meetingId}|${context.keyVersion}`);
+	const ctxBytes = encodeInfo(
+		INFO_ENVELOPE_CONTEXT(context.meetingId, context.keyVersion),
+	);
 	const signedData = concatBytes([
 		hostX25519PublicKey,
 		hostSigningPublicKey,
@@ -372,9 +356,7 @@ export async function openSignedEnvelope(
 		throw new EnvelopeSignatureError("envelope signature verification failed");
 	}
 	const shared = await ecdhKeyAgreement(joinerPriv, hostPub);
-	const info = encodeInfo(
-		`meet-e2ee|envelope|${context.meetingId}|${context.keyVersion}`,
-	);
+	const info = encodeInfo(INFO_ENVELOPE(context.meetingId, context.keyVersion));
 	const aesKey = await hkdfToAESKey(shared, info);
 	const meetingSecret = await getSubtle().decrypt(
 		{ name: "AES-GCM", iv },
@@ -915,7 +897,7 @@ export async function getE2EEChatKey(): Promise<CryptoKey | null> {
 	const subtle = getSubtle();
 	const ikm = meetingSecret;
 	const salt = new Uint8Array(32);
-	const info = new TextEncoder().encode("meet-e2ee|chat");
+	const info = encodeInfo(INFO_CHAT);
 	const hkdfKey = await subtle.importKey(
 		"raw",
 		ikm as BufferSource,

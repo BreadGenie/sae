@@ -22,6 +22,7 @@ import {
 	openSignedEnvelope,
 	x25519KeyPair,
 } from "../utils/media/e2ee";
+import { bufferToBase64, bytesFromBase64 } from "../utils/media/e2eePrimitives";
 
 interface JoinerHello {
 	fromParticipantId: string;
@@ -65,7 +66,7 @@ export function useE2EEHandshake() {
 		const hostX25519PublicKey = await importPublicKey(
 			hostX25519PublicKeyBase64,
 		);
-		const envelopeBytes = base64ToBytes(envelope);
+		const envelopeBytes = bytesFromBase64(envelope);
 		const result = await openSignedEnvelope(
 			joinKeyPair.privateKey,
 			hostX25519PublicKey,
@@ -98,7 +99,7 @@ export function useE2EEHandshake() {
 			meetingSecret,
 			context,
 		);
-		return bytesToBase64(envelopeBytes);
+		return bufferToBase64(envelopeBytes);
 	}
 
 	return {
@@ -106,22 +107,4 @@ export function useE2EEHandshake() {
 		openJoinerEnvelope,
 		buildHostEnvelope,
 	};
-}
-
-function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
-	let binary = "";
-	for (let i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i] as number);
-	}
-	return btoa(binary);
-}
-
-function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
-	const binary = atob(b64);
-	const buffer = new ArrayBuffer(binary.length);
-	const bytes = new Uint8Array(buffer);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i);
-	}
-	return bytes;
 }

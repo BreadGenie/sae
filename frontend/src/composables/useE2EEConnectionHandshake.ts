@@ -19,6 +19,7 @@ import {
 	wipeMeetingContext,
 	x25519KeyPair,
 } from "../utils/media/e2ee";
+import { bufferToBase64, bytesFromBase64 } from "../utils/media/e2eePrimitives";
 import type { SFUClient } from "../utils/SFUClient";
 import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
 import type { CurrentUser } from "./useCurrentUser";
@@ -124,24 +125,6 @@ export function useE2EEConnectionHandshake(
 
 	const parseKeyVersion = (_s: string): number => 1;
 
-	const bytesFromBase64 = (b64: string): Uint8Array<ArrayBuffer> => {
-		const binary = atob(b64);
-		const buffer = new ArrayBuffer(binary.length);
-		const bytes = new Uint8Array(buffer);
-		for (let i = 0; i < binary.length; i++) {
-			bytes[i] = binary.charCodeAt(i);
-		}
-		return bytes;
-	};
-
-	const base64FromBytes = (bytes: Uint8Array<ArrayBuffer>): string => {
-		let binary = "";
-		for (let i = 0; i < bytes.byteLength; i++) {
-			binary += String.fromCharCode(bytes[i]);
-		}
-		return btoa(binary);
-	};
-
 	const wipeE2EERuntimeState = () => {
 		meetingSecret.value?.fill(0);
 		meetingSecret.value = null;
@@ -243,7 +226,7 @@ export function useE2EEConnectionHandshake(
 		const envelopeSenderId = data.fromSenderId;
 		try {
 			const pub = await importEd25519PublicKey(
-				base64FromBytes(result.hostSigningPublicKey),
+				bufferToBase64(result.hostSigningPublicKey),
 			);
 			setSenderSigningPub(envelopeSenderId, pub);
 		} catch (err) {
