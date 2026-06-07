@@ -175,10 +175,6 @@ export function useE2EEConnectionHandshake(
 		}
 		const senderId = sfuClient.getOwnSenderId?.() ?? 0;
 		const identity = await getDeviceIdentity();
-		console.log("[E2EE] signing key hello sent", {
-			fromParticipantId: ownParticipantId(),
-			fromSenderId: senderId,
-		});
 		sfuClient.signalChannel.emit("e2ee:handshake", {
 			fromParticipantId: ownParticipantId(),
 			fromSenderId: senderId,
@@ -204,17 +200,6 @@ export function useE2EEConnectionHandshake(
 	};
 
 	const handleHandshakeEnvelope = async (data: HandshakeMessage) => {
-		console.log("[E2EE] handleHandshakeEnvelope received", {
-			fromParticipantId: data.fromParticipantId,
-			toParticipantId: data.toParticipantId,
-			ownParticipantId: ownParticipantId(),
-			hasEnvelope: !!data.envelope,
-			hasJoinerPriv: !!joinerX25519PrivateKey.value,
-			hasHostX25519Pub: !!(
-				data.hostX25519PublicKey || hostX25519PublicKeyBase64.value
-			),
-			keyVersion: keyVersion.value,
-		});
 		if (!data.envelope) {
 			return;
 		}
@@ -280,15 +265,6 @@ export function useE2EEConnectionHandshake(
 	};
 
 	const handleJoinerHello = async (data: JoinerHello) => {
-		console.log("[E2EE] handleJoinerHello received", {
-			fromParticipantId: data.fromParticipantId,
-			fromSenderId: data.fromSenderId,
-			hasX25519Pub: !!data.x25519PublicKey,
-			hasSigningPub: !!data.signingPublicKey,
-			hasHostPriv: !!hostX25519PrivateKey.value,
-			hasMeetingSecret: !!meetingSecret.value,
-			keyVersion: keyVersion.value,
-		});
 		if (data.fromParticipantId === ownParticipantId()) {
 			return;
 		}
@@ -310,9 +286,6 @@ export function useE2EEConnectionHandshake(
 			return;
 		}
 		if (!meetingSecret.value || keyVersion.value == null) {
-			console.log(
-				"[E2EE] handleJoinerHello: meeting secret not ready, queueing hello",
-			);
 			pendingJoinerHellos.push({
 				fromParticipantId: data.fromParticipantId,
 				fromSenderId: data.fromSenderId,
@@ -358,12 +331,6 @@ export function useE2EEConnectionHandshake(
 			{ meetingId, keyVersion: keyVersion.value },
 		);
 		const ownSenderId = sfuClient.getOwnSenderId?.() ?? 0;
-		console.log("[E2EE] envelope sent", {
-			fromParticipantId: ownParticipantId(),
-			toParticipantId: data.fromParticipantId,
-			toSenderId: data.fromSenderId,
-			isHost: !!hostX25519PrivateKey.value,
-		});
 		sfuClient.signalChannel.emit("e2ee:handshake", {
 			fromParticipantId: ownParticipantId(),
 			fromSenderId: ownSenderId,
@@ -380,13 +347,6 @@ export function useE2EEConnectionHandshake(
 			return;
 		}
 		const msg = data as HandshakeMessage;
-		console.log("[E2EE] handleHandshakeMessage received", {
-			fromParticipantId: msg.fromParticipantId,
-			toParticipantId: msg.toParticipantId,
-			hasX25519Pub: !!msg.x25519PublicKey,
-			hasEnvelope: !!msg.envelope,
-			ownParticipantId: ownParticipantId(),
-		});
 		if (msg.envelope) {
 			void handleHandshakeEnvelope(msg);
 		} else if (msg.x25519PublicKey) {
