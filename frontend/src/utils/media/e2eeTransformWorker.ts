@@ -1,20 +1,25 @@
-import { encodeInfo, INFO_FRAME_AT } from "./e2eePrimitives";
+import {
+	buildSignedFramePayload,
+	decodeFrameHeader,
+	deriveFrameKey,
+	type E2EEFrameHeader,
+	encodeFrameHeader,
+	FRAME_GENERATION_KEYFRAME_FLAG,
+	FRAME_GENERATION_MASK,
+	FRAME_HEADER_FIXED_SIZE,
+	FRAME_HEADER_TOTAL,
+	FRAME_MAGIC,
+	getClearPrefix,
+	getClearPrefixSize,
+	hasFrameMagic,
+	MIN_SIGNED_ENCRYPTED_FRAME_SIZE,
+} from "./frameCodec";
 
-const FRAME_HEADER_FIXED_SIZE = 24;
-const FRAME_SIGNATURE_SIZE = 64;
-const FRAME_HEADER_TOTAL = FRAME_HEADER_FIXED_SIZE + FRAME_SIGNATURE_SIZE;
-const AES_GCM_TAG_SIZE = 16;
-const MIN_FRAME_PLAINTEXT_SIZE = 1;
-const FRAME_MAGIC = new Uint8Array([0x4d, 0x45, 0x32, 0x45]); // ME2E
-const MIN_SIGNED_ENCRYPTED_FRAME_SIZE =
-	FRAME_MAGIC.byteLength +
-	FRAME_HEADER_TOTAL +
-	AES_GCM_TAG_SIZE +
-	MIN_FRAME_PLAINTEXT_SIZE;
+// Worker uses a longer replay window than the main thread (3). The
+// main thread is on the realtime path; the worker is on a separate
+// thread with more headroom. See frameCodec.ts for the rationale.
 const REPLAY_WINDOW = 100;
-const FRAME_GENERATION_KEYFRAME_FLAG = 0x80000000;
-const FRAME_GENERATION_MASK = 0x7fffffff;
-const VIDEO_CLEAR_PREFIX_SIZE = 1;
+
 const SENDER_KEY_CACHE_MAX = 64;
 const DUMMY_VERIFY_MSG = new Uint8Array(0);
 const DUMMY_VERIFY_SIG = new Uint8Array(64);
@@ -22,14 +27,6 @@ const DUMMY_VERIFY_SIG = new Uint8Array(64);
 type EncodedFrame = {
 	data: ArrayBuffer;
 	type?: string;
-};
-
-type E2EEFrameHeader = {
-	senderId: number;
-	generation: number;
-	frameType?: string;
-	keyVersion: number;
-	iv: Uint8Array<ArrayBuffer>;
 };
 
 type WorkerOptions = {
@@ -66,115 +63,6 @@ async function warmSubtleCrypto(): Promise<void> {
 }
 
 void warmSubtleCrypto();
-
-function encodeFrameHeader(header: E2EEFrameHeader): Uint8Array<ArrayBuffer> {
-	const encoded = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
-	const view = new DataView(encoded.buffer);
-	const generation =
-		(header.generation & FRAME_GENERATION_MASK) |
-		(header.frameType === "key" ? FRAME_GENERATION_KEYFRAME_FLAG : 0);
-	view.setUint32(0, header.senderId, true);
-	view.setUint32(4, generation, true);
-	view.setUint32(8, header.keyVersion, true);
-	encoded.set(header.iv.subarray(0, 12), 12);
-	return encoded;
-}
-
-function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
-	if (data.length < FRAME_HEADER_FIXED_SIZE) return null;
-	const view = new DataView(
-		data.buffer,
-		data.byteOffset,
-		FRAME_HEADER_FIXED_SIZE,
-	);
-	const iv = new Uint8Array(12);
-	iv.set(data.subarray(12, 24));
-	const encodedGeneration = view.getUint32(4, true);
-	return {
-		senderId: view.getUint32(0, true),
-		generation: encodedGeneration & FRAME_GENERATION_MASK,
-		frameType:
-			(encodedGeneration & FRAME_GENERATION_KEYFRAME_FLAG) !== 0
-				? "key"
-				: "delta",
-		keyVersion: view.getUint32(8, true),
-		iv,
-	};
-}
-
-async function hkdfToAESKey(
-	ikm: Uint8Array<ArrayBuffer>,
-	info: Uint8Array<ArrayBuffer>,
-): Promise<CryptoKey> {
-	const subtle = getSubtle();
-	const baseKey = await subtle.importKey("raw", ikm, "HKDF", false, [
-		"deriveKey",
-	]);
-	return subtle.deriveKey(
-		{ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info },
-		baseKey,
-		{ name: "AES-GCM", length: 256 },
-		false,
-		["encrypt", "decrypt"],
-	);
-}
-
-async function deriveFrameKey(
-	meetingSecret: Uint8Array<ArrayBuffer>,
-	senderId: number,
-	mediaType: string,
-	generation: number,
-): Promise<CryptoKey> {
-	return hkdfToAESKey(
-		meetingSecret,
-		encodeInfo(INFO_FRAME_AT(senderId, mediaType, generation)),
-	);
-}
-
-function buildSignedFramePayload(
-	headerFixed: Uint8Array<ArrayBuffer>,
-	clearPrefix: Uint8Array<ArrayBuffer>,
-	frameMagic: Uint8Array<ArrayBuffer>,
-	ciphertext: Uint8Array<ArrayBuffer>,
-): Uint8Array<ArrayBuffer> {
-	const out = new Uint8Array(
-		headerFixed.byteLength +
-			clearPrefix.byteLength +
-			frameMagic.byteLength +
-			ciphertext.byteLength,
-	);
-	out.set(headerFixed, 0);
-	out.set(clearPrefix, headerFixed.byteLength);
-	out.set(frameMagic, headerFixed.byteLength + clearPrefix.byteLength);
-	out.set(
-		ciphertext,
-		headerFixed.byteLength + clearPrefix.byteLength + frameMagic.byteLength,
-	);
-	return out;
-}
-
-function hasFrameMagic(data: Uint8Array, offset: number): boolean {
-	if (data.length < offset + FRAME_MAGIC.byteLength) return false;
-	for (let i = 0; i < FRAME_MAGIC.byteLength; i += 1) {
-		if (data[offset + i] !== FRAME_MAGIC[i]) return false;
-	}
-	return true;
-}
-
-function getClearPrefixSize(mediaType: string): number {
-	return mediaType === "video" ? VIDEO_CLEAR_PREFIX_SIZE : 0;
-}
-
-function getClearPrefix(
-	data: ArrayBuffer,
-	prefixSize: number,
-): Uint8Array<ArrayBuffer> {
-	if (prefixSize === 0) return new Uint8Array(0);
-	const source = new Uint8Array(data);
-	const prefix = new Uint8Array(Math.min(prefixSize, source.byteLength));
-	prefix.set(source.subarray(0, prefix.byteLength));
-	return prefix;
-}
 
 class SendState {
 	private nextGeneration = 0;

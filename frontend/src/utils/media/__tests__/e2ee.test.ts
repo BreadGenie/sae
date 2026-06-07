@@ -20,7 +20,7 @@ afterEach(() => {
 	).createEncodedStreams;
 });
 
-import { decodeFrameHeader, encodeFrameHeader } from "../e2ee";
+import { decodeFrameHeader, encodeFrameHeader } from "../frameCodec";
 
 describe("Crypto primitives (T1.1)", () => {
 	describe("X25519 ECDH", () => {

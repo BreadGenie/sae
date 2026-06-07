@@ -2,14 +2,29 @@ import {
 	bufferToBase64,
 	bytesFromBase64,
 	encodeInfo,
-	INFO_AES,
 	INFO_CHAT,
 	INFO_ENVELOPE,
 	INFO_ENVELOPE_CONTEXT,
-	INFO_FRAME,
-	INFO_FRAME_AT,
-	INFO_SENDER,
 } from "./e2eePrimitives";
+import {
+	AES_GCM_TAG_SIZE,
+	buildSignedFramePayload,
+	decodeFrameHeader,
+	deriveFrameKey,
+	E2EEFrameHeader,
+	EMPTY_FRAME_MAGIC,
+	encodeFrameHeader,
+	FRAME_GENERATION_MASK,
+	FRAME_HEADER_FIXED_SIZE,
+	FRAME_HEADER_TOTAL,
+	FRAME_MAGIC,
+	getClearPrefix,
+	getClearPrefixSize,
+	hasFrameMagic,
+	MIN_FRAME_PLAINTEXT_SIZE,
+	MIN_SIGNED_ENCRYPTED_FRAME_SIZE,
+	REPLAY_WINDOW,
+} from "./frameCodec";
 
 function zeroUint8Array(arr: Uint8Array): void {
 	arr.fill(0);
@@ -209,35 +224,11 @@ export async function generateMeetingSecret(): Promise<
 	return globalThis.crypto.getRandomValues(new Uint8Array(32));
 }
 
-export async function initSenderChain(
-	meetingSecret: Uint8Array<ArrayBuffer>,
-	senderId: number,
-	mediaType: string,
-): Promise<Uint8Array<ArrayBuffer>> {
-	return hkdfBits(meetingSecret, encodeInfo(INFO_SENDER(senderId, mediaType)));
-}
-
-export async function advanceChain(
-	chainTip: Uint8Array<ArrayBuffer>,
-): Promise<Uint8Array<ArrayBuffer>> {
-	return hkdfBits(chainTip, encodeInfo(INFO_FRAME));
-}
-
-export async function chainTipToAESKey(
-	chainTip: Uint8Array<ArrayBuffer>,
-): Promise<CryptoKey> {
-	return hkdfToAESKey(chainTip, encodeInfo(INFO_AES));
-}
-
-async function deriveFrameKey(
-	meetingSecret: Uint8Array<ArrayBuffer>,
-	senderId: number,
-	mediaType: string,
-	generation: number,
-): Promise<CryptoKey> {
-	const info = encodeInfo(INFO_FRAME_AT(senderId, mediaType, generation));
-	return hkdfToAESKey(meetingSecret, info);
-}
+export {
+	advanceChain,
+	chainTipToAESKey,
+	initSenderChain,
+} from "./frameCodec";
 
 interface OpenEnvelopeResult {
 	hostX25519PublicKey: Uint8Array<ArrayBuffer>;
@@ -395,99 +386,6 @@ export function generateE2EEKeyVersion(): string {
 	return `${hex}`;
 }
 
-const FRAME_HEADER_FIXED_SIZE = 24;
-const FRAME_SIGNATURE_SIZE = 64;
-const FRAME_HEADER_TOTAL = FRAME_HEADER_FIXED_SIZE + FRAME_SIGNATURE_SIZE;
-const AES_GCM_TAG_SIZE = 16;
-const MIN_FRAME_PLAINTEXT_SIZE = 1;
-const FRAME_MAGIC = new Uint8Array([0x4d, 0x45, 0x32, 0x45]); // ME2E
-const EMPTY_FRAME_MAGIC = new Uint8Array(0);
-const MIN_SIGNED_ENCRYPTED_FRAME_SIZE =
-	FRAME_MAGIC.byteLength +
-	FRAME_HEADER_TOTAL +
-	AES_GCM_TAG_SIZE +
-	MIN_FRAME_PLAINTEXT_SIZE;
-const FRAME_GENERATION_KEYFRAME_FLAG = 0x80000000;
-const FRAME_GENERATION_MASK = 0x7fffffff;
-const VIDEO_CLEAR_PREFIX_SIZE = 1;
-
-type E2EEFrameHeader = {
-	senderId: number;
-	generation: number;
-	frameType?: string;
-	keyVersion: number;
-	iv: Uint8Array<ArrayBuffer>;
-};
-
-export function encodeFrameHeader(header: E2EEFrameHeader): Uint8Array {
-	const encoded = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
-	const view = new DataView(encoded.buffer);
-	const generation =
-		(header.generation & FRAME_GENERATION_MASK) |
-		(header.frameType === "key" ? FRAME_GENERATION_KEYFRAME_FLAG : 0);
-	view.setUint32(0, header.senderId, true);
-	view.setUint32(4, generation, true);
-	view.setUint32(8, header.keyVersion, true);
-	encoded.set(header.iv.subarray(0, 12), 12);
-	return encoded;
-}
-
-export function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
-	if (data.length < FRAME_HEADER_FIXED_SIZE) {
-		return null;
-	}
-	const view = new DataView(
-		data.buffer,
-		data.byteOffset,
-		FRAME_HEADER_FIXED_SIZE,
-	);
-	const iv = new Uint8Array(12);
-	iv.set(data.subarray(12, 24));
-	const encodedGeneration = view.getUint32(4, true);
-	return {
-		senderId: view.getUint32(0, true),
-		generation: encodedGeneration & FRAME_GENERATION_MASK,
-		frameType:
-			(encodedGeneration & FRAME_GENERATION_KEYFRAME_FLAG) !== 0
-				? "key"
-				: "delta",
-		keyVersion: view.getUint32(8, true),
-		iv,
-	};
-}
-
-function buildSignedFramePayload(
-	headerFixed: Uint8Array<ArrayBuffer>,
-	clearPrefix: Uint8Array<ArrayBuffer>,
-	frameMagic: Uint8Array<ArrayBuffer>,
-	ciphertext: Uint8Array<ArrayBuffer>,
-): Uint8Array<ArrayBuffer> {
-	return concatBytes([headerFixed, clearPrefix, frameMagic, ciphertext]);
-}
-
-function hasFrameMagic(data: Uint8Array, offset: number): boolean {
-	if (data.length < offset + FRAME_MAGIC.byteLength) return false;
-	for (let i = 0; i < FRAME_MAGIC.byteLength; i += 1) {
-		if (data[offset + i] !== FRAME_MAGIC[i]) return false;
-	}
-	return true;
-}
-
-function getClearPrefixSize(mediaType: string): number {
-	return mediaType === "video" ? VIDEO_CLEAR_PREFIX_SIZE : 0;
-}
-
-function getClearPrefix(
-	data: ArrayBuffer,
-	prefixSize: number,
-): Uint8Array<ArrayBuffer> {
-	if (prefixSize === 0) return new Uint8Array(0);
-	const source = new Uint8Array(data);
-	const prefix = new Uint8Array(Math.min(prefixSize, source.byteLength));
-	prefix.set(source.subarray(0, prefix.byteLength));
-	return prefix;
-}
-
 export class SenderChainState {
 	readonly senderId: number;
 	readonly mediaType: string;
@@ -542,8 +440,6 @@ export class SenderChainState {
 		this.nextGeneration = 0;
 	}
 }
-
-const REPLAY_WINDOW = 3;
 
 export class ReceiverChainState {
 	private readonly meetingSecret: Uint8Array<ArrayBuffer>;
