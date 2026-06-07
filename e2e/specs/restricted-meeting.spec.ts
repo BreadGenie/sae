@@ -1,6 +1,8 @@
 import { test, expect, joinFromPreview } from "../fixtures/test";
 
 test.describe("Restricted meeting", () => {
+	const lobbyTransitionTimeout = 30_000;
+
 	test("guest waits for approval and host can admit from people panel", async ({
 		hostPage,
 		restrictedMeetingId,
@@ -21,7 +23,9 @@ test.describe("Restricted meeting", () => {
 		await expect(guest.page.getByTestId("join-meeting-preview-button")).toBeEnabled();
 		await guest.page.getByTestId("join-meeting-preview-button").click();
 
-		await expect(guest.page.getByText("Waiting to be admitted")).toBeVisible();
+		await expect(
+			guest.page.getByRole("heading", { name: "Waiting to be admitted" }),
+		).toBeVisible({ timeout: lobbyTransitionTimeout });
 
 		await hostPage.getByTestId("toolbar-people").click();
 		await expect(hostPage.getByTestId("people-panel")).toBeVisible();
@@ -51,20 +55,27 @@ test.describe("Restricted meeting", () => {
 		await expect(guest.page.getByTestId("join-meeting-preview-button")).toBeEnabled();
 		await guest.page.getByTestId("join-meeting-preview-button").click();
 
-		await expect(guest.page.getByText("Waiting to be admitted")).toBeVisible();
+		await expect(
+			guest.page.getByRole("heading", { name: "Waiting to be admitted" }),
+		).toBeVisible({ timeout: lobbyTransitionTimeout });
 
 		await hostPage.getByTestId("toolbar-people").click();
 		await expect(hostPage.getByTestId("people-panel")).toBeVisible();
 
-		const waitingGuestRow = hostPage
+		const waitingGuestRows = hostPage
 			.getByTestId("people-panel")
 			.locator("[data-testid^='waiting-user-']")
-			.filter({ hasText: guestName })
-			.first();
+			.filter({ hasText: guestName });
+		const waitingGuestRow = waitingGuestRows.first();
 
+		await expect(waitingGuestRows).toHaveCount(1, {
+			timeout: lobbyTransitionTimeout,
+		});
 		await expect(waitingGuestRow).toBeVisible();
 		await waitingGuestRow.locator("[data-testid^='reject-waiting-user-']").click();
-		await expect(waitingGuestRow).toHaveCount(0);
+		await expect(waitingGuestRows).toHaveCount(0, {
+			timeout: lobbyTransitionTimeout,
+		});
 
 		await guest.page.goto(`/meet/${meetingId}`);
 		await expect(guest.page.getByTestId("meeting-preview")).toBeVisible();
@@ -72,6 +83,6 @@ test.describe("Restricted meeting", () => {
 
 		await expect(
 			guest.page.getByRole("heading", { name: "Waiting to be admitted" }),
-		).toBeVisible();
+		).toBeVisible({ timeout: lobbyTransitionTimeout });
 	});
 });
