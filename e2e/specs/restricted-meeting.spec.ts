@@ -1,7 +1,7 @@
 import { test, expect, joinFromPreview } from "../fixtures/test";
 
 test.describe("Restricted meeting", () => {
-	const lobbyTransitionTimeout = 30_000;
+	const lobbyTransitionTimeout = process.env.CI ? 60_000 : 30_000;
 
 	test("guest waits for approval and host can admit from people panel", async ({
 		hostPage,
@@ -42,7 +42,7 @@ test.describe("Restricted meeting", () => {
 	}) => {
 		const meetingId = restrictedMeetingId;
 		const guest = await createParticipant();
-		const guestName = `Guest Rejected ${test.info().parallelIndex}`;
+		const guestName = `Guest Rejected ${test.info().parallelIndex}-${test.info().retry}`;
 
 		await hostPage.goto(`/meet/${meetingId}`);
 		await joinFromPreview(hostPage);
