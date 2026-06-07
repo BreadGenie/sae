@@ -3,7 +3,6 @@ import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type {
 	ChatMessage,
 	ClientToServerEvents,
-	E2eeHandshakeEnvelope,
 	ParticipantInfo,
 	PreviewParticipantInfo,
 	ReactionMessage,
@@ -14,6 +13,7 @@ import type {
 import { loggers } from '../utils/logger';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
+import { E2EEHandshakeRelay } from './E2EEHandshakeRelay';
 
 type TypedSocket = Socket<
 	ClientToServerEvents,
@@ -33,6 +33,7 @@ export class SocketHandlerManager {
 	private hostOnlyChat: Record<string, boolean> = {};
 	private nextSenderIdByRoom: Map<string, number> = new Map(); // roomId -> next senderId
 	private participantToSender: Map<string, Map<string, number>> = new Map(); // roomId -> (participantId -> senderId)
+	private e2eeHandshakeRelay: E2EEHandshakeRelay;
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -43,6 +44,11 @@ export class SocketHandlerManager {
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
 		this.rateLimiter = new RateLimiter();
+		this.e2eeHandshakeRelay = new E2EEHandshakeRelay(
+			io,
+			this.fullAccessSockets,
+			this.participantToSender,
+		);
 
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
 			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
@@ -230,136 +236,6 @@ export class SocketHandlerManager {
 		return next;
 	}
 
-	private resolveParticipantBySenderId(
-		roomId: string,
-		senderId: number,
-	): string | undefined {
-		const map = this.participantToSender.get(roomId);
-		if (!map) return undefined;
-		for (const [participantId, sid] of map.entries()) {
-			if (sid === senderId) return participantId;
-		}
-		return undefined;
-	}
-
-	private isE2EEBase64Key(value: unknown): value is string {
-		return typeof value === 'string' && /^[A-Za-z0-9+/]{43}=$/.test(value);
-	}
-
-	private isE2EEEnvelope(value: unknown): value is string {
-		return (
-			typeof value === 'string' &&
-			value.length <= 512 &&
-			/^[A-Za-z0-9+/]+={0,2}$/.test(value)
-		);
-	}
-
-	private isSenderId(value: unknown): value is number {
-		return (
-			typeof value === 'number' &&
-			Number.isInteger(value) &&
-			value >= 0 &&
-			value <= 0xffffffff
-		);
-	}
-
-	private emitE2EEHandshakeToParticipant(
-		roomId: string,
-		participantId: string,
-		data: E2eeHandshakeEnvelope,
-	): void {
-		const socket = this.findSocketByParticipantId(roomId, participantId);
-		if (!socket || !this.fullAccessSockets.get(roomId)?.has(socket.id)) return;
-		socket.emit('e2ee:handshake', data);
-	}
-
-	private setupE2eeHandshakeHandler(socket: Socket): void {
-		socket.on(
-			'e2ee:handshake',
-			(payload: {
-				fromParticipantId?: string;
-				fromSenderId?: number;
-				toParticipantId?: string;
-				toSenderId?: number;
-				x25519PublicKey?: string;
-				signingPublicKey?: string;
-				envelope?: string;
-				hostX25519PublicKey?: string;
-				hostSigningPublicKey?: string;
-			}) => {
-				try {
-					if (socket.scope !== 'full') {
-						return;
-					}
-					if (!socket.roomId) return;
-					const roomId = socket.roomId;
-					const fromParticipantId = socket.participantId;
-					const fromSenderId = socket.senderId;
-					const x25519PublicKey = payload.x25519PublicKey;
-					const signingPublicKey = payload.signingPublicKey;
-					const envelope = payload.envelope;
-					const hostX25519PublicKey = payload.hostX25519PublicKey;
-					const hostSigningPublicKey = payload.hostSigningPublicKey;
-
-					if (!fromParticipantId || fromSenderId === undefined) return;
-
-					if (x25519PublicKey || signingPublicKey) {
-						if (
-							!this.isE2EEBase64Key(x25519PublicKey) ||
-							!this.isE2EEBase64Key(signingPublicKey) ||
-							envelope ||
-							hostX25519PublicKey ||
-							hostSigningPublicKey ||
-							payload.toSenderId !== undefined
-						) {
-							return;
-						}
-						this.emitToFullAccessParticipants(roomId, 'e2ee:handshake', {
-							fromParticipantId,
-							fromSenderId,
-							x25519PublicKey,
-							signingPublicKey,
-						});
-						return;
-					}
-
-					if (envelope || payload.toSenderId !== undefined) {
-						if (
-							!this.isE2EEEnvelope(envelope) ||
-							!this.isSenderId(payload.toSenderId) ||
-							!this.isE2EEBase64Key(hostX25519PublicKey) ||
-							!this.isE2EEBase64Key(hostSigningPublicKey) ||
-							x25519PublicKey ||
-							signingPublicKey
-						) {
-							return;
-						}
-						const targetParticipant = this.resolveParticipantBySenderId(
-							roomId,
-							payload.toSenderId,
-						);
-						if (!targetParticipant) return;
-						this.emitE2EEHandshakeToParticipant(roomId, targetParticipant, {
-							fromParticipantId,
-							fromSenderId,
-							toParticipantId: targetParticipant,
-							toSenderId: payload.toSenderId,
-							envelope,
-							hostX25519PublicKey,
-							hostSigningPublicKey,
-						});
-						return;
-					}
-				} catch (error) {
-					loggers.socketHandler.warn(
-						'e2ee:handshake relay failed: %s',
-						(error as Error).message,
-					);
-				}
-			},
-		);
-	}
-
 	setupSocketHandlers(): void {
 		this.io.use((socket, next) => {
 			if (this.authManager.authenticateSocket(socket)) {
@@ -395,7 +271,7 @@ export class SocketHandlerManager {
 			this.setupChatHandlers(socket);
 			this.setupReactionHandlers(socket);
 			this.setupRaiseHandHandlers(socket);
-			this.setupE2eeHandshakeHandler(socket);
+			this.e2eeHandshakeRelay.setup(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);
 		});
