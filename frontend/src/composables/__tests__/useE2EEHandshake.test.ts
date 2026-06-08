@@ -50,10 +50,9 @@ describe("useE2EEHandshake", () => {
 	}
 
 	it("host-signed envelope opens for a joiner and recovers the meeting secret", async () => {
-		const { beginJoinerHandshake, openJoinerEnvelope, buildHostEnvelope } =
-			useE2EEHandshake();
+		const { openJoinerEnvelope, buildHostEnvelope } = useE2EEHandshake();
 
-		const joiner = await beginJoinerHandshake("joiner-1", 2, "ignored");
+		const joinerKeyPair = await x25519KeyPair();
 		const host = await makeHostKeyMaterial();
 
 		const meetingSecret = await generateMeetingSecret();
@@ -62,7 +61,7 @@ describe("useE2EEHandshake", () => {
 		const envelope = await buildHostEnvelope(
 			host.hostX25519KeyPair.privateKey,
 			host.hostSigningKeyPair.privateKey,
-			await exportPublicKey(joiner.joinKeyPair.publicKey),
+			await exportPublicKey(joinerKeyPair.publicKey),
 			host.hostX25519PublicKeyBytes,
 			host.hostSigningPublicKeyBytes,
 			meetingSecret,
@@ -70,7 +69,7 @@ describe("useE2EEHandshake", () => {
 		);
 
 		const result = await openJoinerEnvelope(
-			joiner.joinKeyPair,
+			joinerKeyPair,
 			host.hostX25519PublicKey,
 			await importEd25519PublicKey(host.hostSigningPublicKeyBytes),
 			envelope,
@@ -89,10 +88,9 @@ describe("useE2EEHandshake", () => {
 	});
 
 	it("rejects an envelope signed by a non-host key (regression for the responder/host rename)", async () => {
-		const { beginJoinerHandshake, openJoinerEnvelope, buildHostEnvelope } =
-			useE2EEHandshake();
+		const { openJoinerEnvelope, buildHostEnvelope } = useE2EEHandshake();
 
-		const joiner = await beginJoinerHandshake("joiner-2", 3, "ignored");
+		const joinerKeyPair = await x25519KeyPair();
 		const realHost = await makeHostKeyMaterial();
 		const attacker = await makeHostKeyMaterial();
 		const meetingSecret = await generateMeetingSecret();
@@ -101,7 +99,7 @@ describe("useE2EEHandshake", () => {
 		const attackerEnvelope = await buildHostEnvelope(
 			attacker.hostX25519KeyPair.privateKey,
 			attacker.hostSigningKeyPair.privateKey,
-			await exportPublicKey(joiner.joinKeyPair.publicKey),
+			await exportPublicKey(joinerKeyPair.publicKey),
 			attacker.hostX25519PublicKeyBytes,
 			attacker.hostSigningPublicKeyBytes,
 			meetingSecret,
@@ -110,7 +108,7 @@ describe("useE2EEHandshake", () => {
 
 		await expect(
 			openJoinerEnvelope(
-				joiner.joinKeyPair,
+				joinerKeyPair,
 				realHost.hostX25519PublicKey,
 				await importEd25519PublicKey(realHost.hostSigningPublicKeyBytes),
 				attackerEnvelope,

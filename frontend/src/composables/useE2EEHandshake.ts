@@ -17,42 +17,12 @@
 
 import {
 	createSignedEnvelope,
-	exportPublicKey,
 	importPublicKey,
 	openSignedEnvelope,
-	x25519KeyPair,
 } from "../utils/media/e2ee";
 import { bufferToBase64, bytesFromBase64 } from "../utils/media/e2eePrimitives";
 
-interface JoinerHello {
-	fromParticipantId: string;
-	fromSenderId: number;
-	x25519PublicKey: string;
-	signingPublicKey: string;
-}
-
 export function useE2EEHandshake() {
-	async function beginJoinerHandshake(
-		participantId: string,
-		senderId: number,
-		signingPublicKey: string,
-	): Promise<{
-		hello: JoinerHello;
-		joinKeyPair: CryptoKeyPair;
-	}> {
-		const kp = await x25519KeyPair();
-		const x25519PublicKey = await exportPublicKey(kp.publicKey);
-		return {
-			hello: {
-				fromParticipantId: participantId,
-				fromSenderId: senderId,
-				x25519PublicKey,
-				signingPublicKey,
-			},
-			joinKeyPair: kp,
-		};
-	}
-
 	async function openJoinerEnvelope(
 		joinKeyPair: CryptoKeyPair,
 		hostX25519PublicKeyBase64: string,
@@ -103,7 +73,6 @@ export function useE2EEHandshake() {
 	}
 
 	return {
-		beginJoinerHandshake,
 		openJoinerEnvelope,
 		buildHostEnvelope,
 	};
