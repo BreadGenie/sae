@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setMeetingContext, wipeMeetingContext } from "../e2ee";
+import { E2EEMeeting } from "../E2EEMeeting";
 import { TransportManager } from "../TransportManager";
 
 vi.mock("../codecStrategy", () => ({
@@ -10,7 +10,7 @@ import { resolveCodecStrategy } from "../codecStrategy";
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	wipeMeetingContext();
+	E2EEMeeting.instance = new E2EEMeeting();
 });
 
 function createManager() {
@@ -143,7 +143,10 @@ describe("getVideoEncodingConfig", () => {
 
 describe("E2EE transport options", () => {
 	it("enables legacy encodedInsertableStreams only for legacy mode", () => {
-		setMeetingContext(new Uint8Array(32) as Uint8Array<ArrayBuffer>, 1);
+		E2EEMeeting.instance.setMeetingContext(
+			new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+			1,
+		);
 		const manager = createManager();
 		manager.sfuClient = {
 			...mockSfuClient(),
@@ -158,7 +161,10 @@ describe("E2EE transport options", () => {
 	});
 
 	it("does not enable legacy encodedInsertableStreams for RTCRtpScriptTransform", () => {
-		setMeetingContext(new Uint8Array(32) as Uint8Array<ArrayBuffer>, 1);
+		E2EEMeeting.instance.setMeetingContext(
+			new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+			1,
+		);
 		const manager = createManager();
 		manager.sfuClient = {
 			...mockSfuClient(),
@@ -173,7 +179,10 @@ describe("E2EE transport options", () => {
 	});
 
 	it("passes sender transform setup through onRtpSender before produce resolves", async () => {
-		setMeetingContext(new Uint8Array(32) as Uint8Array<ArrayBuffer>, 1);
+		E2EEMeeting.instance.setMeetingContext(
+			new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+			1,
+		);
 		const manager = createManager();
 		manager.sfuClient = {
 			...mockSfuClient(),

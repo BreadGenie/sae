@@ -6,12 +6,7 @@
 import type { Consumer, Producer } from "mediasoup-client/types";
 import type { SFUClient } from "../SFUClient";
 import { resolveCodecStrategy } from "./codecStrategy";
-import {
-	hasMeetingContext,
-	preCreateReceiverStreams,
-	setupReceiverTransform,
-	setupSenderTransform,
-} from "./e2ee";
+import { E2EEMeeting } from "./E2EEMeeting";
 import {
 	audioCodecOptions,
 	screenEncodings,
@@ -195,7 +190,10 @@ export class TransportManager {
 	}
 
 	private shouldEnableE2EETransforms(): boolean {
-		return Boolean(this.sfuClient?.isE2EERequired?.()) && hasMeetingContext();
+		return (
+			Boolean(this.sfuClient?.isE2EERequired?.()) &&
+			E2EEMeeting.instance.hasMeetingContext()
+		);
 	}
 
 	private shouldEnableLegacyEncodedInsertableStreams(): boolean {
@@ -206,7 +204,10 @@ export class TransportManager {
 	}
 
 	private assertE2EEContextReady(operation: string): void {
-		if (this.sfuClient?.isE2EERequired?.() && !hasMeetingContext()) {
+		if (
+			this.sfuClient?.isE2EERequired?.() &&
+			!E2EEMeeting.instance.hasMeetingContext()
+		) {
 			throw new Error(
 				`Cannot ${operation}: E2EE is required but meeting context is not ready`,
 			);
@@ -442,12 +443,12 @@ export class TransportManager {
 			senderTransformSetupStarted = true;
 			const senderId = this.sfuClient?.getOwnSenderId?.() ?? 0;
 			const mediaType = track?.kind ?? "video";
-			return setupSenderTransform(sender, senderId, mediaType).catch(
-				(error) => {
+			return E2EEMeeting.instance
+				.setupSenderTransform(sender, senderId, mediaType)
+				.catch((error) => {
 					console.warn("Failed to setup E2EE sender transform:", error);
 					return false;
-				},
-			);
+				});
 		};
 		if (e2eeWantedBeforeProduce) {
 			produceOptions.onRtpSender = setupProducerSenderTransform;
@@ -491,7 +492,7 @@ export class TransportManager {
 		const producer = await this.sendTransport.produce(produceOptions);
 		const e2eeGate = this.shouldEnableE2EETransforms();
 		const e2eeRequired = this.sfuClient?.isE2EERequired?.() ?? false;
-		const hasContext = hasMeetingContext();
+		const hasContext = E2EEMeeting.instance.hasMeetingContext();
 		console.log("[E2EE] createProducer gate", {
 			e2eeGate,
 			e2eeRequired,
@@ -560,7 +561,7 @@ export class TransportManager {
 					console.log("[E2EE] onRtpReceiver callback fired", {
 						producerId: rawConsumerParams.producerId,
 					});
-					preCreateReceiverStreams(receiver);
+					E2EEMeeting.instance.preCreateReceiverStreams(receiver);
 				};
 			}
 			consumer = await recvTransport.consume(consumeArgs);
@@ -577,7 +578,7 @@ export class TransportManager {
 
 		if (consumer) {
 			const e2eeRequired = this.sfuClient?.isE2EERequired?.() ?? false;
-			const hasContext = hasMeetingContext();
+			const hasContext = E2EEMeeting.instance.hasMeetingContext();
 			console.log("[E2EE] createConsumer gate", {
 				e2eeGate: e2eeWanted,
 				e2eeRequired,
@@ -591,7 +592,7 @@ export class TransportManager {
 				try {
 					const remoteSenderId = rawConsumerParams.senderId ?? 0;
 					const mediaType = rawConsumerParams.kind ?? "video";
-					await setupReceiverTransform(
+					await E2EEMeeting.instance.setupReceiverTransform(
 						consumer.rtpReceiver,
 						remoteSenderId,
 						mediaType,

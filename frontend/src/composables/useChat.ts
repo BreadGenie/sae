@@ -1,6 +1,6 @@
 import { toast } from "frappe-ui";
 import audioNotificationManager from "../utils/audioNotifications";
-import { getE2EEChatKey, hasMeetingContext } from "../utils/media/e2ee";
+import { E2EEMeeting } from "../utils/media/E2EEMeeting";
 import type { SFUClient } from "../utils/SFUClient";
 import type { ChatMessage, ChatStore } from "./useChatStore";
 import type { CurrentUser } from "./useCurrentUser";
@@ -62,7 +62,7 @@ async function decryptChatMessage(
 }
 
 function shouldEncryptChat(): boolean {
-	return hasMeetingContext();
+	return E2EEMeeting.instance.hasMeetingContext();
 }
 
 export function useChat(deps: {
@@ -73,7 +73,7 @@ export function useChat(deps: {
 	const { chatStore, currentUser, sfuClient } = deps;
 
 	async function getChatKey(): Promise<CryptoKey | null> {
-		return getE2EEChatKey();
+		return E2EEMeeting.instance.getE2EEChatKey();
 	}
 
 	const setupChatEvents = (notificationQueue: unknown) => {

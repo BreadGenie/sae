@@ -193,7 +193,7 @@ export function usePinnedTileAnimation({
 				});
 
 				panels.forEach((panel) => {
-					if (panel) resizeObserver!.observe(panel);
+					if (panel) resizeObserver?.observe(panel);
 				});
 
 				if (container.value) {

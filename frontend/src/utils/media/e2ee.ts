@@ -2,26 +2,21 @@ import {
 	bufferToBase64,
 	bytesFromBase64,
 	encodeInfo,
-	INFO_CHAT,
 	INFO_ENVELOPE,
 	INFO_ENVELOPE_CONTEXT,
 } from "./e2eePrimitives";
 import {
-	AES_GCM_TAG_SIZE,
 	buildSignedFramePayload,
 	decodeFrameHeader,
 	deriveFrameKey,
-	E2EEFrameHeader,
 	EMPTY_FRAME_MAGIC,
 	encodeFrameHeader,
-	FRAME_GENERATION_MASK,
 	FRAME_HEADER_FIXED_SIZE,
 	FRAME_HEADER_TOTAL,
 	FRAME_MAGIC,
 	getClearPrefix,
 	getClearPrefixSize,
 	hasFrameMagic,
-	MIN_FRAME_PLAINTEXT_SIZE,
 	MIN_SIGNED_ENCRYPTED_FRAME_SIZE,
 	REPLAY_WINDOW,
 } from "./frameCodec";
@@ -42,19 +37,19 @@ type EncodedFrameLike = {
 	type?: string;
 };
 
-type SenderWithInsertableStreams = RTCRtpSender & {
+export type SenderWithInsertableStreams = RTCRtpSender & {
 	createEncodedStreams?: () => EncodedStreams;
 };
 
-type ReceiverWithInsertableStreams = RTCRtpReceiver & {
+export type ReceiverWithInsertableStreams = RTCRtpReceiver & {
 	createEncodedStreams?: () => EncodedStreams;
 };
 
-type TransformableSender = RTCRtpSender & {
+export type TransformableSender = RTCRtpSender & {
 	transform?: unknown;
 };
 
-type TransformableReceiver = RTCRtpReceiver & {
+export type TransformableReceiver = RTCRtpReceiver & {
 	transform?: unknown;
 };
 
@@ -177,7 +172,7 @@ async function verifyWithEd25519(
 	return getSubtle().verify({ name: "Ed25519" }, publicKey, signature, data);
 }
 
-async function hkdfBits(
+async function _hkdfBits(
 	ikm: Uint8Array<ArrayBuffer>,
 	info: Uint8Array<ArrayBuffer>,
 	length = 32,
@@ -687,173 +682,6 @@ export function createDecryptionTransformStream(
 	});
 }
 
-// ---------------------------------------------------------------------------
-// E2EE chain registry
-//
-// Module-level singleton that tracks the meeting secret
-// (populated when the handshake completes via
-// `meet:e2ee-handshake-complete`) and the per-sender chain state.
-//
-// Producers/consumers register themselves with the registry at
-// `createProducer` / consumer-creation time. The transform isn't
-// actually installed until the meeting secret is available; this is
-// the lazy-activation pattern.
-// ---------------------------------------------------------------------------
-
-interface PendingSender {
-	sender: RTCRtpSender;
-	senderId: number;
-	mediaType: string;
-}
-
-interface PendingReceiver {
-	receiver: RTCRtpReceiver;
-	senderId: number;
-	mediaType: string;
-}
-
-let meetingSecret: Uint8Array<ArrayBuffer> | null = null;
-let keyVersion: number | null = null;
-let senderSigningPriv: CryptoKey | null = null;
-const senderChains = new Map<string, SenderChainState>();
-const senderSigningPubs = new Map<number, CryptoKey>();
-let receiverChain: ReceiverChainState | null = null;
-const pendingSenders = new Set<PendingSender>();
-const pendingReceivers = new Set<PendingReceiver>();
-const activeSenderTransforms = new WeakSet<RTCRtpSender>();
-const activeReceiverTransforms = new WeakSet<RTCRtpReceiver>();
-const scriptTransformWorkers = new Set<Worker>();
-
-export function setMeetingContext(
-	meetingSecretArg: Uint8Array<ArrayBuffer>,
-	keyVersionArg: number,
-	senderSigningPrivArg?: CryptoKey,
-): void {
-	meetingSecret = meetingSecretArg;
-	keyVersion = keyVersionArg;
-	senderSigningPriv = senderSigningPrivArg ?? null;
-	senderChains.clear();
-	receiverChain = null;
-	void setupPendingTransforms();
-}
-
-export function hasMeetingContext(): boolean {
-	return meetingSecret !== null && keyVersion !== null;
-}
-
-export function setSenderSigningPub(
-	senderId: number,
-	signingPub: CryptoKey,
-): void {
-	senderSigningPubs.set(senderId, signingPub);
-	receiverChain?.setSenderSigningPub(senderId, signingPub);
-	for (const worker of scriptTransformWorkers) {
-		worker.postMessage({ type: "addSenderSigningPub", senderId, signingPub });
-	}
-}
-
-export function hasSenderSigningPub(senderId: number): boolean {
-	return (
-		receiverChain?.hasSenderSigningPub(senderId) ??
-		senderSigningPubs.has(senderId)
-	);
-}
-
-export function wipeMeetingContext(): void {
-	if (meetingSecret) zeroUint8Array(meetingSecret);
-	meetingSecret = null;
-	keyVersion = null;
-	senderSigningPriv = null;
-	for (const chain of senderChains.values()) {
-		chain.wipe();
-	}
-	senderChains.clear();
-	if (receiverChain) {
-		receiverChain.wipe();
-		receiverChain = null;
-	}
-	pendingSenders.clear();
-	pendingReceivers.clear();
-	senderSigningPubs.clear();
-	for (const worker of scriptTransformWorkers) {
-		worker.postMessage({ type: "wipe" });
-	}
-	scriptTransformWorkers.clear();
-	chatKeyCache = null;
-}
-
-let chatKeyCache: { meetingSecretVersion: number; key: CryptoKey } | null =
-	null;
-
-export async function getE2EEChatKey(): Promise<CryptoKey | null> {
-	if (!meetingSecret) return null;
-	if (chatKeyCache && chatKeyCache.meetingSecretVersion === keyVersion) {
-		return chatKeyCache.key;
-	}
-	const subtle = getSubtle();
-	const ikm = meetingSecret;
-	const salt = new Uint8Array(32);
-	const info = encodeInfo(INFO_CHAT);
-	const hkdfKey = await subtle.importKey(
-		"raw",
-		ikm as BufferSource,
-		"HKDF",
-		false,
-		["deriveBits"],
-	);
-	const bits = await subtle.deriveBits(
-		{ name: "HKDF", hash: "SHA-256", salt, info: info as BufferSource },
-		hkdfKey,
-		256,
-	);
-	const key = await subtle.importKey("raw", bits, { name: "AES-GCM" }, false, [
-		"encrypt",
-		"decrypt",
-	]);
-	chatKeyCache = { meetingSecretVersion: keyVersion, key };
-	return key;
-}
-
-function getOrCreateSenderChain(
-	senderId: number,
-	mediaType: string,
-): SenderChainState | null {
-	if (!meetingSecret) {
-		return null;
-	}
-	if (!senderSigningPriv) {
-		console.warn(
-			"[E2EE] getOrCreateSenderChain: no sender signing key (deferring)",
-		);
-		return null;
-	}
-	const key = `${senderId}:${mediaType}`;
-	let chain = senderChains.get(key);
-	if (!chain) {
-		chain = new SenderChainState(
-			meetingSecret,
-			senderId,
-			mediaType,
-			senderSigningPriv,
-		);
-		senderChains.set(key, chain);
-	}
-	return chain;
-}
-
-function getOrCreateReceiverChain(): ReceiverChainState | null {
-	if (!meetingSecret) {
-		return null;
-	}
-	if (!receiverChain) {
-		receiverChain = new ReceiverChainState(meetingSecret);
-		for (const [senderId, pub] of senderSigningPubs) {
-			receiverChain.setSenderSigningPub(senderId, pub);
-		}
-	}
-	return receiverChain;
-}
-
 function hasLegacyInsertableStreamSupport(): boolean {
 	if (typeof globalThis.RTCRtpSender === "undefined") return false;
 	if (typeof globalThis.RTCRtpReceiver === "undefined") return false;
@@ -889,294 +717,4 @@ export function getE2EETransformCapability(): E2EETransformCapability {
 	if (hasLegacyInsertableStreamSupport()) return "legacy-insertable-streams";
 	if (getRTCRtpScriptTransform()) return "rtp-script-transform";
 	return "none";
-}
-
-function createE2EEWorker(): Worker {
-	const worker = new Worker(
-		new URL("./e2eeTransformWorker.ts", import.meta.url),
-		{
-			type: "module",
-		},
-	);
-	scriptTransformWorkers.add(worker);
-	return worker;
-}
-
-function postTransformWorkerPrewarm(
-	worker: Worker,
-	payload: {
-		mediaType: string;
-		senderSigningPubs?: Array<[number, CryptoKey]>;
-	},
-): void {
-	try {
-		worker.postMessage({
-			type: "prewarm",
-			mediaType: payload.mediaType,
-			senderSigningPubs: payload.senderSigningPubs ?? [],
-		});
-	} catch {
-		// best-effort: a failed pre-warm post is not fatal
-	}
-}
-
-function installScriptTransform(
-	target: TransformableSender | TransformableReceiver,
-	options: Record<string, unknown>,
-): Worker | null {
-	const RTCRtpScriptTransform = getRTCRtpScriptTransform();
-	if (!RTCRtpScriptTransform) return null;
-	const worker = createE2EEWorker();
-	target.transform = new RTCRtpScriptTransform(worker, options);
-	return worker;
-}
-
-const preCreatedReceiverStreams = new WeakMap<
-	RTCRtpReceiver,
-	{
-		readable: ReadableStream<unknown>;
-		writable: WritableStream<unknown>;
-	}
->();
-
-export function preCreateReceiverStreams(receiver: RTCRtpReceiver): boolean {
-	const capability = getE2EETransformCapability();
-	if (capability === "none") {
-		console.warn(
-			"[E2EE] preCreateReceiverStreams: no insertable stream support",
-		);
-		return false;
-	}
-	if (capability === "rtp-script-transform") {
-		return true;
-	}
-	if (preCreatedReceiverStreams.has(receiver)) {
-		return true;
-	}
-	const streams = (
-		receiver as ReceiverWithInsertableStreams
-	).createEncodedStreams?.();
-	if (!streams) {
-		console.warn(
-			"[E2EE] preCreateReceiverStreams: createEncodedStreams returned null",
-		);
-		return false;
-	}
-	const readable = streams.readable || streams.readableStream;
-	const writable = streams.writable || streams.writableStream;
-	if (!readable || !writable) {
-		console.warn("[E2EE] preCreateReceiverStreams: missing readable/writable");
-		return false;
-	}
-	preCreatedReceiverStreams.set(receiver, { readable, writable });
-	return true;
-}
-
-export async function setupSenderTransform(
-	sender: RTCRtpSender | undefined,
-	senderId: number,
-	mediaType: string,
-): Promise<boolean> {
-	if (!sender) {
-		return false;
-	}
-	const capability = getE2EETransformCapability();
-	if (
-		activeSenderTransforms.has(sender) &&
-		capability !== "rtp-script-transform"
-	) {
-		return false;
-	}
-	if (capability === "none") {
-		console.warn(
-			"[E2EE] setupSenderTransform: insertable stream support missing",
-		);
-		return false;
-	}
-	if (!hasMeetingContext()) {
-		console.warn(
-			"[E2EE] setupSenderTransform: no meeting context (deferring)",
-			{ senderId, mediaType },
-		);
-		pendingSenders.add({ sender, senderId, mediaType });
-		return false;
-	}
-	const senderKeyVersion = keyVersion;
-	if (senderKeyVersion == null) return false;
-	if (capability === "rtp-script-transform") {
-		if (!meetingSecret || !senderSigningPriv) {
-			pendingSenders.add({ sender, senderId, mediaType });
-			return false;
-		}
-		const worker = installScriptTransform(sender as TransformableSender, {
-			direction: "send",
-			meetingSecret: new Uint8Array(meetingSecret),
-			keyVersion: senderKeyVersion,
-			senderId,
-			mediaType,
-			senderSigningPrivateKey: senderSigningPriv,
-		});
-		const installed = worker !== null;
-		if (installed) {
-			activeSenderTransforms.add(sender);
-			postTransformWorkerPrewarm(worker as Worker, { mediaType });
-		}
-		return installed;
-	}
-	const chain = getOrCreateSenderChain(senderId, mediaType);
-	if (!chain) {
-		console.warn("[E2EE] setupSenderTransform: chain is null");
-		return false;
-	}
-	const streams = (
-		sender as SenderWithInsertableStreams
-	).createEncodedStreams?.();
-	if (!streams) {
-		console.warn(
-			"[E2EE] setupSenderTransform: createEncodedStreams returned nothing",
-			{
-				hasProto: typeof (sender as SenderWithInsertableStreams)
-					.createEncodedStreams,
-			},
-		);
-		return false;
-	}
-	const readable = streams.readable || streams.readableStream;
-	const writable = streams.writable || streams.writableStream;
-	if (!readable || !writable) return false;
-	try {
-		readable
-			.pipeThrough(createEncryptionTransformStream(chain, senderKeyVersion))
-			.pipeTo(writable)
-			.catch((error: unknown) => {
-				console.warn("E2EE sender transform pipeline failed:", error);
-			});
-		activeSenderTransforms.add(sender);
-		return true;
-	} catch (error) {
-		console.error("E2EE: Failed to setup sender transform:", error);
-		return false;
-	}
-}
-
-export async function setupReceiverTransform(
-	receiver: RTCRtpReceiver | undefined,
-	senderId: number,
-	mediaType: string,
-): Promise<boolean> {
-	if (!receiver) {
-		console.warn("[E2EE] setupReceiverTransform: no receiver");
-		return false;
-	}
-	if (activeReceiverTransforms.has(receiver)) {
-		console.warn("[E2EE] setupReceiverTransform: already active", {
-			senderId,
-			mediaType,
-		});
-		return false;
-	}
-	const capability = getE2EETransformCapability();
-	if (capability === "none") {
-		console.warn("[E2EE] setupReceiverTransform: no insertable stream support");
-		return false;
-	}
-	if (!hasMeetingContext()) {
-		pendingReceivers.add({ receiver, senderId, mediaType });
-		return false;
-	}
-	const receiverKeyVersion = keyVersion;
-	if (receiverKeyVersion == null) return false;
-	if (capability === "rtp-script-transform") {
-		if (!meetingSecret) return false;
-		const worker = installScriptTransform(receiver as TransformableReceiver, {
-			direction: "recv",
-			meetingSecret: new Uint8Array(meetingSecret),
-			keyVersion: receiverKeyVersion,
-			senderId,
-			mediaType,
-			senderSigningPubs: Array.from(senderSigningPubs.entries()),
-		});
-		const installed = worker !== null;
-		if (installed) {
-			activeReceiverTransforms.add(receiver);
-			postTransformWorkerPrewarm(worker as Worker, {
-				mediaType,
-				senderSigningPubs: Array.from(senderSigningPubs.entries()),
-			});
-		}
-		return installed;
-	}
-	const chain = getOrCreateReceiverChain();
-	if (!chain) {
-		console.warn("[E2EE] setupReceiverTransform: chain is null");
-		return false;
-	}
-	let readable: ReadableStream<unknown> | undefined;
-	let writable: WritableStream<unknown> | undefined;
-	const preCreated = preCreatedReceiverStreams.get(receiver);
-	if (preCreated) {
-		readable = preCreated.readable;
-		writable = preCreated.writable;
-	} else {
-		const streams = (
-			receiver as ReceiverWithInsertableStreams
-		).createEncodedStreams?.();
-		if (!streams) {
-			console.warn(
-				"[E2EE] setupReceiverTransform: createEncodedStreams returned null",
-				{ senderId, mediaType },
-			);
-			return false;
-		}
-		readable = streams.readable || streams.readableStream;
-		writable = streams.writable || streams.writableStream;
-	}
-	if (!readable || !writable) {
-		console.warn("[E2EE] setupReceiverTransform: missing readable/writable", {
-			senderId,
-			mediaType,
-			hasReadable: !!readable,
-			hasWritable: !!writable,
-		});
-		return false;
-	}
-	try {
-		readable
-			.pipeThrough(
-				createDecryptionTransformStream(
-					chain,
-					receiverKeyVersion,
-					receiver,
-					mediaType,
-				),
-			)
-			.pipeTo(writable)
-			.catch((error: unknown) => {
-				console.warn("E2EE receiver transform pipeline failed:", error);
-			});
-		activeReceiverTransforms.add(receiver);
-		return true;
-	} catch (error) {
-		console.error("E2EE: Failed to setup receiver transform:", error);
-		return false;
-	}
-}
-
-async function setupPendingTransforms(): Promise<void> {
-	for (const pending of Array.from(pendingSenders)) {
-		const ok = await setupSenderTransform(
-			pending.sender,
-			pending.senderId,
-			pending.mediaType,
-		);
-		if (ok) pendingSenders.delete(pending);
-	}
-	for (const pending of Array.from(pendingReceivers)) {
-		const ok = await setupReceiverTransform(
-			pending.receiver,
-			pending.senderId,
-			pending.mediaType,
-		);
-		if (ok) pendingReceivers.delete(pending);
-	}
 }

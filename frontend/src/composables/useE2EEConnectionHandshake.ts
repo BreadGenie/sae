@@ -10,13 +10,11 @@
 
 import { toast } from "frappe-ui";
 import { onUnmounted, type Ref, shallowRef } from "vue";
+import { E2EEMeeting } from "../utils/media/E2EEMeeting";
 import {
 	exportEd25519PublicKey,
 	exportPublicKey,
 	importEd25519PublicKey,
-	setMeetingContext,
-	setSenderSigningPub,
-	wipeMeetingContext,
 	x25519KeyPair,
 } from "../utils/media/e2ee";
 import { bufferToBase64, bytesFromBase64 } from "../utils/media/e2eePrimitives";
@@ -119,7 +117,7 @@ export function useE2EEConnectionHandshake(
 		hostX25519PublicKeyBase64.value = null;
 		joinerPublicKeyBySenderId.clear();
 		keyVersion.value = null;
-		wipeMeetingContext();
+		E2EEMeeting.instance.wipeMeetingContext();
 	};
 	let pagehideHandlerAttached = false;
 
@@ -134,7 +132,7 @@ export function useE2EEConnectionHandshake(
 		joinerPublicKeyBySenderId.clear();
 		joinerSigningPublicKeyBySenderId.clear();
 		keyVersion.value = null;
-		wipeMeetingContext();
+		E2EEMeeting.instance.wipeMeetingContext();
 	};
 
 	const ownParticipantId = (): string =>
@@ -228,7 +226,7 @@ export function useE2EEConnectionHandshake(
 			const pub = await importEd25519PublicKey(
 				bufferToBase64(result.hostSigningPublicKey),
 			);
-			setSenderSigningPub(envelopeSenderId, pub);
+			E2EEMeeting.instance.setSenderSigningPub(envelopeSenderId, pub);
 		} catch (err) {
 			console.error("[E2EE] failed to import host signing public key:", err);
 			return;
@@ -260,7 +258,7 @@ export function useE2EEConnectionHandshake(
 			data.signingPublicKey,
 		);
 		try {
-			setSenderSigningPub(
+			E2EEMeeting.instance.setSenderSigningPub(
 				data.fromSenderId,
 				await importEd25519PublicKey(data.signingPublicKey),
 			);
@@ -473,7 +471,7 @@ export function useE2EEConnectionHandshake(
 			const signingPrivateKey =
 				detail.signingPrivateKey ??
 				(await getDeviceIdentity()).signingKeyPair.privateKey;
-			setMeetingContext(
+			E2EEMeeting.instance.setMeetingContext(
 				detail.meetingSecret as Uint8Array<ArrayBuffer>,
 				Number(detail.keyVersion),
 				signingPrivateKey,
@@ -698,7 +696,7 @@ export function useE2EEConnectionHandshake(
 		hostX25519PublicKeyBase64.value = null;
 		joinerPublicKeyBySenderId.clear();
 		keyVersion.value = null;
-		wipeMeetingContext();
+		E2EEMeeting.instance.wipeMeetingContext();
 	};
 
 	if (typeof window !== "undefined") {

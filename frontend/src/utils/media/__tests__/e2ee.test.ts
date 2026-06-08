@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { E2EEMeeting } from "../E2EEMeeting";
 
 beforeAll(() => {
 	if (typeof globalThis.RTCRtpSender === "undefined") {
@@ -1045,70 +1046,75 @@ describe("Per-sender authentication (threat model B)", () => {
 });
 
 describe("E2EE chain registry", () => {
-	beforeEach(async () => {
-		const { wipeMeetingContext } = await import("../e2ee");
-		wipeMeetingContext();
+	beforeEach(() => {
+		E2EEMeeting.instance = new E2EEMeeting();
 	});
 
 	it("hasMeetingContext() reflects setMeetingContext/wipeMeetingContext", async () => {
-		const e2ee = await import("../e2ee");
-		expect(e2ee.hasMeetingContext()).toBe(false);
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setMeetingContext(secret, 1);
-		expect(e2ee.hasMeetingContext()).toBe(true);
-		e2ee.wipeMeetingContext();
-		expect(e2ee.hasMeetingContext()).toBe(false);
+		const { generateMeetingSecret } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		expect(meeting.hasMeetingContext()).toBe(false);
+		const secret = await generateMeetingSecret();
+		meeting.setMeetingContext(secret, 1);
+		expect(meeting.hasMeetingContext()).toBe(true);
+		meeting.wipeMeetingContext();
+		expect(meeting.hasMeetingContext()).toBe(false);
 	});
 
 	it("wipeMeetingContext zeroes the meeting secret", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
+		const { generateMeetingSecret } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
 		expect(secret.some((b) => b !== 0)).toBe(true);
-		e2ee.setMeetingContext(secret, 1);
-		e2ee.wipeMeetingContext();
+		meeting.setMeetingContext(secret, 1);
+		meeting.wipeMeetingContext();
 		expect(secret.every((b) => b === 0)).toBe(true);
 	});
 
 	it("setMeetingContext creates per-sender chain on demand", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		const kp = await e2ee.ed25519KeyPair();
-		e2ee.setMeetingContext(secret, 7, kp.privateKey);
+		const { generateMeetingSecret, ed25519KeyPair } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		meeting.setMeetingContext(secret, 7, kp.privateKey);
 		const sender = makeMockSender();
-		const ok = await e2ee.setupSenderTransform(sender, 42, "video");
+		const ok = await meeting.setupSenderTransform(sender, 42, "video");
 		expect(ok).toBe(true);
 	});
 
 	it("setupSenderTransform returns false when no meeting context", async () => {
-		const e2ee = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
 		const sender = makeMockSender();
-		const ok = await e2ee.setupSenderTransform(sender, 1, "video");
+		const ok = await meeting.setupSenderTransform(sender, 1, "video");
 		expect(ok).toBe(false);
 	});
 
 	it("setupSenderTransform returns false when no signing key", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setMeetingContext(secret, 1);
+		const { generateMeetingSecret } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		meeting.setMeetingContext(secret, 1);
 		const sender = makeMockSender();
-		const ok = await e2ee.setupSenderTransform(sender, 1, "video");
+		const ok = await meeting.setupSenderTransform(sender, 1, "video");
 		expect(ok).toBe(false);
 	});
 
 	it("setupSenderTransform deduplicates by sender", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		const kp = await e2ee.ed25519KeyPair();
-		e2ee.setMeetingContext(secret, 1, kp.privateKey);
+		const { generateMeetingSecret, ed25519KeyPair } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		meeting.setMeetingContext(secret, 1, kp.privateKey);
 		const sender = makeMockSender();
-		expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(true);
-		expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(false);
+		expect(await meeting.setupSenderTransform(sender, 5, "video")).toBe(true);
+		expect(await meeting.setupSenderTransform(sender, 5, "video")).toBe(false);
 	});
 
 	it("setupSenderTransform can reinstall RTCRtpScriptTransform on a reused sender", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		const kp = await e2ee.ed25519KeyPair();
+		const { generateMeetingSecret, ed25519KeyPair } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
 		const originalSender = globalThis.RTCRtpSender;
 		const originalReceiver = globalThis.RTCRtpReceiver;
 		const originalScriptTransform = (
@@ -1139,11 +1145,11 @@ describe("E2EE chain registry", () => {
 					postMessage() {}
 				},
 			});
-			e2ee.setMeetingContext(secret, 1, kp.privateKey);
+			meeting.setMeetingContext(secret, 1, kp.privateKey);
 			const sender = {} as RTCRtpSender;
 
-			expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(true);
-			expect(await e2ee.setupSenderTransform(sender, 5, "video")).toBe(true);
+			expect(await meeting.setupSenderTransform(sender, 5, "video")).toBe(true);
+			expect(await meeting.setupSenderTransform(sender, 5, "video")).toBe(true);
 		} finally {
 			Object.defineProperty(globalThis, "RTCRtpSender", {
 				configurable: true,
@@ -1169,45 +1175,47 @@ describe("E2EE chain registry", () => {
 	});
 
 	it("retains sender signing pub registered before meeting context", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		const kp = await e2ee.ed25519KeyPair();
-		e2ee.setSenderSigningPub(7, kp.publicKey);
-		expect(e2ee.hasSenderSigningPub(7)).toBe(true);
-		e2ee.setMeetingContext(secret, 1, kp.privateKey);
-		expect(e2ee.hasSenderSigningPub(7)).toBe(true);
+		const { generateMeetingSecret, ed25519KeyPair } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		const kp = await ed25519KeyPair();
+		meeting.setSenderSigningPub(7, kp.publicKey);
+		expect(meeting.hasSenderSigningPub(7)).toBe(true);
+		meeting.setMeetingContext(secret, 1, kp.privateKey);
+		expect(meeting.hasSenderSigningPub(7)).toBe(true);
 	});
 });
 
 describe("E2EE chat key", () => {
-	beforeEach(async () => {
-		const { wipeMeetingContext } = await import("../e2ee");
-		wipeMeetingContext();
+	beforeEach(() => {
+		E2EEMeeting.instance = new E2EEMeeting();
 	});
 
 	it("getE2EEChatKey returns null when no meeting context", async () => {
-		const { getE2EEChatKey } = await import("../e2ee");
-		expect(await getE2EEChatKey()).toBeNull();
+		const meeting = E2EEMeeting.instance;
+		expect(await meeting.getE2EEChatKey()).toBeNull();
 	});
 
 	it("getE2EEChatKey is deterministic per (meetingSecret, keyVersion)", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setMeetingContext(secret, 7);
-		const k1 = await e2ee.getE2EEChatKey();
-		const k2 = await e2ee.getE2EEChatKey();
+		const { generateMeetingSecret } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		meeting.setMeetingContext(secret, 7);
+		const k1 = await meeting.getE2EEChatKey();
+		const k2 = await meeting.getE2EEChatKey();
 		expect(k1).not.toBeNull();
 		expect(k1).toBe(k2);
 	});
 
 	it("wipeMeetingContext invalidates the cached chat key", async () => {
-		const e2ee = await import("../e2ee");
-		const secret = await e2ee.generateMeetingSecret();
-		e2ee.setMeetingContext(secret, 1);
-		const k1 = await e2ee.getE2EEChatKey();
+		const { generateMeetingSecret } = await import("../e2ee");
+		const meeting = E2EEMeeting.instance;
+		const secret = await generateMeetingSecret();
+		meeting.setMeetingContext(secret, 1);
+		const k1 = await meeting.getE2EEChatKey();
 		expect(k1).not.toBeNull();
-		e2ee.wipeMeetingContext();
-		expect(await e2ee.getE2EEChatKey()).toBeNull();
+		meeting.wipeMeetingContext();
+		expect(await meeting.getE2EEChatKey()).toBeNull();
 	});
 });
 

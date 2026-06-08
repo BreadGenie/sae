@@ -28,7 +28,7 @@ const FRAME_SIGNATURE_SIZE = 64;
 export const FRAME_HEADER_TOTAL =
 	FRAME_HEADER_FIXED_SIZE + FRAME_SIGNATURE_SIZE;
 export const AES_GCM_TAG_SIZE = 16;
-export const MIN_FRAME_PLAINTEXT_SIZE = 1;
+const MIN_FRAME_PLAINTEXT_SIZE = 1;
 export const FRAME_MAGIC = new Uint8Array([0x4d, 0x45, 0x32, 0x45]); // ME2E
 export const EMPTY_FRAME_MAGIC = new Uint8Array(0);
 export const MIN_SIGNED_ENCRYPTED_FRAME_SIZE =
@@ -36,12 +36,12 @@ export const MIN_SIGNED_ENCRYPTED_FRAME_SIZE =
 	FRAME_HEADER_TOTAL +
 	AES_GCM_TAG_SIZE +
 	MIN_FRAME_PLAINTEXT_SIZE;
-export const FRAME_GENERATION_KEYFRAME_FLAG = 0x80000000;
-export const FRAME_GENERATION_MASK = 0x7fffffff;
+const FRAME_GENERATION_KEYFRAME_FLAG = 0x80000000;
+const FRAME_GENERATION_MASK = 0x7fffffff;
 const VIDEO_CLEAR_PREFIX_SIZE = 1;
 export const REPLAY_WINDOW = 3;
 
-export type E2EEFrameHeader = {
+type E2EEFrameHeader = {
 	senderId: number;
 	generation: number;
 	frameType?: string;
