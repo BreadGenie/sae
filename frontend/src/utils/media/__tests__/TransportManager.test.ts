@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { E2EEMeeting } from "../E2EEMeeting";
+import { DefaultE2EETransformPolicy } from "../E2EETransformPolicy";
 import { TransportManager } from "../TransportManager";
 
 vi.mock("../codecStrategy", () => ({
@@ -147,17 +148,14 @@ describe("E2EE transport options", () => {
 			new Uint8Array(32) as Uint8Array<ArrayBuffer>,
 			1,
 		);
-		const manager = createManager();
-		manager.sfuClient = {
+		const policy = new DefaultE2EETransformPolicy({
 			...mockSfuClient(),
 			isE2EERequired: vi.fn(() => true),
 			getE2EEMode: vi.fn(() => "insertable-streams"),
-		} as never;
+		} as never);
+		const manager = new TransportManager(policy);
 
-		const result = (manager as unknown as Record<string, unknown>)
-			.shouldEnableLegacyEncodedInsertableStreams as () => boolean;
-
-		expect(result.call(manager)).toBe(true);
+		expect(manager.e2eePolicy.legacyInsertableStreamsEnabled).toBe(true);
 	});
 
 	it("does not enable legacy encodedInsertableStreams for RTCRtpScriptTransform", () => {
@@ -165,17 +163,14 @@ describe("E2EE transport options", () => {
 			new Uint8Array(32) as Uint8Array<ArrayBuffer>,
 			1,
 		);
-		const manager = createManager();
-		manager.sfuClient = {
+		const policy = new DefaultE2EETransformPolicy({
 			...mockSfuClient(),
 			isE2EERequired: vi.fn(() => true),
 			getE2EEMode: vi.fn(() => "rtp-script-transform"),
-		} as never;
+		} as never);
+		const manager = new TransportManager(policy);
 
-		const result = (manager as unknown as Record<string, unknown>)
-			.shouldEnableLegacyEncodedInsertableStreams as () => boolean;
-
-		expect(result.call(manager)).toBe(false);
+		expect(manager.e2eePolicy.legacyInsertableStreamsEnabled).toBe(false);
 	});
 
 	it("passes sender transform setup through onRtpSender before produce resolves", async () => {
@@ -183,13 +178,13 @@ describe("E2EE transport options", () => {
 			new Uint8Array(32) as Uint8Array<ArrayBuffer>,
 			1,
 		);
-		const manager = createManager();
-		manager.sfuClient = {
+		const policy = new DefaultE2EETransformPolicy({
 			...mockSfuClient(),
 			isE2EERequired: vi.fn(() => true),
 			getE2EEMode: vi.fn(() => "rtp-script-transform"),
 			getOwnSenderId: vi.fn(() => 7),
-		} as never;
+		} as never);
+		const manager = new TransportManager(policy);
 		manager.device = { canProduce: vi.fn(() => true) } as never;
 		const produce = vi.fn(async () => ({ rtpSender: {} }));
 		manager.sendTransport = { produce } as never;
