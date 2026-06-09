@@ -368,6 +368,8 @@ export function useSFUConnection(deps: {
 				video_enabled: mediaState.isCameraOn,
 			});
 
+			await e2eeHandshake.waitForMeetingContextIfRequired();
+
 			await manager.initializeDevice();
 			await manager.createReceiveTransport();
 

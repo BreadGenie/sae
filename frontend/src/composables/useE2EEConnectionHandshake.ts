@@ -9,6 +9,7 @@
 import { onUnmounted, type Ref } from "vue";
 import { E2EEEpochSignalingController } from "../utils/media/E2EEEpochSignalingController";
 import { E2EEHandshakeController } from "../utils/media/E2EEHandshakeController";
+import { E2EEMeeting } from "../utils/media/E2EEMeeting";
 import type { SFUClient } from "../utils/SFUClient";
 import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
 import type { CurrentUser } from "./useCurrentUser";
@@ -25,6 +26,7 @@ interface E2EEConnectionHandshakeDeps {
 }
 
 export interface E2EEConnectionHandshake {
+	waitForMeetingContextIfRequired: () => Promise<void>;
 	handleMeetingE2EEEnabled: (data: {
 		meeting_id?: string;
 		e2ee_enabled?: boolean;
@@ -50,12 +52,20 @@ export function useE2EEConnectionHandshake(
 		isCurrentTabHost: deps.isCurrentTabHost,
 		getDeviceIdentity,
 	});
+	const meetingContextWaiters = new Set<() => void>();
+	const resolveMeetingContextWaiters = () => {
+		for (const resolve of meetingContextWaiters) {
+			resolve();
+		}
+		meetingContextWaiters.clear();
+	};
 	const epochSignalingController = new E2EEEpochSignalingController({
 		meetingId,
 		sfuClient,
 		currentUser,
 		isCurrentTabHost: deps.isCurrentTabHost,
 		getDeviceIdentity,
+		onEpochInstalled: resolveMeetingContextWaiters,
 	});
 
 	controller.onHandshakeComplete = (detail) => {
@@ -64,6 +74,27 @@ export function useE2EEConnectionHandshake(
 			detail.keyVersion,
 			detail.signingPrivateKey,
 		);
+		resolveMeetingContextWaiters();
+	};
+
+	const waitForMeetingContextIfRequired = async () => {
+		if (
+			!sfuClient.isE2EERequired() ||
+			E2EEMeeting.instance.hasMeetingContext()
+		) {
+			return;
+		}
+		await new Promise<void>((resolve, reject) => {
+			const timeout = window.setTimeout(() => {
+				meetingContextWaiters.delete(done);
+				reject(new Error("Timed out waiting for E2EE epoch key material"));
+			}, 15000);
+			const done = () => {
+				window.clearTimeout(timeout);
+				resolve();
+			};
+			meetingContextWaiters.add(done);
+		});
 	};
 
 	// ── pagehide ──────────────────────────────────────────────────────
@@ -136,6 +167,7 @@ export function useE2EEConnectionHandshake(
 	const boundTeardownForDisconnect = teardownForDisconnect;
 
 	return {
+		waitForMeetingContextIfRequired,
 		handleMeetingE2EEEnabled: boundHandleMeetingE2EEEnabled,
 		setupRealtimeEventListeners,
 		teardownRealtimeEventListeners,
