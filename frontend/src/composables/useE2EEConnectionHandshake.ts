@@ -13,7 +13,6 @@ import type { SFUClient } from "../utils/SFUClient";
 import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
 import type { CurrentUser } from "./useCurrentUser";
 import { useDeviceIdentity } from "./useDeviceIdentity";
-import { useE2EEHandshake } from "./useE2EEHandshake";
 import type { MediaState } from "./useMediaState";
 
 interface E2EEConnectionHandshakeDeps {
@@ -43,7 +42,6 @@ export function useE2EEConnectionHandshake(
 ): E2EEConnectionHandshake {
 	const { meetingId, sfuClient, sfuManager, currentUser, mediaState } = deps;
 
-	const { openJoinerEnvelope, buildHostEnvelope } = useE2EEHandshake();
 	const { getIdentity: getDeviceIdentity } = useDeviceIdentity();
 
 	const controller = new E2EEHandshakeController({
@@ -54,8 +52,6 @@ export function useE2EEConnectionHandshake(
 		mediaState,
 		isCurrentTabHost: deps.isCurrentTabHost,
 		getDeviceIdentity,
-		openJoinerEnvelope,
-		buildHostEnvelope,
 	});
 	const epochSignalingController = new E2EEEpochSignalingController({
 		meetingId,
@@ -84,47 +80,25 @@ export function useE2EEConnectionHandshake(
 	// ── event routing ─────────────────────────────────────────────────
 	let realtimeListenersAttached = false;
 
-	const handleHandshakeMessageBound = (data: unknown) =>
-		controller.handleHandshakeMessage(data);
 	const handleEpochMessageBound = (data: unknown) => {
 		void epochSignalingController.handleEpochEnvelope(data);
 	};
 	const handleSFUReconnectBound = () => controller.handleSFUReconnect();
 	const handleHostE2EEKeySetBound = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
-		if (detail?.hostX25519KeyPair && detail?.keyVersion) {
+		if (detail?.keyVersion) {
 			void controller.handleHostE2EEKeySet(detail);
 		}
 	};
-	const handleHandshakeCompleteBound = (event: Event) => {
-		const detail = (event as CustomEvent).detail;
-		if (!detail?.meetingSecret || detail?.keyVersion == null) return;
-		if (detail.meetingId && detail.meetingId !== meetingId) return;
-		void (async () => {
-			const signingPrivateKey =
-				detail.signingPrivateKey ??
-				(await getDeviceIdentity()).signingKeyPair.privateKey;
-			controller.setMeetingContext(
-				detail.meetingSecret as Uint8Array<ArrayBuffer>,
-				Number(detail.keyVersion),
-				signingPrivateKey,
-			);
-		})();
-	};
-	const handleE2EEResyncBound = () => controller.resyncHandshake();
+	const handleE2EEResyncBound = () => controller.handleSFUReconnect();
 
 	function setupRealtimeEventListeners(): void {
 		if (realtimeListenersAttached) return;
 		sfuClient.on("e2ee:epoch", handleEpochMessageBound);
-		sfuClient.on("e2ee:handshake", handleHandshakeMessageBound);
 		sfuClient.on("reconnect", handleSFUReconnectBound);
 		document.addEventListener(
 			"meet:e2ee-host-enabled",
 			handleHostE2EEKeySetBound,
-		);
-		document.addEventListener(
-			"meet:e2ee-handshake-complete",
-			handleHandshakeCompleteBound,
 		);
 		document.addEventListener(
 			"meet:e2ee-needs-key-resync",
@@ -136,15 +110,10 @@ export function useE2EEConnectionHandshake(
 	function teardownRealtimeEventListeners(): void {
 		if (!realtimeListenersAttached) return;
 		sfuClient.off("e2ee:epoch");
-		sfuClient.off("e2ee:handshake");
 		sfuClient.off("reconnect");
 		document.removeEventListener(
 			"meet:e2ee-host-enabled",
 			handleHostE2EEKeySetBound,
-		);
-		document.removeEventListener(
-			"meet:e2ee-handshake-complete",
-			handleHandshakeCompleteBound,
 		);
 		document.removeEventListener(
 			"meet:e2ee-needs-key-resync",

@@ -128,7 +128,6 @@ export interface ServerToClientEvents {
 	hand_raised: (data: HandRaisedEvent) => void;
 	existing_raised_hands: (data: ExistingRaisedHandsEvent) => void;
 	network_quality_update: (data: NetworkQualityUpdateEvent) => void;
-	'e2ee:handshake': (data: E2eeHandshakeEnvelope) => void;
 	'e2ee:epoch': (data: E2eeEpochEnvelope) => void;
 }
 
@@ -410,18 +409,6 @@ export interface HealthStats {
 	peers: number;
 }
 
-export type E2eeHandshakeEnvelope = {
-	fromParticipantId: string;
-	fromSenderId: number;
-	toParticipantId?: string;
-	toSenderId?: number;
-	x25519PublicKey?: string;
-	signingPublicKey?: string;
-	envelope?: string;
-	hostX25519PublicKey?: string;
-	hostSigningPublicKey?: string;
-};
-
 export type E2eeEpochEnvelope =
 	| E2eeEpochKeyPackageRequest
 	| E2eeEpochKeyPackage
@@ -502,7 +489,6 @@ declare module 'socket.io' {
 		roomId?: string;
 		participantId?: string;
 		senderId?: number;
-		x25519PublicKey?: string;
 		currentToken?: string;
 		tokenExpiresAt?: number;
 		tokenExpiryTimer?: NodeJS.Timeout;

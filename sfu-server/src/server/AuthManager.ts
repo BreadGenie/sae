@@ -194,7 +194,6 @@ export class AuthManager {
 		socket.tokenExpiresAt = undefined;
 		socket.e2eeReady = undefined;
 		socket.e2eeRequired = undefined;
-		socket.x25519PublicKey = undefined;
 	}
 
 	private scheduleTokenExpiry(socket: Socket): void {

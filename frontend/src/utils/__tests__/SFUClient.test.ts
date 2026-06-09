@@ -678,7 +678,7 @@ describe("E2EE signaling payloads", () => {
 		}
 	});
 
-	it("keeps e2ee enabled=false when host public key is missing", async () => {
+	it("uses the explicit E2EE required flag without host public key compatibility", async () => {
 		const client = createClient();
 		client.connected = true;
 		client.connectionDetails.e2eeRequired = true;
@@ -693,7 +693,7 @@ describe("E2EE signaling payloads", () => {
 			"join_room",
 			expect.objectContaining({
 				e2ee: expect.objectContaining({
-					enabled: false,
+					enabled: true,
 				}),
 			}),
 		);

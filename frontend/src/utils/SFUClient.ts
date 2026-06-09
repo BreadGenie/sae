@@ -735,7 +735,7 @@ export class SFUClient {
 	}
 
 	isE2EERequired(): boolean {
-		return Boolean(this.connectionDetails.e2eeHostPublicKey);
+		return this.connectionDetails.e2eeRequired;
 	}
 
 	getE2EEMode(): "insertable-streams" | "rtp-script-transform" | "none" {

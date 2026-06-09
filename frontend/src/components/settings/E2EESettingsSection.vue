@@ -169,7 +169,6 @@ watch(e2eeEnabled, async (val, oldVal) => {
 		document.dispatchEvent(
 			new CustomEvent("meet:e2ee-host-enabled", {
 				detail: {
-					hostX25519KeyPair: meetingKeyPair,
 					hostSigningKeyPair: identity.signingKeyPair,
 					keyVersion,
 				},

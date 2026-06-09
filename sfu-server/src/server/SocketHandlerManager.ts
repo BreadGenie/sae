@@ -14,7 +14,6 @@ import { loggers } from '../utils/logger';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
 import { E2EEEpochRelay } from './E2EEEpochRelay';
-import { E2EEHandshakeRelay } from './E2EEHandshakeRelay';
 
 type TypedSocket = Socket<
 	ClientToServerEvents,
@@ -35,7 +34,6 @@ export class SocketHandlerManager {
 	private nextSenderIdByRoom: Map<string, number> = new Map(); // roomId -> next senderId
 	private participantToSender: Map<string, Map<string, number>> = new Map(); // roomId -> (participantId -> senderId)
 	private e2eeEpochRelay: E2EEEpochRelay;
-	private e2eeHandshakeRelay: E2EEHandshakeRelay;
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -51,12 +49,6 @@ export class SocketHandlerManager {
 			this.fullAccessSockets,
 			this.participantToSender,
 		);
-		this.e2eeHandshakeRelay = new E2EEHandshakeRelay(
-			io,
-			this.fullAccessSockets,
-			this.participantToSender,
-		);
-
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
 			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
 				participantId: peerId,
@@ -279,7 +271,6 @@ export class SocketHandlerManager {
 			this.setupReactionHandlers(socket);
 			this.setupRaiseHandHandlers(socket);
 			this.e2eeEpochRelay.setup(socket);
-			this.e2eeHandshakeRelay.setup(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);
 		});
@@ -501,7 +492,6 @@ export class SocketHandlerManager {
 				capability?: {
 					supported?: boolean;
 				};
-				ecdhPublicKey?: string;
 			};
 		},
 	): Promise<void> {
@@ -535,10 +525,6 @@ export class SocketHandlerManager {
 
 			const senderId = this.assignSenderId(roomId, participantId);
 			socket.senderId = senderId;
-			if (e2ee?.ecdhPublicKey) {
-				socket.x25519PublicKey = e2ee.ecdhPublicKey;
-			}
-
 			// Track socket by scope
 			if (socket.scope === 'full') {
 				if (!this.fullAccessSockets.has(roomId)) {
@@ -973,7 +959,6 @@ export class SocketHandlerManager {
 		e2ee?: {
 			enabled?: boolean;
 			capability?: { supported?: boolean };
-			ecdhPublicKey?: string;
 		},
 	): void {
 		if (!socket.e2eeRequired) {
@@ -987,15 +972,6 @@ export class SocketHandlerManager {
 
 		if (!e2ee.capability?.supported) {
 			throw new Error('Client does not support required E2EE capabilities');
-		}
-
-		if (e2ee.ecdhPublicKey) {
-			if (
-				typeof e2ee.ecdhPublicKey !== 'string' ||
-				e2ee.ecdhPublicKey.length < 16
-			) {
-				throw new Error('Invalid E2EE ECDH public key in join request');
-			}
 		}
 
 		socket.e2eeReady = true;
