@@ -110,6 +110,13 @@ export class E2EEEpochSignalingController {
 		this.receivedKeyPackagesBySenderId.clear();
 	}
 
+	getReceivedKeyPackagesBySenderId(): ReadonlyMap<
+		number,
+		{ epochNumber: number; participantId: string; keyPackage: string }
+	> {
+		return this.receivedKeyPackagesBySenderId;
+	}
+
 	private async publishKeyPackage(epochNumber: number): Promise<void> {
 		const senderId = this.deps.sfuClient.getOwnSenderId();
 		if (senderId === null) {
@@ -173,42 +180,48 @@ export class E2EEEpochSignalingController {
 			return;
 		}
 
-		const joiningPackage = this.findJoiningKeyPackage(request.epochNumber);
-		if (!joiningPackage) {
+		const joiningPackages = this.collectJoiningKeyPackages(
+			request.joiningSenderIds,
+			request.epochNumber,
+		);
+		if (
+			joiningPackages.length !== request.joiningSenderIds.length ||
+			joiningPackages.length === 0
+		) {
 			console.warn(
-				"[DEBUG-e2ee] authorAddMemberCommit: no cached key package for joiner",
+				"[DEBUG-e2ee] authorAddMemberCommit: missing key packages for named joiners",
 				{
-					cacheEntries: Array.from(
-						this.receivedKeyPackagesBySenderId.values(),
-					).map((e) => ({
-						fromParticipantId: e.participantId,
-						epochNumber: e.epochNumber,
-					})),
+					requested: request.joiningSenderIds,
+					missing: request.joiningSenderIds.filter(
+						(id) => !this.receivedKeyPackagesBySenderId.has(id),
+					),
 				},
 			);
 			return;
 		}
 
-		const decodedKeyPackage = this.epochProtocolProvider.decodeKeyPackage(
-			bytesFromBase64(joiningPackage.keyPackage),
+		const decodedKeyPackages = joiningPackages.map((p) =>
+			this.epochProtocolProvider.decodeKeyPackage(
+				bytesFromBase64(p.keyPackage),
+			),
 		);
-		const nextEpoch = await this.epochProtocolProvider.addMember(
+		const result = await this.epochProtocolProvider.addMultipleMembers(
 			activeEpoch.state,
-			decodedKeyPackage,
+			decodedKeyPackages,
 		);
 		const identity = await this.deps.getDeviceIdentity();
 
 		installActiveEpochState({
-			epochNumber: nextEpoch.epochNumber,
-			state: nextEpoch.state,
-			meetingSecret: nextEpoch.meetingSecret,
+			epochNumber: result.epoch.epochNumber,
+			state: result.epoch.state,
+			meetingSecret: result.epoch.meetingSecret,
 		});
 		E2EEMeeting.instance.setMeetingContext(
-			nextEpoch.meetingSecret,
-			nextEpoch.epochNumber,
+			result.epoch.meetingSecret,
+			result.epoch.epochNumber,
 			identity.signingKeyPair.privateKey,
 		);
-		await this.syncSenderSigningPubs(nextEpoch.state);
+		await this.syncSenderSigningPubs(result.epoch.state);
 
 		const fromSenderId = this.deps.sfuClient.getOwnSenderId();
 		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
@@ -219,25 +232,27 @@ export class E2EEEpochSignalingController {
 			fromParticipantId,
 			fromSenderId,
 			previousEpochNumber: request.epochNumber,
-			epochNumber: nextEpoch.epochNumber,
+			epochNumber: result.epoch.epochNumber,
 			membershipDeltaId: request.membershipDeltaId,
 			membershipDeltaHash: request.membershipDeltaHash,
 			rosterHash: request.rosterHash,
 			mlsCommit: bufferToBase64(
-				this.epochProtocolProvider.encodeCommit(nextEpoch.commit),
+				this.epochProtocolProvider.encodeCommit(result.commit),
 			),
 		});
-		this.deps.sfuClient.sendE2EEEpochEnvelope({
-			type: "welcome",
-			fromParticipantId,
-			fromSenderId,
-			toParticipantId: joiningPackage.participantId,
-			toSenderId: joiningPackage.senderId,
-			epochNumber: nextEpoch.epochNumber,
-			mlsWelcome: bufferToBase64(
-				this.epochProtocolProvider.encodeWelcome(nextEpoch.welcome),
-			),
-		});
+		for (const joiner of joiningPackages) {
+			this.deps.sfuClient.sendE2EEEpochEnvelope({
+				type: "welcome",
+				fromParticipantId,
+				fromSenderId,
+				toParticipantId: joiner.participantId,
+				toSenderId: joiner.senderId,
+				epochNumber: result.epoch.epochNumber,
+				mlsWelcome: bufferToBase64(
+					this.epochProtocolProvider.encodeWelcome(result.welcome),
+				),
+			});
+		}
 	}
 
 	private async processCommit(
@@ -386,22 +401,27 @@ export class E2EEEpochSignalingController {
 		}
 	}
 
-	private findJoiningKeyPackage(epochNumber: number): {
-		senderId: number;
-		participantId: string;
-		keyPackage: string;
-	} | null {
+	private collectJoiningKeyPackages(
+		joiningSenderIds: number[],
+		epochNumber: number,
+	): Array<{ senderId: number; participantId: string; keyPackage: string }> {
 		const ownSenderId = this.deps.sfuClient.getOwnSenderId();
-		for (const [senderId, entry] of this.receivedKeyPackagesBySenderId) {
-			if (senderId === ownSenderId || entry.epochNumber !== epochNumber)
-				continue;
-			return {
+		const out: Array<{
+			senderId: number;
+			participantId: string;
+			keyPackage: string;
+		}> = [];
+		for (const senderId of joiningSenderIds) {
+			if (senderId === ownSenderId) continue;
+			const entry = this.receivedKeyPackagesBySenderId.get(senderId);
+			if (!entry || entry.epochNumber !== epochNumber) continue;
+			out.push({
 				senderId,
 				participantId: entry.participantId,
 				keyPackage: entry.keyPackage,
-			};
+			});
 		}
-		return null;
+		return out;
 	}
 
 	private isEpochEnvelope(value: unknown): value is E2eeEpochEnvelope {

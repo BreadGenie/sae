@@ -41,6 +41,13 @@ export function useE2EEConnectionHandshake(
 
 	const { getIdentity: getDeviceIdentity } = useDeviceIdentity();
 
+	const epochSignalingController = new E2EEEpochSignalingController({
+		meetingId,
+		sfuClient,
+		currentUser,
+		isCurrentTabHost: deps.isCurrentTabHost,
+		getDeviceIdentity,
+	});
 	const controller = new E2EEHandshakeController({
 		meetingId,
 		sfuClient,
@@ -49,13 +56,7 @@ export function useE2EEConnectionHandshake(
 		mediaState,
 		isCurrentTabHost: deps.isCurrentTabHost,
 		getDeviceIdentity,
-	});
-	const epochSignalingController = new E2EEEpochSignalingController({
-		meetingId,
-		sfuClient,
-		currentUser,
-		isCurrentTabHost: deps.isCurrentTabHost,
-		getDeviceIdentity,
+		epochSignalingController,
 	});
 
 	controller.onHandshakeComplete = (detail) => {

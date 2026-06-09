@@ -3,7 +3,9 @@ import type { CurrentUser } from "../../composables/useCurrentUser";
 import type { MediaState } from "../../composables/useMediaState";
 import type { SFUClient } from "../SFUClient";
 import type { SFUMeetingManager } from "../SFUMeetingManager";
+import type { E2EEEpochSignalingController } from "./E2EEEpochSignalingController";
 import {
+	getActiveEpochState,
 	installActiveEpochState,
 	wipeActiveEpochState,
 } from "./E2EEEpochStateStore";
@@ -12,6 +14,7 @@ import {
 	type EpochProtocolProvider,
 	TsMlsEpochProtocolProvider,
 } from "./EpochProtocolProvider";
+import { bufferToBase64, bytesFromBase64 } from "./e2eePrimitives";
 
 interface E2EEHandshakeControllerDeps {
 	meetingId: string;
@@ -25,6 +28,8 @@ interface E2EEHandshakeControllerDeps {
 		signingPublicKey: string;
 		signingKeyPair: CryptoKeyPair;
 	}>;
+	epochSignalingController?: E2EEEpochSignalingController;
+	enableCollectionTimeoutMs?: number;
 	epochProtocolProvider?: EpochProtocolProvider;
 }
 
@@ -94,9 +99,13 @@ export class E2EEHandshakeController {
 		console.log("[DEBUG-e2ee] handleHostE2EEKeySet: enter", {
 			detail: _detail,
 		});
-		await this.generateHostMeetingSecret();
+		const hasMembers = await this.collectMembersAndCreateGenesisEpoch();
+		if (!hasMembers) {
+			await this.generateHostMeetingSecret();
+		}
 		console.log("[DEBUG-e2ee] handleHostE2EEKeySet: genesis complete", {
 			epochNumber: this.keyVersion,
+			hadMembers: hasMembers,
 		});
 		if (this.isReconfiguringForE2EE) return;
 		this.isReconfiguringForE2EE = true;
@@ -108,6 +117,191 @@ export class E2EEHandshakeController {
 		} finally {
 			this.isReconfiguringForE2EE = false;
 		}
+	}
+
+	private async collectMembersAndCreateGenesisEpoch(): Promise<boolean> {
+		if (!this.deps.epochSignalingController) {
+			console.log(
+				"[DEBUG-e2ee] collectMembersAndCreateGenesisEpoch: no signaling controller, skipping collection",
+			);
+			return false;
+		}
+		const expectedSenderIds = await this.listCurrentNonHostSenderIds();
+		if (expectedSenderIds.length === 0) {
+			console.log(
+				"[DEBUG-e2ee] collectMembersAndCreateGenesisEpoch: no existing members to collect",
+			);
+			return false;
+		}
+		console.log(
+			"[DEBUG-e2ee] collectMembersAndCreateGenesisEpoch: broadcasting key-package-request",
+			{ expectedSenderIds },
+		);
+		this.deps.sfuClient.sendE2EEEpochEnvelope({
+			type: "key-package-request",
+			epochNumber: 1,
+			reason: "enable",
+		});
+
+		const collected = await this.waitForKeyPackages(
+			expectedSenderIds,
+			this.deps.enableCollectionTimeoutMs ?? 15000,
+		);
+		console.log("[DEBUG-e2ee] collectMembersAndCreateGenesisEpoch: collected", {
+			collected: Array.from(collected.keys()),
+			missing: expectedSenderIds.filter((id) => !collected.has(id)),
+		});
+		if (collected.size === 0) {
+			console.warn(
+				"[DEBUG-e2ee] collectMembersAndCreateGenesisEpoch: no key packages received, falling back to host-only genesis",
+			);
+			return false;
+		}
+
+		const identity = await this.getDeviceIdentity();
+		const userId = this.ownParticipantId();
+		const hostSenderId = this.sfuClient.getOwnSenderId?.() ?? 0;
+		await this.generateHostMeetingSecret();
+		const collectedSenderIds = Array.from(collected.keys()).sort(
+			(a, b) => a - b,
+		);
+		const decodedKeyPackages = collectedSenderIds.map((senderId) => {
+			const cached = collected.get(senderId);
+			return this.epochProtocolProvider.decodeKeyPackage(
+				bytesFromBase64(cached?.keyPackage ?? ""),
+			);
+		});
+		const activeEpoch = getActiveEpochState();
+		if (!activeEpoch) {
+			console.warn(
+				"[DEBUG-e2ee] collectMembersAndCreateGenesisEpoch: no active epoch after genesis",
+			);
+			return false;
+		}
+		const result = await this.epochProtocolProvider.addMultipleMembers(
+			activeEpoch.state,
+			decodedKeyPackages,
+		);
+		installActiveEpochState({
+			epochNumber: result.epoch.epochNumber,
+			state: result.epoch.state,
+			meetingSecret: result.epoch.meetingSecret,
+		});
+		this.keyVersion = result.epoch.epochNumber;
+		this.meetingSecret = result.epoch.meetingSecret;
+		this.onHandshakeComplete?.({
+			meetingId: this.meetingId,
+			meetingSecret: result.epoch.meetingSecret,
+			keyVersion: result.epoch.epochNumber,
+			signingPrivateKey: identity.signingKeyPair.privateKey,
+		});
+		const fromParticipantId = userId;
+		const previousEpochNumber = activeEpoch.epochNumber;
+		const epochNumber = result.epoch.epochNumber;
+		const membershipDeltaId = `add-${collectedSenderIds.join("-")}-to-${epochNumber}`;
+		const membershipDeltaHash = Buffer.from(
+			JSON.stringify({
+				type: "add",
+				senderIds: collectedSenderIds,
+				nextEpochNumber: epochNumber,
+			}),
+		).toString("base64");
+		this.deps.sfuClient.sendE2EEEpochEnvelope({
+			type: "commit",
+			fromParticipantId,
+			fromSenderId: hostSenderId,
+			previousEpochNumber,
+			epochNumber,
+			membershipDeltaId,
+			membershipDeltaHash,
+			rosterHash: membershipDeltaHash,
+			mlsCommit: bufferToBase64(
+				this.epochProtocolProvider.encodeCommit(result.commit),
+			),
+		});
+		for (const senderId of collectedSenderIds) {
+			const cached = collected.get(senderId);
+			if (!cached) continue;
+			this.deps.sfuClient.sendE2EEEpochEnvelope({
+				type: "welcome",
+				fromParticipantId,
+				fromSenderId: hostSenderId,
+				toParticipantId: cached.participantId,
+				toSenderId: cached.senderId,
+				epochNumber,
+				mlsWelcome: bufferToBase64(
+					this.epochProtocolProvider.encodeWelcome(result.welcome),
+				),
+			});
+		}
+		return true;
+	}
+
+	private async listCurrentNonHostSenderIds(): Promise<number[]> {
+		try {
+			const participants = (await this.deps.sfuClient.getRoomParticipants()) as
+				| Array<{ user_id?: string; sender_id?: number; is_host?: boolean }>
+				| undefined;
+			if (!Array.isArray(participants)) return [];
+			const hostParticipantId = this.ownParticipantId();
+			return participants
+				.filter(
+					(p) =>
+						typeof p.sender_id === "number" &&
+						p.is_host !== true &&
+						p.user_id !== hostParticipantId,
+				)
+				.map((p) => p.sender_id as number);
+		} catch (error) {
+			console.warn(
+				"[DEBUG-e2ee] listCurrentNonHostSenderIds: getRoomParticipants failed",
+				error,
+			);
+			return [];
+		}
+	}
+
+	private async waitForKeyPackages(
+		expectedSenderIds: number[],
+		timeoutMs: number,
+	): Promise<
+		Map<
+			number,
+			{
+				senderId: number;
+				participantId: string;
+				keyPackage: string;
+				epochNumber: number;
+			}
+		>
+	> {
+		const out = new Map<
+			number,
+			{
+				senderId: number;
+				participantId: string;
+				keyPackage: string;
+				epochNumber: number;
+			}
+		>();
+		const expected = new Set(expectedSenderIds);
+		const signaling = this.deps.epochSignalingController;
+		if (!signaling) return out;
+		const start = Date.now();
+		while (Date.now() - start < timeoutMs) {
+			const cache = signaling.getReceivedKeyPackagesBySenderId();
+			for (const senderId of expected) {
+				if (out.has(senderId)) continue;
+				const entry = cache.get(senderId);
+				if (!entry) continue;
+				out.set(senderId, { senderId, ...entry });
+			}
+			if (out.size === expected.size) break;
+			await new Promise((resolve) =>
+				setTimeout(resolve, Math.min(250, timeoutMs / 6)),
+			);
+		}
+		return out;
 	}
 
 	async generateHostMeetingSecret(): Promise<void> {

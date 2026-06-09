@@ -26,6 +26,7 @@ type E2eeEpochPayload = {
 	toParticipantId?: unknown;
 	toSenderId?: unknown;
 	committerSenderId?: unknown;
+	joiningSenderIds?: unknown;
 	membershipDeltaId?: unknown;
 	membershipDeltaHash?: unknown;
 	rosterHash?: unknown;
@@ -215,39 +216,41 @@ export class E2EEEpochRelay {
 			epochNumber: payload.epochNumber,
 			keyPackage: payload.keyPackage,
 		});
-		this.requestCommitFromHost(roomId, fromSenderId, payload.epochNumber);
+		this.requestCommitFromHost(roomId, [fromSenderId], payload.epochNumber);
 	}
 
 	private requestCommitFromHost(
 		roomId: string,
-		joiningSenderId: number,
+		joiningSenderIds: number[],
 		epochNumber: number,
 	): void {
 		const hostSocket = this.findHostSocket(roomId);
 		console.log('[DEBUG-e2ee] SFU: requestCommitFromHost lookup', {
 			roomId,
-			joiningSenderId,
+			joiningSenderIds,
 			epochNumber,
 			hostFound: !!hostSocket,
 			hostSenderId: hostSocket?.senderId,
 		});
 		if (
 			hostSocket?.senderId === undefined ||
-			hostSocket.senderId === joiningSenderId
+			joiningSenderIds.length === 0 ||
+			joiningSenderIds.includes(hostSocket.senderId)
 		) {
 			console.warn('[DEBUG-e2ee] SFU: no host committer available', {
 				roomId,
-				joiningSenderId,
+				joiningSenderIds,
 				hostFound: !!hostSocket,
 			});
 			return;
 		}
 		const nextEpochNumber = epochNumber + 1;
-		const membershipDeltaId = `add-${joiningSenderId}-to-${nextEpochNumber}`;
+		const sortedIds = [...joiningSenderIds].sort((a, b) => a - b);
+		const membershipDeltaId = `add-${sortedIds.join('-')}-to-${nextEpochNumber}`;
 		const membershipDeltaHash = Buffer.from(
 			JSON.stringify({
 				type: 'add',
-				senderId: joiningSenderId,
+				senderIds: sortedIds,
 				nextEpochNumber,
 			}),
 		).toString('base64');
@@ -259,6 +262,7 @@ export class E2EEEpochRelay {
 			membershipDeltaHash,
 			rosterHash: membershipDeltaHash,
 			committerSenderId: hostSocket.senderId,
+			joiningSenderIds: sortedIds,
 		});
 	}
 
@@ -270,7 +274,8 @@ export class E2EEEpochRelay {
 			!this.isDeltaId(payload.membershipDeltaId) ||
 			!this.isHash(payload.membershipDeltaHash) ||
 			!this.isHash(payload.rosterHash) ||
-			!this.isSenderId(payload.committerSenderId)
+			!this.isSenderId(payload.committerSenderId) ||
+			!this.isSenderIdArray(payload.joiningSenderIds)
 		) {
 			return;
 		}
@@ -287,6 +292,7 @@ export class E2EEEpochRelay {
 			membershipDeltaHash: payload.membershipDeltaHash,
 			rosterHash: payload.rosterHash,
 			committerSenderId: payload.committerSenderId,
+			joiningSenderIds: payload.joiningSenderIds,
 		});
 	}
 
@@ -469,6 +475,14 @@ export class E2EEEpochRelay {
 			Number.isInteger(value) &&
 			value >= 0 &&
 			value <= SENDER_ID_MAX
+		);
+	}
+
+	private isSenderIdArray(value: unknown): value is number[] {
+		return (
+			Array.isArray(value) &&
+			value.length > 0 &&
+			value.every((id) => this.isSenderId(id))
 		);
 	}
 

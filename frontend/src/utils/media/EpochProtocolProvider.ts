@@ -53,8 +53,26 @@ type AddMemberResult = EpochStateResult & {
 	welcome: Welcome;
 };
 
+type AddMultipleMembersResult = {
+	commit: MLSMessage;
+	welcome: Welcome;
+	epoch: EpochStateResult;
+};
+
+type CreateGenesisWithMembersResult = EpochStateResult & {
+	joiningMembers: EpochMemberInput[];
+	welcome: Welcome;
+};
+
 export interface EpochProtocolProvider {
 	createGenesisEpoch(input: EpochMemberInput): Promise<EpochStateResult>;
+	createGenesisEpochWithMembers(
+		creator: EpochMemberInput,
+		joiningMembers: Array<{
+			member: EpochMemberInput;
+			keyPackage: EpochKeyPackage;
+		}>,
+	): Promise<CreateGenesisWithMembersResult>;
 	generateKeyPackage(input: EpochMemberInput): Promise<EpochKeyPackage>;
 	encodeKeyPackage(keyPackage: KeyPackage): Uint8Array;
 	decodeKeyPackage(encoded: Uint8Array): KeyPackage;
@@ -65,6 +83,10 @@ export interface EpochProtocolProvider {
 		state: ClientState,
 		joiningMember: KeyPackage,
 	): Promise<AddMemberResult>;
+	addMultipleMembers(
+		state: ClientState,
+		joiningMembers: KeyPackage[],
+	): Promise<AddMultipleMembersResult>;
 	joinFromWelcome(
 		welcome: Welcome,
 		keyPackage: KeyPackage,
@@ -90,6 +112,49 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 			cipherSuite,
 		);
 		return this.buildStateResult(state);
+	}
+
+	async createGenesisEpochWithMembers(
+		creator: EpochMemberInput,
+		joiningMembers: Array<{
+			member: EpochMemberInput;
+			keyPackage: EpochKeyPackage;
+		}>,
+	): Promise<CreateGenesisWithMembersResult> {
+		if (joiningMembers.length === 0) {
+			throw new Error(
+				"createGenesisEpochWithMembers requires at least one joining member",
+			);
+		}
+		const cipherSuite = await this.getCipherSuite();
+		const creatorKeyPackage = await this.generateKeyPackage(creator);
+		const addProposals: Proposal[] = joiningMembers.map((jm) => ({
+			proposalType: "add",
+			add: { keyPackage: jm.keyPackage.publicPackage },
+		}));
+		const state = await createGroup(
+			new TextEncoder().encode(creator.groupId),
+			creatorKeyPackage.publicPackage,
+			creatorKeyPackage.privatePackage,
+			[],
+			cipherSuite,
+		);
+		const commit = await createCommit(
+			{ state, cipherSuite },
+			{ extraProposals: addProposals, ratchetTreeExtension: true },
+		);
+		commit.consumed.forEach(zeroOutUint8Array);
+		if (!commit.welcome) {
+			throw new Error(
+				"createGenesisEpochWithMembers did not produce a welcome",
+			);
+		}
+		const nextEpoch = await this.buildStateResult(commit.newState);
+		return {
+			...nextEpoch,
+			joiningMembers: joiningMembers.map((jm) => jm.member),
+			welcome: commit.welcome,
+		};
 	}
 
 	async generateKeyPackage(input: EpochMemberInput): Promise<EpochKeyPackage> {
@@ -135,23 +200,40 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		state: ClientState,
 		joiningMember: KeyPackage,
 	): Promise<AddMemberResult> {
-		const cipherSuite = await this.getCipherSuite();
-		const addProposal: Proposal = {
-			proposalType: "add",
-			add: { keyPackage: joiningMember },
+		const result = await this.addMultipleMembers(state, [joiningMember]);
+		return {
+			...result.epoch,
+			commit: result.commit,
+			welcome: result.welcome,
 		};
+	}
+
+	async addMultipleMembers(
+		state: ClientState,
+		joiningMembers: KeyPackage[],
+	): Promise<AddMultipleMembersResult> {
+		if (joiningMembers.length === 0) {
+			throw new Error(
+				"addMultipleMembers requires at least one joining member",
+			);
+		}
+		const cipherSuite = await this.getCipherSuite();
+		const addProposals: Proposal[] = joiningMembers.map((kp) => ({
+			proposalType: "add",
+			add: { keyPackage: kp },
+		}));
 		const commit = await createCommit(
 			{ state, cipherSuite },
-			{ extraProposals: [addProposal], ratchetTreeExtension: true },
+			{ extraProposals: addProposals, ratchetTreeExtension: true },
 		);
 		commit.consumed.forEach(zeroOutUint8Array);
 		if (!commit.welcome) {
-			throw new Error("Add-member commit did not produce a welcome");
+			throw new Error("Add-multiple-members commit did not produce a welcome");
 		}
 		return {
-			...(await this.buildStateResult(commit.newState)),
 			commit: commit.commit,
 			welcome: commit.welcome,
+			epoch: await this.buildStateResult(commit.newState),
 		};
 	}
 

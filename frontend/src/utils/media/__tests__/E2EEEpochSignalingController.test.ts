@@ -20,6 +20,21 @@ function createController(options: { isHost?: boolean } = {}) {
 		commit: { id: "commit" } as never,
 		welcome: { id: "welcome" } as never,
 	}));
+	const addMultipleMembers = vi.fn(
+		async (state: unknown, joiningMembers: unknown[]) => {
+			expect(Array.isArray(joiningMembers)).toBe(true);
+			return {
+				commit: { id: "commit" } as never,
+				welcome: { id: "welcome" } as never,
+				epoch: {
+					epochNumber: 2,
+					state: state as never,
+					encodedState: new Uint8Array([8]),
+					meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+				},
+			};
+		},
+	);
 	const encodeKeyPackage = vi.fn(
 		(_keyPackage: unknown) => new Uint8Array([1, 2, 3]),
 	);
@@ -60,6 +75,7 @@ function createController(options: { isHost?: boolean } = {}) {
 		})),
 		epochProtocolProvider: {
 			createGenesisEpoch: vi.fn(),
+			createGenesisEpochWithMembers: vi.fn(),
 			generateKeyPackage,
 			encodeKeyPackage,
 			decodeKeyPackage,
@@ -67,6 +83,7 @@ function createController(options: { isHost?: boolean } = {}) {
 			encodeWelcome,
 			decodeWelcome,
 			addMember,
+			addMultipleMembers,
 			joinFromWelcome,
 			processCommit: vi.fn(),
 			exportMeetingSecret: vi.fn(),
@@ -77,6 +94,7 @@ function createController(options: { isHost?: boolean } = {}) {
 		sendE2EEEpochEnvelope,
 		generateKeyPackage,
 		addMember,
+		addMultipleMembers,
 		joinFromWelcome,
 	};
 }
@@ -115,9 +133,10 @@ describe("E2EEEpochSignalingController", () => {
 			state: { id: "epoch-1-state" } as never,
 			meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
 		});
-		const { controller, sendE2EEEpochEnvelope, addMember } = createController({
-			isHost: true,
-		});
+		const { controller, sendE2EEEpochEnvelope, addMultipleMembers } =
+			createController({
+				isHost: true,
+			});
 
 		await controller.handleEpochEnvelope({
 			type: "key-package",
@@ -134,9 +153,10 @@ describe("E2EEEpochSignalingController", () => {
 			membershipDeltaHash: "ZGVsdGE=",
 			rosterHash: "cm9zdGVy",
 			committerSenderId: 7,
+			joiningSenderIds: [9],
 		});
 
-		expect(addMember).toHaveBeenCalled();
+		expect(addMultipleMembers).toHaveBeenCalled();
 		expect(sendE2EEEpochEnvelope).toHaveBeenCalledWith(
 			expect.objectContaining({
 				type: "commit",

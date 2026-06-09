@@ -70,4 +70,109 @@ describe("TsMlsEpochProtocolProvider", () => {
 		expect([...bob.meetingSecret]).toEqual([...addBob.meetingSecret]);
 		expect([...bob.meetingSecret]).not.toEqual([...alice.meetingSecret]);
 	});
+
+	it("adds multiple members in one commit and lets each joiner export the same meeting secret", async () => {
+		const provider = new TsMlsEpochProtocolProvider();
+		const genesis = await provider.createGenesisEpoch({
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "alice@example.com",
+			deviceId: "alice-laptop",
+			senderId: 7,
+			signingPubKey,
+		});
+		const bobKeyPackage = await provider.generateKeyPackage({
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "bob@example.com",
+			deviceId: "bob-phone",
+			senderId: 9,
+			signingPubKey,
+		});
+		const carolKeyPackage = await provider.generateKeyPackage({
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "carol@example.com",
+			deviceId: "carol-laptop",
+			senderId: 11,
+			signingPubKey,
+		});
+
+		const addBoth = await provider.addMultipleMembers(genesis.state, [
+			bobKeyPackage.publicPackage,
+			carolKeyPackage.publicPackage,
+		]);
+
+		const bob = await provider.joinFromWelcome(
+			addBoth.welcome,
+			bobKeyPackage.publicPackage,
+			bobKeyPackage.privatePackage,
+			addBoth.epoch.state.ratchetTree,
+		);
+		const carol = await provider.joinFromWelcome(
+			addBoth.welcome,
+			carolKeyPackage.publicPackage,
+			carolKeyPackage.privatePackage,
+			addBoth.epoch.state.ratchetTree,
+		);
+
+		expect(addBoth.epoch.epochNumber).toBe(2);
+		expect(bob.epochNumber).toBe(2);
+		expect(carol.epochNumber).toBe(2);
+		expect([...bob.meetingSecret]).toEqual([...addBoth.epoch.meetingSecret]);
+		expect([...carol.meetingSecret]).toEqual([...addBoth.epoch.meetingSecret]);
+		expect([...bob.meetingSecret]).toEqual([...carol.meetingSecret]);
+	});
+
+	it("creates a genesis epoch with members and welcomes them all in one commit", async () => {
+		const provider = new TsMlsEpochProtocolProvider();
+		const bobMember = {
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "bob@example.com",
+			deviceId: "bob-phone",
+			senderId: 9,
+			signingPubKey,
+		};
+		const carolMember = {
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "carol@example.com",
+			deviceId: "carol-laptop",
+			senderId: 11,
+			signingPubKey,
+		};
+		const bobKeyPackage = await provider.generateKeyPackage(bobMember);
+		const carolKeyPackage = await provider.generateKeyPackage(carolMember);
+
+		const result = await provider.createGenesisEpochWithMembers(
+			{
+				groupId: "meeting-vscl-sabe-ykvp",
+				userId: "alice@example.com",
+				deviceId: "alice-laptop",
+				senderId: 7,
+				signingPubKey,
+			},
+			[
+				{ member: bobMember, keyPackage: bobKeyPackage },
+				{ member: carolMember, keyPackage: carolKeyPackage },
+			],
+		);
+
+		const bob = await provider.joinFromWelcome(
+			result.welcome,
+			bobKeyPackage.publicPackage,
+			bobKeyPackage.privatePackage,
+			result.state.ratchetTree,
+		);
+		const carol = await provider.joinFromWelcome(
+			result.welcome,
+			carolKeyPackage.publicPackage,
+			carolKeyPackage.privatePackage,
+			result.state.ratchetTree,
+		);
+
+		expect(result.epochNumber).toBe(2);
+		expect(bob.epochNumber).toBe(2);
+		expect(carol.epochNumber).toBe(2);
+		expect([...bob.meetingSecret]).toEqual([...result.meetingSecret]);
+		expect([...carol.meetingSecret]).toEqual([...result.meetingSecret]);
+		expect([...bob.meetingSecret]).toEqual([...carol.meetingSecret]);
+		expect(getGroupMembers(result.state)).toHaveLength(3);
+	});
 });

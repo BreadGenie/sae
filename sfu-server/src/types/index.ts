@@ -440,6 +440,7 @@ export type E2eeEpochCommitRequest = {
 	membershipDeltaHash: string;
 	rosterHash: string;
 	committerSenderId: number;
+	joiningSenderIds: number[];
 };
 
 export type E2eeEpochCommit = {
