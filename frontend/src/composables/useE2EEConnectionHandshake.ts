@@ -25,7 +25,6 @@ interface E2EEConnectionHandshakeDeps {
 }
 
 export interface E2EEConnectionHandshake {
-	prepareJoiningHandshakeIfRequired: () => Promise<void>;
 	handleMeetingE2EEEnabled: (data: {
 		meeting_id?: string;
 		e2ee_enabled?: boolean;
@@ -132,14 +131,11 @@ export function useE2EEConnectionHandshake(
 		}
 	});
 
-	const boundPrepareJoiningHandshakeIfRequired =
-		controller.prepareJoiningHandshakeIfRequired.bind(controller);
 	const boundHandleMeetingE2EEEnabled =
 		controller.handleMeetingE2EEEnabled.bind(controller);
 	const boundTeardownForDisconnect = teardownForDisconnect;
 
 	return {
-		prepareJoiningHandshakeIfRequired: boundPrepareJoiningHandshakeIfRequired,
 		handleMeetingE2EEEnabled: boundHandleMeetingE2EEEnabled,
 		setupRealtimeEventListeners,
 		teardownRealtimeEventListeners,

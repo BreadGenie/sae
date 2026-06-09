@@ -153,20 +153,10 @@ export class E2EEHandshakeController {
 		});
 	}
 
-	async prepareJoiningHandshakeIfRequired(): Promise<void> {
-		if (!this.sfuClient.isE2EERequired() || this.meetingSecret) return;
-		this.sfuClient.sendE2EEEpochEnvelope({
-			type: "resync-request",
-			fromParticipantId: this.ownParticipantId(),
-			fromSenderId: this.sfuClient.getOwnSenderId?.() ?? 0,
-		});
-	}
-
 	async handleMeetingE2EEEnabled(data: { meeting_id?: string }): Promise<void> {
 		if (data.meeting_id !== this.meetingId) return;
 		if (this.deps.isCurrentTabHost.value) return;
 		this.sfuClient.setE2EERequired(true);
-		await this.prepareJoiningHandshakeIfRequired();
 	}
 
 	private async reconfigureMediaForE2EE(): Promise<void> {

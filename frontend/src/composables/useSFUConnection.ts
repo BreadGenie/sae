@@ -368,14 +368,6 @@ export function useSFUConnection(deps: {
 				video_enabled: mediaState.isCameraOn,
 			});
 
-			// If E2EE was already enabled when we joined, kick off the
-			// joiner handshake now. The realtime `meeting:e2ee_enabled`
-			// event won't reach us (it was broadcast before we joined),
-			// so without this trigger we'd be sitting in the room with
-			// `e2ee.enabled: true` in our join request but no
-			// meeting_secret yet, and no transform would install.
-			await e2eeHandshake.prepareJoiningHandshakeIfRequired();
-
 			await manager.initializeDevice();
 			await manager.createReceiveTransport();
 
