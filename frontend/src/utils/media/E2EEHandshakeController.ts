@@ -22,6 +22,10 @@ import type { SFUClient } from "../SFUClient";
 import type { SFUMeetingManager } from "../SFUMeetingManager";
 import { E2EEMeeting } from "./E2EEMeeting";
 import {
+	type EpochProtocolProvider,
+	TsMlsEpochProtocolProvider,
+} from "./EpochProtocolProvider";
+import {
 	exportEd25519PublicKey,
 	exportPublicKey,
 	importEd25519PublicKey,
@@ -59,9 +63,11 @@ interface E2EEHandshakeControllerDeps {
 	mediaState: MediaState;
 	isCurrentTabHost: Ref<boolean>;
 	getDeviceIdentity: () => Promise<{
+		deviceId: string;
 		signingPublicKey: string;
 		signingKeyPair: CryptoKeyPair;
 	}>;
+	epochProtocolProvider?: EpochProtocolProvider;
 	openJoinerEnvelope: (
 		joinKeyPair: CryptoKeyPair,
 		hostX25519PublicKeyBase64: string,
@@ -99,6 +105,12 @@ export class E2EEHandshakeController {
 	readonly joinerPublicKeyBySenderId = new Map<number, string>();
 	readonly joinerSigningPublicKeyBySenderId = new Map<number, string>();
 	private readonly pendingJoinerHellos: JoinerHello[] = [];
+	private readonly handshakeWaiters = new Set<{
+		resolve: () => void;
+		reject: (error: Error) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>();
+	private readonly epochProtocolProvider: EpochProtocolProvider;
 	isReconfiguringForE2EE = false;
 
 	// -- callbacks --
@@ -113,6 +125,8 @@ export class E2EEHandshakeController {
 
 	constructor(deps: E2EEHandshakeControllerDeps) {
 		this.deps = deps;
+		this.epochProtocolProvider =
+			deps.epochProtocolProvider ?? new TsMlsEpochProtocolProvider();
 	}
 
 	// ── helpers ──────────────────────────────────────────────────────────
@@ -148,6 +162,7 @@ export class E2EEHandshakeController {
 	}
 
 	private get getDeviceIdentity(): () => Promise<{
+		deviceId: string;
 		signingPublicKey: string;
 		signingKeyPair: CryptoKeyPair;
 	}> {
@@ -235,6 +250,15 @@ export class E2EEHandshakeController {
 			keyVersion: this.keyVersion,
 			signingPrivateKey,
 		});
+		this.resolveHandshakeWaiters();
+	}
+
+	private resolveHandshakeWaiters(): void {
+		for (const waiter of this.handshakeWaiters) {
+			clearTimeout(waiter.timer);
+			waiter.resolve();
+		}
+		this.handshakeWaiters.clear();
 	}
 
 	// ── intent: wipe ────────────────────────────────────────────────────
@@ -250,8 +274,17 @@ export class E2EEHandshakeController {
 		this.hostSigningPrivateKey = null;
 		this.joinerPublicKeyBySenderId.clear();
 		this.joinerSigningPublicKeyBySenderId.clear();
+		this.rejectHandshakeWaiters(new Error("E2EE runtime state was wiped"));
 		this.keyVersion = null;
 		E2EEMeeting.instance.wipeMeetingContext();
+	}
+
+	private rejectHandshakeWaiters(error: Error): void {
+		for (const waiter of this.handshakeWaiters) {
+			clearTimeout(waiter.timer);
+			waiter.reject(error);
+		}
+		this.handshakeWaiters.clear();
 	}
 
 	teardownForDisconnect(): void {
@@ -419,6 +452,7 @@ export class E2EEHandshakeController {
 		hostX25519KeyPair: CryptoKeyPair;
 		keyVersion: string;
 		hostSigningKeyPair?: CryptoKeyPair;
+		meetingSecret?: Uint8Array<ArrayBuffer>;
 	}): Promise<void> {
 		this.hostX25519PrivateKey = detail.hostX25519KeyPair.privateKey;
 		this.hostX25519PublicKeyBase64 = null;
@@ -440,7 +474,17 @@ export class E2EEHandshakeController {
 			});
 		}
 
-		await this.generateHostMeetingSecret();
+		if (detail.meetingSecret) {
+			const identity = await this.getDeviceIdentity();
+			this.meetingSecret = detail.meetingSecret;
+			this.dispatchHandshakeComplete(
+				detail.meetingSecret,
+				identity.signingKeyPair.privateKey,
+			);
+			this.flushPendingJoinerHellos();
+		} else {
+			await this.generateHostMeetingSecret();
+		}
 
 		if (this.isReconfiguringForE2EE) return;
 		this.isReconfiguringForE2EE = true;
@@ -462,11 +506,19 @@ export class E2EEHandshakeController {
 	// ── intent: host meeting-secret generation ─────────────────────────
 
 	async generateHostMeetingSecret(): Promise<void> {
-		const ms = new Uint8Array(32);
-		globalThis.crypto.getRandomValues(ms);
-		this.meetingSecret = ms;
 		const identity = await this.getDeviceIdentity();
-		this.dispatchHandshakeComplete(ms, identity.signingKeyPair.privateKey);
+		const genesis = await this.epochProtocolProvider.createGenesisEpoch({
+			groupId: this.meetingId,
+			userId: this.ownParticipantId(),
+			deviceId: identity.deviceId,
+			senderId: this.sfuClient.getOwnSenderId?.() ?? 0,
+		});
+		this.keyVersion = genesis.epochNumber;
+		this.meetingSecret = genesis.meetingSecret;
+		this.dispatchHandshakeComplete(
+			genesis.meetingSecret,
+			identity.signingKeyPair.privateKey,
+		);
 		this.flushPendingJoinerHellos();
 	}
 
@@ -570,20 +622,21 @@ export class E2EEHandshakeController {
 				resolve();
 				return;
 			}
+			let waiter: {
+				resolve: () => void;
+				reject: (error: Error) => void;
+				timer: ReturnType<typeof setTimeout>;
+			};
 			const timer = setTimeout(() => {
+				this.handshakeWaiters.delete(waiter);
 				reject(new Error("E2EE handshake timed out"));
 			}, timeoutMs);
-			const listener = () => {
-				if (this.meetingSecret) {
-					clearTimeout(timer);
-					document.removeEventListener(
-						"meet:e2ee-handshake-complete",
-						listener,
-					);
-					resolve();
-				}
+			waiter = {
+				resolve,
+				reject,
+				timer,
 			};
-			document.addEventListener("meet:e2ee-handshake-complete", listener);
+			this.handshakeWaiters.add(waiter);
 		});
 	}
 

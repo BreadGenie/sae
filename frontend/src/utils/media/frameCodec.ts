@@ -23,7 +23,7 @@ import {
 	INFO_SENDER,
 } from "./e2eePrimitives";
 
-export const FRAME_HEADER_FIXED_SIZE = 24;
+export const FRAME_HEADER_FIXED_SIZE = 28;
 const FRAME_SIGNATURE_SIZE = 64;
 export const FRAME_HEADER_TOTAL =
 	FRAME_HEADER_FIXED_SIZE + FRAME_SIGNATURE_SIZE;
@@ -46,6 +46,7 @@ type E2EEFrameHeader = {
 	generation: number;
 	frameType?: string;
 	keyVersion: number;
+	epochNumber: number;
 	iv: Uint8Array<ArrayBuffer>;
 };
 
@@ -114,7 +115,8 @@ export function encodeFrameHeader(
 	view.setUint32(0, header.senderId, true);
 	view.setUint32(4, generation, true);
 	view.setUint32(8, header.keyVersion, true);
-	encoded.set(header.iv.subarray(0, 12), 12);
+	view.setUint32(12, header.epochNumber, true);
+	encoded.set(header.iv.subarray(0, 12), 16);
 	return encoded;
 }
 
@@ -128,7 +130,7 @@ export function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
 		FRAME_HEADER_FIXED_SIZE,
 	);
 	const iv = new Uint8Array(12);
-	iv.set(data.subarray(12, 24));
+	iv.set(data.subarray(16, 28));
 	const encodedGeneration = view.getUint32(4, true);
 	return {
 		senderId: view.getUint32(0, true),
@@ -138,6 +140,7 @@ export function decodeFrameHeader(data: Uint8Array): E2EEFrameHeader | null {
 				? "key"
 				: "delta",
 		keyVersion: view.getUint32(8, true),
+		epochNumber: view.getUint32(12, true),
 		iv,
 	};
 }

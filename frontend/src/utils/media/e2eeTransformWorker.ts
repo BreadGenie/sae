@@ -88,18 +88,19 @@ class SendState {
 			generation,
 		);
 		const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-		const encrypted = await subtle.encrypt(
-			{ name: "AES-GCM", iv },
-			key,
-			frame.data,
-		);
 		const header = encodeFrameHeader({
 			senderId: this.senderId,
 			generation,
 			frameType: frame.type,
 			keyVersion,
+			epochNumber: keyVersion,
 			iv,
 		});
+		const encrypted = await subtle.encrypt(
+			{ name: "AES-GCM", iv, additionalData: header },
+			key,
+			frame.data,
+		);
 		const ciphertext = new Uint8Array(encrypted.byteLength);
 		ciphertext.set(new Uint8Array(encrypted));
 		const signed = buildSignedFramePayload(
@@ -244,7 +245,11 @@ class RecvState {
 		const headerEnd = headerOffset + FRAME_HEADER_FIXED_SIZE;
 		const signatureEnd = headerOffset + FRAME_HEADER_TOTAL;
 		const header = decodeFrameHeader(data.subarray(headerOffset, headerEnd));
-		if (!header || header.keyVersion !== expectedKeyVersion) {
+		if (
+			!header ||
+			header.keyVersion !== expectedKeyVersion ||
+			header.epochNumber !== expectedKeyVersion
+		) {
 			return null;
 		}
 		const signingPub = this.signingPubs.get(header.senderId);
@@ -291,7 +296,7 @@ class RecvState {
 		}
 		try {
 			const decrypted = await subtle.decrypt(
-				{ name: "AES-GCM", iv: header.iv },
+				{ name: "AES-GCM", iv: header.iv, additionalData: headerFixed },
 				key,
 				ciphertext,
 			);

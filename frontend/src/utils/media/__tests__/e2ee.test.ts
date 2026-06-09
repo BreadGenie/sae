@@ -297,16 +297,17 @@ describe("Chain derivation (T1.3)", () => {
 });
 
 describe("Frame header (T1.4)", () => {
-	it("encoded header is 24 bytes", () => {
+	it("encoded header is 28 bytes", () => {
 		const header = {
 			senderId: 0x12345678,
 			generation: 0x1abcdef0,
 			frameType: "key",
 			keyVersion: 0xdeadbeef,
+			epochNumber: 4,
 			iv: new Uint8Array(12).fill(0xab),
 		};
 		const encoded = encodeFrameHeader(header);
-		expect(encoded.length).toBe(24);
+		expect(encoded.length).toBe(28);
 	});
 
 	it("round-trips all fields", () => {
@@ -315,6 +316,7 @@ describe("Frame header (T1.4)", () => {
 			generation: 0x1abcdef0,
 			frameType: "key",
 			keyVersion: 0xdeadbeef,
+			epochNumber: 4,
 			iv: new Uint8Array(12).fill(0xab),
 		};
 		const encoded = encodeFrameHeader(original);
@@ -323,6 +325,7 @@ describe("Frame header (T1.4)", () => {
 		expect(decoded?.generation).toBe(0x1abcdef0);
 		expect(decoded?.frameType).toBe("key");
 		expect(decoded?.keyVersion).toBe(0xdeadbeef);
+		expect(decoded?.epochNumber).toBe(4);
 		expect(Buffer.from(decoded?.iv).toString("hex")).toBe("ab".repeat(12));
 	});
 
@@ -332,6 +335,7 @@ describe("Frame header (T1.4)", () => {
 			generation: 7,
 			frameType: "delta",
 			keyVersion: 1,
+			epochNumber: 1,
 			iv: new Uint8Array(12),
 		});
 		const decoded = decodeFrameHeader(encoded);
@@ -339,8 +343,8 @@ describe("Frame header (T1.4)", () => {
 		expect(decoded?.frameType).toBe("delta");
 	});
 
-	it("rejects frames shorter than 24 bytes", () => {
-		const decoded = decodeFrameHeader(new Uint8Array(23));
+	it("rejects frames shorter than 28 bytes", () => {
+		const decoded = decodeFrameHeader(new Uint8Array(27));
 		expect(decoded).toBeNull();
 	});
 
@@ -349,6 +353,7 @@ describe("Frame header (T1.4)", () => {
 			senderId: 1,
 			generation: 0,
 			keyVersion: 0,
+			epochNumber: 2,
 			iv: new Uint8Array(12),
 		});
 		expect(encoded[0]).toBe(1);

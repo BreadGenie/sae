@@ -13,6 +13,7 @@ import type {
 import { loggers } from '../utils/logger';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
+import { E2EEEpochRelay } from './E2EEEpochRelay';
 import { E2EEHandshakeRelay } from './E2EEHandshakeRelay';
 
 type TypedSocket = Socket<
@@ -33,6 +34,7 @@ export class SocketHandlerManager {
 	private hostOnlyChat: Record<string, boolean> = {};
 	private nextSenderIdByRoom: Map<string, number> = new Map(); // roomId -> next senderId
 	private participantToSender: Map<string, Map<string, number>> = new Map(); // roomId -> (participantId -> senderId)
+	private e2eeEpochRelay: E2EEEpochRelay;
 	private e2eeHandshakeRelay: E2EEHandshakeRelay;
 
 	constructor(
@@ -44,6 +46,11 @@ export class SocketHandlerManager {
 		this.mediasoup = mediasoup;
 		this.authManager = authManager;
 		this.rateLimiter = new RateLimiter();
+		this.e2eeEpochRelay = new E2EEEpochRelay(
+			io,
+			this.fullAccessSockets,
+			this.participantToSender,
+		);
 		this.e2eeHandshakeRelay = new E2EEHandshakeRelay(
 			io,
 			this.fullAccessSockets,
@@ -271,6 +278,7 @@ export class SocketHandlerManager {
 			this.setupChatHandlers(socket);
 			this.setupReactionHandlers(socket);
 			this.setupRaiseHandHandlers(socket);
+			this.e2eeEpochRelay.setup(socket);
 			this.e2eeHandshakeRelay.setup(socket);
 			this.setupDisconnectHandlers(socket);
 			this.setupErrorHandlers(socket);

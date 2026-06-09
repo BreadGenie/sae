@@ -18,9 +18,9 @@ import {
 } from "../frameCodec";
 
 describe("frameCodec: constants", () => {
-	it("exports the on-wire header shape (24-byte fixed + 64-byte signature)", () => {
-		expect(FRAME_HEADER_FIXED_SIZE).toBe(24);
-		expect(FRAME_HEADER_TOTAL).toBe(88);
+	it("exports the on-wire header shape (28-byte fixed + 64-byte signature)", () => {
+		expect(FRAME_HEADER_FIXED_SIZE).toBe(28);
+		expect(FRAME_HEADER_TOTAL).toBe(92);
 		expect(FRAME_MAGIC.length).toBe(4);
 		expect(FRAME_MAGIC[0]).toBe(0x4d); // M
 		expect(FRAME_MAGIC[1]).toBe(0x45); // E
@@ -40,12 +40,13 @@ describe("frameCodec: constants", () => {
 });
 
 describe("frameCodec: header encode/decode", () => {
-	it("round-trips senderId, generation, keyVersion, and iv (keyframe)", () => {
+	it("round-trips senderId, generation, keyVersion, epochNumber, and iv (keyframe)", () => {
 		const header = {
 			senderId: 0x12345678,
 			generation: 42,
 			frameType: "key" as const,
 			keyVersion: 7,
+			epochNumber: 3,
 			iv: new Uint8Array(12).fill(0xab),
 		};
 		const encoded = encodeFrameHeader(header);
@@ -56,6 +57,7 @@ describe("frameCodec: header encode/decode", () => {
 		expect(decoded?.generation).toBe(42);
 		expect(decoded?.frameType).toBe("key");
 		expect(decoded?.keyVersion).toBe(7);
+		expect(decoded?.epochNumber).toBe(3);
 		expect(Array.from(decoded?.iv ?? [])).toEqual(
 			Array.from(new Uint8Array(12).fill(0xab)),
 		);
@@ -67,6 +69,7 @@ describe("frameCodec: header encode/decode", () => {
 			generation: 7,
 			frameType: "delta" as const,
 			keyVersion: 1,
+			epochNumber: 1,
 			iv: new Uint8Array(12),
 		};
 		const encoded = encodeFrameHeader(header);
@@ -75,20 +78,22 @@ describe("frameCodec: header encode/decode", () => {
 		expect(decoded?.generation).toBe(7);
 	});
 
-	it("rejects frames shorter than 24 bytes", () => {
-		expect(decodeFrameHeader(new Uint8Array(23))).toBeNull();
+	it("rejects frames shorter than 28 bytes", () => {
+		expect(decodeFrameHeader(new Uint8Array(27))).toBeNull();
 	});
 
-	it("uses little-endian byte order for the three uint32 fields", () => {
+	it("uses little-endian byte order for the four uint32 fields", () => {
 		const header = {
 			senderId: 1,
 			generation: 0,
 			keyVersion: 0,
+			epochNumber: 2,
 			iv: new Uint8Array(12),
 		};
 		const encoded = encodeFrameHeader(header);
-		const view = new DataView(encoded.buffer, encoded.byteOffset, 4);
+		const view = new DataView(encoded.buffer, encoded.byteOffset, 16);
 		expect(view.getUint32(0, true)).toBe(1);
+		expect(view.getUint32(12, true)).toBe(2);
 	});
 });
 

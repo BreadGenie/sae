@@ -7,6 +7,7 @@
 // no caller reads are removed from the return type.
 
 import { onUnmounted, type Ref } from "vue";
+import { E2EEEpochSignalingController } from "../utils/media/E2EEEpochSignalingController";
 import { E2EEHandshakeController } from "../utils/media/E2EEHandshakeController";
 import type { SFUClient } from "../utils/SFUClient";
 import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
@@ -56,6 +57,13 @@ export function useE2EEConnectionHandshake(
 		openJoinerEnvelope,
 		buildHostEnvelope,
 	});
+	const epochSignalingController = new E2EEEpochSignalingController({
+		meetingId,
+		sfuClient,
+		currentUser,
+		isCurrentTabHost: deps.isCurrentTabHost,
+		getDeviceIdentity,
+	});
 
 	controller.onHandshakeComplete = (detail) => {
 		controller.setMeetingContext(
@@ -67,13 +75,20 @@ export function useE2EEConnectionHandshake(
 
 	// ── pagehide ──────────────────────────────────────────────────────
 	let pagehideHandlerAttached = false;
-	const onPageHide = () => controller.teardownForDisconnect();
+	const teardownForDisconnect = () => {
+		epochSignalingController.clearPendingKeyPackages();
+		controller.teardownForDisconnect();
+	};
+	const onPageHide = () => teardownForDisconnect();
 
 	// ── event routing ─────────────────────────────────────────────────
 	let realtimeListenersAttached = false;
 
 	const handleHandshakeMessageBound = (data: unknown) =>
 		controller.handleHandshakeMessage(data);
+	const handleEpochMessageBound = (data: unknown) => {
+		void epochSignalingController.handleEpochEnvelope(data);
+	};
 	const handleSFUReconnectBound = () => controller.handleSFUReconnect();
 	const handleHostE2EEKeySetBound = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
@@ -100,6 +115,7 @@ export function useE2EEConnectionHandshake(
 
 	function setupRealtimeEventListeners(): void {
 		if (realtimeListenersAttached) return;
+		sfuClient.on("e2ee:epoch", handleEpochMessageBound);
 		sfuClient.on("e2ee:handshake", handleHandshakeMessageBound);
 		sfuClient.on("reconnect", handleSFUReconnectBound);
 		document.addEventListener(
@@ -119,6 +135,7 @@ export function useE2EEConnectionHandshake(
 
 	function teardownRealtimeEventListeners(): void {
 		if (!realtimeListenersAttached) return;
+		sfuClient.off("e2ee:epoch");
 		sfuClient.off("e2ee:handshake");
 		sfuClient.off("reconnect");
 		document.removeEventListener(
@@ -152,8 +169,7 @@ export function useE2EEConnectionHandshake(
 		controller.prepareJoiningHandshakeIfRequired.bind(controller);
 	const boundHandleMeetingE2EEEnabled =
 		controller.handleMeetingE2EEEnabled.bind(controller);
-	const boundTeardownForDisconnect =
-		controller.teardownForDisconnect.bind(controller);
+	const boundTeardownForDisconnect = teardownForDisconnect;
 
 	return {
 		prepareJoiningHandshakeIfRequired: boundPrepareJoiningHandshakeIfRequired,

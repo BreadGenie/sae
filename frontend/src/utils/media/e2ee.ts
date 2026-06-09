@@ -549,20 +549,21 @@ export function createEncryptionTransformStream(
 			try {
 				const { key, generation } = await chainState.nextFrameKey();
 				const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-				const encrypted = await subtle.encrypt(
-					{ name: "AES-GCM", iv },
-					key,
-					encodedFrame.data,
-				);
 				const header = encodeFrameHeader({
 					senderId: chainState.senderId,
 					generation,
 					frameType: typedFrame.type,
 					keyVersion,
+					epochNumber: keyVersion,
 					iv,
 				});
 				const headerBuf = new Uint8Array(header.length);
 				headerBuf.set(header);
+				const encrypted = await subtle.encrypt(
+					{ name: "AES-GCM", iv, additionalData: headerBuf },
+					key,
+					encodedFrame.data,
+				);
 				const cipherBytes = new Uint8Array(encrypted.byteLength);
 				cipherBytes.set(new Uint8Array(encrypted));
 				const signature = await chainState.signFramePayload(
@@ -640,6 +641,15 @@ export function createDecryptionTransformStream(
 				});
 				return;
 			}
+			if (header.epochNumber !== expectedKeyVersion) {
+				console.warn("[E2EE] decrypt: epoch mismatch", {
+					header: header.epochNumber,
+					expected: expectedKeyVersion,
+					senderId: header.senderId,
+					mediaType,
+				});
+				return;
+			}
 			const headerFixed = new Uint8Array(FRAME_HEADER_FIXED_SIZE);
 			headerFixed.set(data.subarray(headerOffset, headerEnd));
 			const signature = data.slice(headerEnd, signatureEnd);
@@ -669,7 +679,7 @@ export function createDecryptionTransformStream(
 			}
 			try {
 				const decrypted = await subtle.decrypt(
-					{ name: "AES-GCM", iv: header.iv },
+					{ name: "AES-GCM", iv: header.iv, additionalData: headerFixed },
 					result.key,
 					ciphertext,
 				);

@@ -18,6 +18,8 @@
 	"dependencies": {
 		"@emoji-mart/data": "^1.2.1",
 		"@mediapipe/selfie_segmentation": "0.1.1671057942",
+		"@noble/ciphers": "2.1.1",
+		"@noble/hashes": "^2.2.0",
 		"@workadventure/noise-suppression": "0.0.4",
 		"emoji-mart": "^5.6.0",
 		"frappe-ui": "^0.1.271",
@@ -25,6 +27,7 @@
 		"pinia": "^3.0.4",
 		"reka-ui": "^2.6.0",
 		"socket.io-client": "^4.7.2",
+		"ts-mls": "^1.6.2",
 		"vue": "^3.5.13",
 		"vue-router": "^4.5.0"
 	},

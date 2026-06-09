@@ -3,6 +3,7 @@
 
 import { frappeRequest } from "frappe-ui";
 import { normalizeCodecStrategy } from "./media/codecStrategy";
+import type { E2eeEpochEnvelope } from "./media/E2EEEpochSignaling";
 import { getE2EETransformCapability } from "./media/e2ee";
 import type { SignalChannel } from "./media/SignalChannel";
 
@@ -759,6 +760,10 @@ export class SFUClient {
 
 	sendIceCandidate(targetUser: unknown, signalData: unknown): void {
 		this.sendEvent("ice_candidate", { targetUser, signalData });
+	}
+
+	sendE2EEEpochEnvelope(envelope: E2eeEpochEnvelope): void {
+		this.sendEvent("e2ee:epoch", envelope);
 	}
 
 	// ==================== MEDIA CONTROL ====================
