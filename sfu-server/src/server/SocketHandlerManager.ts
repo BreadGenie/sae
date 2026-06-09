@@ -319,7 +319,6 @@ export class SocketHandlerManager {
 					e2ee,
 				});
 				callback({ success: true, senderId: socket.senderId });
-				this.requestEpochKeyPackageAfterJoin(socket, roomId, socket.userId);
 			} catch (error) {
 				loggers.socketHandler.error(
 					'Error joining room: %s',
@@ -481,25 +480,6 @@ export class SocketHandlerManager {
 		});
 	}
 
-	private requestEpochKeyPackageAfterJoin(
-		socket: Socket,
-		roomId: string,
-		participantId: string,
-	): void {
-		if (socket.scope !== 'full' || !socket.e2eeRequired) return;
-		const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
-		if (socket.isHost) {
-			this.e2eeEpochRelay.requestKeyPackages(roomId, epochNumber, 'enable');
-			return;
-		}
-		this.e2eeEpochRelay.requestKeyPackageFromParticipant(
-			roomId,
-			participantId,
-			epochNumber,
-			'join',
-		);
-	}
-
 	private async handleJoinRoom(
 		socket: Socket,
 		data: {
@@ -590,6 +570,24 @@ export class SocketHandlerManager {
 					userData.audio_enabled,
 					userData.video_enabled,
 				);
+
+				if (socket.e2eeRequired) {
+					const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
+					if (socket.isHost) {
+						this.e2eeEpochRelay.requestKeyPackages(
+							roomId,
+							epochNumber,
+							'enable',
+						);
+					} else {
+						this.e2eeEpochRelay.requestKeyPackageFromParticipant(
+							roomId,
+							participantId,
+							epochNumber,
+							'join',
+						);
+					}
+				}
 			} else if (socket.scope === 'presence-preview') {
 				if (!this.previewSockets.has(roomId)) {
 					this.previewSockets.set(roomId, new Set());
