@@ -72,6 +72,18 @@ export class E2EEEpochRelay {
 		});
 	}
 
+	requestKeyPackages(
+		roomId: string,
+		epochNumber: number,
+		reason: 'enable' | 'join' | 'reconnect',
+	): void {
+		this.emitToFullAccessParticipants(roomId, {
+			type: 'key-package-request',
+			epochNumber,
+			reason,
+		});
+	}
+
 	private handle(socket: Socket, payload: E2eeEpochPayload): void {
 		try {
 			if (socket.scope !== 'full') return;
@@ -151,6 +163,38 @@ export class E2EEEpochRelay {
 			fromSenderId,
 			epochNumber: payload.epochNumber,
 			keyPackage: payload.keyPackage,
+		});
+		this.requestCommitFromHost(roomId, fromSenderId, payload.epochNumber);
+	}
+
+	private requestCommitFromHost(
+		roomId: string,
+		joiningSenderId: number,
+		epochNumber: number,
+	): void {
+		const hostSocket = this.findHostSocket(roomId);
+		if (
+			hostSocket?.senderId === undefined ||
+			hostSocket.senderId === joiningSenderId
+		)
+			return;
+		const nextEpochNumber = epochNumber + 1;
+		const membershipDeltaId = `add-${joiningSenderId}-to-${nextEpochNumber}`;
+		const membershipDeltaHash = Buffer.from(
+			JSON.stringify({
+				type: 'add',
+				senderId: joiningSenderId,
+				nextEpochNumber,
+			}),
+		).toString('base64');
+		this.emitToTarget(roomId, hostSocket.participantId ?? '', {
+			type: 'commit-request',
+			epochNumber,
+			nextEpochNumber,
+			membershipDeltaId,
+			membershipDeltaHash,
+			rosterHash: membershipDeltaHash,
+			committerSenderId: hostSocket.senderId,
 		});
 	}
 
@@ -399,6 +443,25 @@ export class E2EEEpochRelay {
 				| TypedSocket
 				| undefined;
 			if (socket && socket.participantId === participantId) {
+				return socket;
+			}
+		}
+		return null;
+	}
+
+	private findHostSocket(roomId: string): TypedSocket | null {
+		const socketsInRoom = this.io.sockets.adapter.rooms.get(roomId);
+		if (!socketsInRoom) return null;
+
+		for (const socketId of socketsInRoom) {
+			const socket = this.io.sockets.sockets.get(socketId) as
+				| TypedSocket
+				| undefined;
+			if (
+				socket?.isHost &&
+				socket.participantId &&
+				this.fullAccessSockets.get(roomId)?.has(socket.id)
+			) {
 				return socket;
 			}
 		}

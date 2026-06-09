@@ -583,6 +583,14 @@ export class SocketHandlerManager {
 					userData.audio_enabled,
 					userData.video_enabled,
 				);
+
+				if (socket.e2eeRequired) {
+					this.e2eeEpochRelay.requestKeyPackages(
+						roomId,
+						1,
+						socket.isHost ? 'enable' : 'join',
+					);
+				}
 			} else if (socket.scope === 'presence-preview') {
 				if (!this.previewSockets.has(roomId)) {
 					this.previewSockets.set(roomId, new Set());
