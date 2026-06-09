@@ -8,7 +8,6 @@ import {
 
 function createController(options: { isHost?: boolean } = {}) {
 	const sendE2EEEpochEnvelope = vi.fn();
-	const onEpochInstalled = vi.fn();
 	const generateKeyPackage = vi.fn(async () => ({
 		publicPackage: { id: "public-package" } as never,
 		privatePackage: { id: "private-package" } as never,
@@ -54,7 +53,6 @@ function createController(options: { isHost?: boolean } = {}) {
 			currentUser: shallowRef({ user_id: "user-1" }),
 		} as never,
 		isCurrentTabHost: shallowRef(Boolean(options.isHost)),
-		onEpochInstalled,
 		getDeviceIdentity: vi.fn(async () => ({
 			deviceId: "device-1",
 			signingPublicKey: "signing-public-key",
@@ -80,7 +78,6 @@ function createController(options: { isHost?: boolean } = {}) {
 		generateKeyPackage,
 		addMember,
 		joinFromWelcome,
-		onEpochInstalled,
 	};
 }
 
@@ -161,12 +158,8 @@ describe("E2EEEpochSignalingController", () => {
 	});
 
 	it("joins from a targeted welcome and acknowledges the installed epoch", async () => {
-		const {
-			controller,
-			sendE2EEEpochEnvelope,
-			joinFromWelcome,
-			onEpochInstalled,
-		} = createController();
+		const { controller, sendE2EEEpochEnvelope, joinFromWelcome } =
+			createController();
 
 		await controller.handleEpochEnvelope({
 			type: "key-package-request",
@@ -184,7 +177,6 @@ describe("E2EEEpochSignalingController", () => {
 		});
 
 		expect(joinFromWelcome).toHaveBeenCalled();
-		expect(onEpochInstalled).toHaveBeenCalledOnce();
 		expect(controller.getPendingKeyPackage(1)).toBeNull();
 		expect(sendE2EEEpochEnvelope).toHaveBeenCalledWith({
 			type: "ack",

@@ -31,7 +31,6 @@ interface E2EEEpochSignalingControllerDeps {
 	currentUser: CurrentUser;
 	isCurrentTabHost: Ref<boolean>;
 	getDeviceIdentity: () => Promise<DeviceIdentity>;
-	onEpochInstalled?: () => void;
 	epochProtocolProvider?: EpochProtocolProvider;
 }
 
@@ -155,7 +154,6 @@ export class E2EEEpochSignalingController {
 			nextEpoch.epochNumber,
 			identity.signingKeyPair.privateKey,
 		);
-		this.deps.onEpochInstalled?.();
 		await this.syncSenderSigningPubs(nextEpoch.state);
 
 		const fromSenderId = this.deps.sfuClient.getOwnSenderId();
@@ -219,7 +217,6 @@ export class E2EEEpochSignalingController {
 			nextEpoch.epochNumber,
 			identity.signingKeyPair.privateKey,
 		);
-		this.deps.onEpochInstalled?.();
 		await this.syncSenderSigningPubs(nextEpoch.state);
 
 		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
@@ -266,7 +263,6 @@ export class E2EEEpochSignalingController {
 			nextEpoch.epochNumber,
 			identity.signingKeyPair.privateKey,
 		);
-		this.deps.onEpochInstalled?.();
 		await this.syncSenderSigningPubs(nextEpoch.state);
 		this.pendingKeyPackagesByEpoch.delete(welcomeEnvelope.epochNumber - 1);
 
