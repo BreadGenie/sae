@@ -16,6 +16,7 @@ import {
 	mlsExporter,
 	type PrivateKeyPackage,
 	type Proposal,
+	processPublicMessage,
 	type RatchetTree,
 	type Welcome,
 	zeroOutUint8Array,
@@ -32,6 +33,7 @@ type EpochMemberInput = {
 	userId: string;
 	deviceId: string;
 	senderId: number;
+	signingPubKey: string;
 };
 
 type EpochStateResult = {
@@ -68,6 +70,10 @@ export interface EpochProtocolProvider {
 		keyPackage: KeyPackage,
 		privateKeyPackage: PrivateKeyPackage,
 		ratchetTree?: RatchetTree,
+	): Promise<EpochStateResult>;
+	processCommit(
+		state: ClientState,
+		commit: MLSMessage,
 	): Promise<EpochStateResult>;
 	exportMeetingSecret(state: ClientState): Promise<Uint8Array<ArrayBuffer>>;
 }
@@ -167,6 +173,24 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		return this.buildStateResult(state);
 	}
 
+	async processCommit(
+		state: ClientState,
+		commit: MLSMessage,
+	): Promise<EpochStateResult> {
+		if (commit.wireformat !== "mls_public_message") {
+			throw new Error("Expected mls_public_message for commit processing");
+		}
+		const cipherSuite = await this.getCipherSuite();
+		const result = await processPublicMessage(
+			state,
+			commit.publicMessage,
+			emptyPskIndex,
+			cipherSuite,
+		);
+		result.consumed.forEach(zeroOutUint8Array);
+		return this.buildStateResult(result.newState);
+	}
+
 	async exportMeetingSecret(
 		state: ClientState,
 	): Promise<Uint8Array<ArrayBuffer>> {
@@ -208,6 +232,7 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 					userId: input.userId,
 					deviceId: input.deviceId,
 					senderId: input.senderId,
+					signingPubKey: input.signingPubKey,
 				}),
 			),
 		};

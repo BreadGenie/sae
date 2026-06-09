@@ -1,3 +1,5 @@
+import { getGroupMembers } from "ts-mls/clientState.js";
+import { decodeMlsMessage } from "ts-mls/message.js";
 import type { Ref } from "vue";
 import type { CurrentUser } from "../../composables/useCurrentUser";
 import type { SFUClient } from "../SFUClient";
@@ -69,6 +71,8 @@ export class E2EEEpochSignalingController {
 				});
 				return;
 			case "commit":
+				await this.processCommit(data);
+				return;
 			case "ack":
 			case "resync-request":
 				return;
@@ -100,6 +104,7 @@ export class E2EEEpochSignalingController {
 			userId,
 			deviceId: identity.deviceId,
 			senderId,
+			signingPubKey: identity.signingPublicKey,
 		});
 		this.pendingKeyPackagesByEpoch.set(epochNumber, keyPackage);
 
@@ -149,6 +154,7 @@ export class E2EEEpochSignalingController {
 			nextEpoch.epochNumber,
 			identity.signingKeyPair.privateKey,
 		);
+		await this.syncSenderSigningPubs(nextEpoch.state);
 
 		const fromSenderId = this.deps.sfuClient.getOwnSenderId();
 		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
@@ -177,6 +183,50 @@ export class E2EEEpochSignalingController {
 			mlsWelcome: bufferToBase64(
 				this.epochProtocolProvider.encodeWelcome(nextEpoch.welcome),
 			),
+		});
+	}
+
+	private async processCommit(
+		commitEnvelope: Extract<E2eeEpochEnvelope, { type: "commit" }>,
+	): Promise<void> {
+		const activeEpoch = getActiveEpochState();
+		if (
+			!activeEpoch ||
+			activeEpoch.epochNumber !== commitEnvelope.previousEpochNumber
+		)
+			return;
+
+		const [decodedCommit] = decodeMlsMessage(
+			bytesFromBase64(commitEnvelope.mlsCommit),
+			0,
+		);
+		const nextEpoch = await this.epochProtocolProvider.processCommit(
+			activeEpoch.state,
+			decodedCommit,
+		);
+		if (nextEpoch.epochNumber !== commitEnvelope.epochNumber) return;
+
+		const identity = await this.deps.getDeviceIdentity();
+		installActiveEpochState({
+			epochNumber: nextEpoch.epochNumber,
+			state: nextEpoch.state,
+			meetingSecret: nextEpoch.meetingSecret,
+		});
+		E2EEMeeting.instance.setMeetingContext(
+			nextEpoch.meetingSecret,
+			nextEpoch.epochNumber,
+			identity.signingKeyPair.privateKey,
+		);
+		await this.syncSenderSigningPubs(nextEpoch.state);
+
+		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
+		const fromSenderId = this.deps.sfuClient.getOwnSenderId();
+		if (!fromParticipantId || fromSenderId === null) return;
+		this.deps.sfuClient.sendE2EEEpochEnvelope({
+			type: "ack",
+			fromParticipantId,
+			fromSenderId,
+			epochNumber: nextEpoch.epochNumber,
 		});
 	}
 
@@ -213,6 +263,7 @@ export class E2EEEpochSignalingController {
 			nextEpoch.epochNumber,
 			identity.signingKeyPair.privateKey,
 		);
+		await this.syncSenderSigningPubs(nextEpoch.state);
 		this.pendingKeyPackagesByEpoch.delete(welcomeEnvelope.epochNumber - 1);
 
 		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
@@ -223,6 +274,38 @@ export class E2EEEpochSignalingController {
 			fromSenderId: ownSenderId,
 			epochNumber: nextEpoch.epochNumber,
 		});
+	}
+
+	private async syncSenderSigningPubs(
+		state: import("ts-mls").ClientState,
+	): Promise<void> {
+		let members: import("ts-mls").LeafNode[];
+		try {
+			members = getGroupMembers(state);
+		} catch {
+			return;
+		}
+		for (const leaf of members) {
+			if (leaf.credential.credentialType !== "basic") continue;
+			const identity = JSON.parse(
+				new TextDecoder().decode(leaf.credential.identity),
+			);
+			if (
+				typeof identity.senderId !== "number" ||
+				typeof identity.signingPubKey !== "string"
+			)
+				continue;
+			if (E2EEMeeting.instance.hasSenderSigningPub(identity.senderId)) continue;
+			const rawKey = bytesFromBase64(identity.signingPubKey);
+			const cryptoKey = await crypto.subtle.importKey(
+				"raw",
+				rawKey as BufferSource,
+				"Ed25519",
+				true,
+				["verify"],
+			);
+			E2EEMeeting.instance.setSenderSigningPub(identity.senderId, cryptoKey);
+		}
 	}
 
 	private findJoiningKeyPackage(epochNumber: number): {

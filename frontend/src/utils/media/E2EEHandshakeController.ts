@@ -111,6 +111,7 @@ export class E2EEHandshakeController {
 			userId: this.ownParticipantId(),
 			deviceId: identity.deviceId,
 			senderId: this.sfuClient.getOwnSenderId?.() ?? 0,
+			signingPubKey: identity.signingPublicKey,
 		});
 		this.keyVersion = genesis.epochNumber;
 		this.meetingSecret = genesis.meetingSecret;

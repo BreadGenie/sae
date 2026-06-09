@@ -68,6 +68,7 @@ function createController(options: { isHost?: boolean } = {}) {
 			decodeWelcome,
 			addMember,
 			joinFromWelcome,
+			processCommit: vi.fn(),
 			exportMeetingSecret: vi.fn(),
 		},
 	});
@@ -96,6 +97,7 @@ describe("E2EEEpochSignalingController", () => {
 			userId: "user-1",
 			deviceId: "device-1",
 			senderId: 7,
+			signingPubKey: "signing-public-key",
 		});
 		expect(sendE2EEEpochEnvelope).toHaveBeenCalledWith({
 			type: "key-package",

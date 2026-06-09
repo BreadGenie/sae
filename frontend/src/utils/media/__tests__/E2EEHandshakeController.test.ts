@@ -36,6 +36,7 @@ function createController() {
 			decodeWelcome: vi.fn(),
 			addMember: vi.fn(),
 			joinFromWelcome: vi.fn(),
+			processCommit: vi.fn(),
 			exportMeetingSecret: vi.fn(),
 		},
 	});

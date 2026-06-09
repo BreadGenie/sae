@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import { TsMlsEpochProtocolProvider } from "../EpochProtocolProvider";
 
 describe("TsMlsEpochProtocolProvider", () => {
+	const signingPubKey =
+		"MCowBQYDK2VwAyEAh+OJTqK5xh0L0d3CjGqC7qh0IqR2rQXv5hOv7yvVNnQ=";
+
 	it("creates a genesis epoch and exports a stable 32-byte meeting secret", async () => {
 		const provider = new TsMlsEpochProtocolProvider();
 
@@ -11,6 +14,7 @@ describe("TsMlsEpochProtocolProvider", () => {
 			userId: "alice@example.com",
 			deviceId: "alice-laptop",
 			senderId: 7,
+			signingPubKey,
 		});
 
 		expect(genesis.epochNumber).toBe(1);
@@ -31,12 +35,14 @@ describe("TsMlsEpochProtocolProvider", () => {
 			userId: "alice@example.com",
 			deviceId: "alice-laptop",
 			senderId: 7,
+			signingPubKey,
 		});
 		const bobKeyPackage = await provider.generateKeyPackage({
 			groupId: "meeting-vscl-sabe-ykvp",
 			userId: "bob@example.com",
 			deviceId: "bob-phone",
 			senderId: 9,
+			signingPubKey,
 		});
 
 		const addBob = await provider.addMember(
