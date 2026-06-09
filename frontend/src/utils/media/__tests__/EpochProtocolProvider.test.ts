@@ -1,4 +1,5 @@
 import { decodeGroupState } from "ts-mls";
+import { getGroupMembers } from "ts-mls/clientState.js";
 import { describe, expect, it } from "vitest";
 import { TsMlsEpochProtocolProvider } from "../EpochProtocolProvider";
 
@@ -20,6 +21,14 @@ describe("TsMlsEpochProtocolProvider", () => {
 		expect(genesis.epochNumber).toBe(1);
 		expect(genesis.encodedState.byteLength).toBeGreaterThan(0);
 		expect(genesis.meetingSecret.byteLength).toBe(32);
+
+		const credential = getGroupMembers(genesis.state)[0]?.credential;
+		expect(credential?.credentialType).toBe("basic");
+		if (credential?.credentialType === "basic") {
+			expect(JSON.parse(new TextDecoder().decode(credential.identity))).toEqual(
+				expect.objectContaining({ signingPubKey }),
+			);
+		}
 
 		const reExportedSecret = await provider.exportMeetingSecret(genesis.state);
 		expect([...reExportedSecret]).toEqual([...genesis.meetingSecret]);

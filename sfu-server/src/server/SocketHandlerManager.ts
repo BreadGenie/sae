@@ -219,6 +219,7 @@ export class SocketHandlerManager {
 		delete this.hostOnlyChat[roomId];
 		this.nextSenderIdByRoom.delete(roomId);
 		this.participantToSender.delete(roomId);
+		this.e2eeEpochRelay.clearRoom(roomId);
 		this.mediasoup.closeRoom(roomId);
 	}
 
@@ -571,9 +572,10 @@ export class SocketHandlerManager {
 				);
 
 				if (socket.e2eeRequired) {
+					const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
 					this.e2eeEpochRelay.requestKeyPackages(
 						roomId,
-						1,
+						epochNumber,
 						socket.isHost ? 'enable' : 'join',
 					);
 				}

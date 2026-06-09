@@ -55,6 +55,7 @@ export class E2EEEpochRelay {
 		string,
 		Map<number, RetainedEpochMaterial>
 	>();
+	private currentEpochByRoom = new Map<string, number>();
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -82,6 +83,15 @@ export class E2EEEpochRelay {
 			epochNumber,
 			reason,
 		});
+	}
+
+	getCurrentEpochNumber(roomId: string): number {
+		return this.currentEpochByRoom.get(roomId) ?? 1;
+	}
+
+	clearRoom(roomId: string): void {
+		this.currentEpochByRoom.delete(roomId);
+		this.retainedMaterial.delete(roomId);
 	}
 
 	private handle(socket: Socket, payload: E2eeEpochPayload): void {
@@ -350,6 +360,10 @@ export class E2EEEpochRelay {
 		roomId: string,
 		commit: Extract<E2eeEpochEnvelope, { type: 'commit' }>,
 	): void {
+		const currentEpoch = this.getCurrentEpochNumber(roomId);
+		if (commit.epochNumber > currentEpoch) {
+			this.currentEpochByRoom.set(roomId, commit.epochNumber);
+		}
 		this.getRetainedEpoch(roomId, commit.epochNumber).commit = commit;
 		this.pruneRetainedMaterial(roomId);
 	}
