@@ -27,6 +27,7 @@ export type E2eeEpochCommitRequest = {
 	nextEpochNumber: number;
 	membershipDeltaId: string;
 	membershipDeltaHash: string;
+	rosterHash: string;
 	committerSenderId: number;
 };
 

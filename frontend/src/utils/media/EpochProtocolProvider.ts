@@ -12,6 +12,7 @@ import {
 	getCiphersuiteImpl,
 	joinGroup,
 	type KeyPackage,
+	type MLSMessage,
 	mlsExporter,
 	type PrivateKeyPackage,
 	type Proposal,
@@ -19,7 +20,9 @@ import {
 	type Welcome,
 	zeroOutUint8Array,
 } from "ts-mls";
-import { encodeKeyPackage } from "ts-mls/keyPackage.js";
+import { decodeKeyPackage, encodeKeyPackage } from "ts-mls/keyPackage.js";
+import { encodeMlsMessage } from "ts-mls/message.js";
+import { encodeWelcome } from "ts-mls/welcome.js";
 
 const MEET_MLS_CIPHERSUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const MEET_MLS_MEETING_SECRET_LABEL = "meet-e2ee|meeting-secret|v1";
@@ -44,6 +47,7 @@ type EpochKeyPackage = {
 };
 
 type AddMemberResult = EpochStateResult & {
+	commit: MLSMessage;
 	welcome: Welcome;
 };
 
@@ -51,6 +55,9 @@ export interface EpochProtocolProvider {
 	createGenesisEpoch(input: EpochMemberInput): Promise<EpochStateResult>;
 	generateKeyPackage(input: EpochMemberInput): Promise<EpochKeyPackage>;
 	encodeKeyPackage(keyPackage: KeyPackage): Uint8Array;
+	decodeKeyPackage(encoded: Uint8Array): KeyPackage;
+	encodeCommit(commit: MLSMessage): Uint8Array;
+	encodeWelcome(welcome: Welcome): Uint8Array;
 	addMember(
 		state: ClientState,
 		joiningMember: KeyPackage,
@@ -93,6 +100,22 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		return encodeKeyPackage(keyPackage);
 	}
 
+	decodeKeyPackage(encoded: Uint8Array): KeyPackage {
+		const decoded = decodeKeyPackage(encoded, 0);
+		if (!decoded) {
+			throw new Error("Invalid MLS key package");
+		}
+		return decoded[0];
+	}
+
+	encodeCommit(commit: MLSMessage): Uint8Array {
+		return encodeMlsMessage(commit);
+	}
+
+	encodeWelcome(welcome: Welcome): Uint8Array {
+		return encodeWelcome(welcome);
+	}
+
 	async addMember(
 		state: ClientState,
 		joiningMember: KeyPackage,
@@ -112,6 +135,7 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		}
 		return {
 			...(await this.buildStateResult(commit.newState)),
+			commit: commit.commit,
 			welcome: commit.welcome,
 		};
 	}

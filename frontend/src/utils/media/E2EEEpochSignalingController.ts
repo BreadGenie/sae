@@ -3,10 +3,15 @@ import type { CurrentUser } from "../../composables/useCurrentUser";
 import type { SFUClient } from "../SFUClient";
 import type { E2eeEpochEnvelope } from "./E2EEEpochSignaling";
 import {
+	getActiveEpochState,
+	installActiveEpochState,
+} from "./E2EEEpochStateStore";
+import { E2EEMeeting } from "./E2EEMeeting";
+import {
 	type EpochProtocolProvider,
 	TsMlsEpochProtocolProvider,
 } from "./EpochProtocolProvider";
-import { bufferToBase64 } from "./e2eePrimitives";
+import { bufferToBase64, bytesFromBase64 } from "./e2eePrimitives";
 
 type DeviceIdentity = {
 	deviceId: string;
@@ -34,6 +39,10 @@ export class E2EEEpochSignalingController {
 		number,
 		PendingKeyPackage
 	>();
+	private readonly receivedKeyPackagesBySenderId = new Map<
+		number,
+		{ epochNumber: number; participantId: string; keyPackage: string }
+	>();
 
 	constructor(deps: E2EEEpochSignalingControllerDeps) {
 		this.deps = deps;
@@ -49,14 +58,19 @@ export class E2EEEpochSignalingController {
 				return;
 			case "commit-request":
 				if (this.shouldAuthorCommit(data.committerSenderId)) {
-					// Commit authoring needs SFU membership deltas and roster hashing.
-					// This tracer only publishes key packages for the next slice.
+					await this.authorAddMemberCommit(data);
 				}
+				return;
+			case "key-package":
+				this.receivedKeyPackagesBySenderId.set(data.fromSenderId, {
+					epochNumber: data.epochNumber,
+					participantId: data.fromParticipantId,
+					keyPackage: data.keyPackage,
+				});
 				return;
 			case "commit":
 			case "welcome":
 			case "ack":
-			case "key-package":
 			case "resync-request":
 				return;
 		}
@@ -68,6 +82,7 @@ export class E2EEEpochSignalingController {
 
 	clearPendingKeyPackages(): void {
 		this.pendingKeyPackagesByEpoch.clear();
+		this.receivedKeyPackagesBySenderId.clear();
 	}
 
 	private async publishKeyPackage(epochNumber: number): Promise<void> {
@@ -102,6 +117,83 @@ export class E2EEEpochSignalingController {
 			this.deps.isCurrentTabHost.value &&
 			this.deps.sfuClient.getOwnSenderId() === committerSenderId
 		);
+	}
+
+	private async authorAddMemberCommit(
+		request: Extract<E2eeEpochEnvelope, { type: "commit-request" }>,
+	): Promise<void> {
+		const activeEpoch = getActiveEpochState();
+		if (!activeEpoch || activeEpoch.epochNumber !== request.epochNumber) return;
+
+		const joiningPackage = this.findJoiningKeyPackage(request.epochNumber);
+		if (!joiningPackage) return;
+
+		const decodedKeyPackage = this.epochProtocolProvider.decodeKeyPackage(
+			bytesFromBase64(joiningPackage.keyPackage),
+		);
+		const nextEpoch = await this.epochProtocolProvider.addMember(
+			activeEpoch.state,
+			decodedKeyPackage,
+		);
+		const identity = await this.deps.getDeviceIdentity();
+
+		installActiveEpochState({
+			epochNumber: nextEpoch.epochNumber,
+			state: nextEpoch.state,
+			meetingSecret: nextEpoch.meetingSecret,
+		});
+		E2EEMeeting.instance.setMeetingContext(
+			nextEpoch.meetingSecret,
+			nextEpoch.epochNumber,
+			identity.signingKeyPair.privateKey,
+		);
+
+		const fromSenderId = this.deps.sfuClient.getOwnSenderId();
+		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
+		if (fromSenderId === null || !fromParticipantId) return;
+
+		this.deps.sfuClient.sendE2EEEpochEnvelope({
+			type: "commit",
+			fromParticipantId,
+			fromSenderId,
+			previousEpochNumber: request.epochNumber,
+			epochNumber: nextEpoch.epochNumber,
+			membershipDeltaId: request.membershipDeltaId,
+			membershipDeltaHash: request.membershipDeltaHash,
+			rosterHash: request.rosterHash,
+			mlsCommit: bufferToBase64(
+				this.epochProtocolProvider.encodeCommit(nextEpoch.commit),
+			),
+		});
+		this.deps.sfuClient.sendE2EEEpochEnvelope({
+			type: "welcome",
+			fromParticipantId,
+			fromSenderId,
+			toParticipantId: joiningPackage.participantId,
+			toSenderId: joiningPackage.senderId,
+			epochNumber: nextEpoch.epochNumber,
+			mlsWelcome: bufferToBase64(
+				this.epochProtocolProvider.encodeWelcome(nextEpoch.welcome),
+			),
+		});
+	}
+
+	private findJoiningKeyPackage(epochNumber: number): {
+		senderId: number;
+		participantId: string;
+		keyPackage: string;
+	} | null {
+		const ownSenderId = this.deps.sfuClient.getOwnSenderId();
+		for (const [senderId, entry] of this.receivedKeyPackagesBySenderId) {
+			if (senderId === ownSenderId || entry.epochNumber !== epochNumber)
+				continue;
+			return {
+				senderId,
+				participantId: entry.participantId,
+				keyPackage: entry.keyPackage,
+			};
+		}
+		return null;
 	}
 
 	private isEpochEnvelope(value: unknown): value is E2eeEpochEnvelope {

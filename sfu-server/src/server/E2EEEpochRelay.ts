@@ -161,6 +161,7 @@ export class E2EEEpochRelay {
 			payload.nextEpochNumber !== payload.epochNumber + 1 ||
 			!this.isDeltaId(payload.membershipDeltaId) ||
 			!this.isHash(payload.membershipDeltaHash) ||
+			!this.isHash(payload.rosterHash) ||
 			!this.isSenderId(payload.committerSenderId)
 		) {
 			return;
@@ -176,6 +177,7 @@ export class E2EEEpochRelay {
 			nextEpochNumber: payload.nextEpochNumber,
 			membershipDeltaId: payload.membershipDeltaId,
 			membershipDeltaHash: payload.membershipDeltaHash,
+			rosterHash: payload.rosterHash,
 			committerSenderId: payload.committerSenderId,
 		});
 	}

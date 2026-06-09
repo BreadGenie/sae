@@ -20,6 +20,10 @@ import type { CurrentUser } from "../../composables/useCurrentUser";
 import type { MediaState } from "../../composables/useMediaState";
 import type { SFUClient } from "../SFUClient";
 import type { SFUMeetingManager } from "../SFUMeetingManager";
+import {
+	installActiveEpochState,
+	wipeActiveEpochState,
+} from "./E2EEEpochStateStore";
 import { E2EEMeeting } from "./E2EEMeeting";
 import {
 	type EpochProtocolProvider,
@@ -276,6 +280,7 @@ export class E2EEHandshakeController {
 		this.joinerSigningPublicKeyBySenderId.clear();
 		this.rejectHandshakeWaiters(new Error("E2EE runtime state was wiped"));
 		this.keyVersion = null;
+		wipeActiveEpochState();
 		E2EEMeeting.instance.wipeMeetingContext();
 	}
 
@@ -515,6 +520,11 @@ export class E2EEHandshakeController {
 		});
 		this.keyVersion = genesis.epochNumber;
 		this.meetingSecret = genesis.meetingSecret;
+		installActiveEpochState({
+			epochNumber: genesis.epochNumber,
+			state: genesis.state,
+			meetingSecret: genesis.meetingSecret,
+		});
 		this.dispatchHandshakeComplete(
 			genesis.meetingSecret,
 			identity.signingKeyPair.privateKey,
