@@ -40,6 +40,7 @@ function createController() {
 			decodeKeyPackage: vi.fn(),
 			encodeCommit: vi.fn(),
 			encodeWelcome: vi.fn(),
+			decodeWelcome: vi.fn(),
 			addMember: vi.fn(),
 			joinFromWelcome: vi.fn(),
 			exportMeetingSecret: vi.fn(),

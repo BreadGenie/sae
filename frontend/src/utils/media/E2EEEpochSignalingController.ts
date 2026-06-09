@@ -69,9 +69,11 @@ export class E2EEEpochSignalingController {
 				});
 				return;
 			case "commit":
-			case "welcome":
 			case "ack":
 			case "resync-request":
+				return;
+			case "welcome":
+				await this.processWelcome(data);
 				return;
 		}
 	}
@@ -175,6 +177,51 @@ export class E2EEEpochSignalingController {
 			mlsWelcome: bufferToBase64(
 				this.epochProtocolProvider.encodeWelcome(nextEpoch.welcome),
 			),
+		});
+	}
+
+	private async processWelcome(
+		welcomeEnvelope: Extract<E2eeEpochEnvelope, { type: "welcome" }>,
+	): Promise<void> {
+		const ownSenderId = this.deps.sfuClient.getOwnSenderId();
+		if (ownSenderId === null || welcomeEnvelope.toSenderId !== ownSenderId)
+			return;
+
+		const pendingKeyPackage = this.pendingKeyPackagesByEpoch.get(
+			welcomeEnvelope.epochNumber - 1,
+		);
+		if (!pendingKeyPackage) return;
+
+		const welcome = this.epochProtocolProvider.decodeWelcome(
+			bytesFromBase64(welcomeEnvelope.mlsWelcome),
+		);
+		const nextEpoch = await this.epochProtocolProvider.joinFromWelcome(
+			welcome,
+			pendingKeyPackage.publicPackage,
+			pendingKeyPackage.privatePackage,
+		);
+		if (nextEpoch.epochNumber !== welcomeEnvelope.epochNumber) return;
+
+		const identity = await this.deps.getDeviceIdentity();
+		installActiveEpochState({
+			epochNumber: nextEpoch.epochNumber,
+			state: nextEpoch.state,
+			meetingSecret: nextEpoch.meetingSecret,
+		});
+		E2EEMeeting.instance.setMeetingContext(
+			nextEpoch.meetingSecret,
+			nextEpoch.epochNumber,
+			identity.signingKeyPair.privateKey,
+		);
+		this.pendingKeyPackagesByEpoch.delete(welcomeEnvelope.epochNumber - 1);
+
+		const fromParticipantId = this.deps.currentUser.currentUser.value?.user_id;
+		if (!fromParticipantId) return;
+		this.deps.sfuClient.sendE2EEEpochEnvelope({
+			type: "ack",
+			fromParticipantId,
+			fromSenderId: ownSenderId,
+			epochNumber: nextEpoch.epochNumber,
 		});
 	}
 

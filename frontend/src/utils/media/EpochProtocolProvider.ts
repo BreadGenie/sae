@@ -22,7 +22,7 @@ import {
 } from "ts-mls";
 import { decodeKeyPackage, encodeKeyPackage } from "ts-mls/keyPackage.js";
 import { encodeMlsMessage } from "ts-mls/message.js";
-import { encodeWelcome } from "ts-mls/welcome.js";
+import { decodeWelcome, encodeWelcome } from "ts-mls/welcome.js";
 
 const MEET_MLS_CIPHERSUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 const MEET_MLS_MEETING_SECRET_LABEL = "meet-e2ee|meeting-secret|v1";
@@ -58,6 +58,7 @@ export interface EpochProtocolProvider {
 	decodeKeyPackage(encoded: Uint8Array): KeyPackage;
 	encodeCommit(commit: MLSMessage): Uint8Array;
 	encodeWelcome(welcome: Welcome): Uint8Array;
+	decodeWelcome(encoded: Uint8Array): Welcome;
 	addMember(
 		state: ClientState,
 		joiningMember: KeyPackage,
@@ -66,7 +67,7 @@ export interface EpochProtocolProvider {
 		welcome: Welcome,
 		keyPackage: KeyPackage,
 		privateKeyPackage: PrivateKeyPackage,
-		ratchetTree: RatchetTree,
+		ratchetTree?: RatchetTree,
 	): Promise<EpochStateResult>;
 	exportMeetingSecret(state: ClientState): Promise<Uint8Array<ArrayBuffer>>;
 }
@@ -116,6 +117,14 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		return encodeWelcome(welcome);
 	}
 
+	decodeWelcome(encoded: Uint8Array): Welcome {
+		const decoded = decodeWelcome(encoded, 0);
+		if (!decoded) {
+			throw new Error("Invalid MLS welcome");
+		}
+		return decoded[0];
+	}
+
 	async addMember(
 		state: ClientState,
 		joiningMember: KeyPackage,
@@ -144,7 +153,7 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		welcome: Welcome,
 		keyPackage: KeyPackage,
 		privateKeyPackage: PrivateKeyPackage,
-		ratchetTree: RatchetTree,
+		ratchetTree?: RatchetTree,
 	): Promise<EpochStateResult> {
 		const cipherSuite = await this.getCipherSuite();
 		const state = await joinGroup(
