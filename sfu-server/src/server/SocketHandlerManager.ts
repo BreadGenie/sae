@@ -319,6 +319,7 @@ export class SocketHandlerManager {
 					e2ee,
 				});
 				callback({ success: true, senderId: socket.senderId });
+				this.requestEpochKeyPackageAfterJoin(socket, roomId, socket.userId);
 			} catch (error) {
 				loggers.socketHandler.error(
 					'Error joining room: %s',
@@ -570,34 +571,6 @@ export class SocketHandlerManager {
 					userData.audio_enabled,
 					userData.video_enabled,
 				);
-
-				if (socket.e2eeRequired) {
-					const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
-					console.log(
-						'[DEBUG-e2ee] SFU: handleJoinRoom sending key-package-request',
-						{
-							roomId,
-							participantId,
-							isHost: socket.isHost,
-							assignedSenderId: socket.senderId,
-							epochNumber,
-						},
-					);
-					if (socket.isHost) {
-						this.e2eeEpochRelay.requestKeyPackages(
-							roomId,
-							epochNumber,
-							'enable',
-						);
-					} else {
-						this.e2eeEpochRelay.requestKeyPackageFromParticipant(
-							roomId,
-							participantId,
-							epochNumber,
-							'join',
-						);
-					}
-				}
 			} else if (socket.scope === 'presence-preview') {
 				if (!this.previewSockets.has(roomId)) {
 					this.previewSockets.set(roomId, new Set());
@@ -622,6 +595,35 @@ export class SocketHandlerManager {
 			);
 			throw error;
 		}
+	}
+
+	private requestEpochKeyPackageAfterJoin(
+		socket: Socket,
+		roomId: string,
+		participantId: string,
+	): void {
+		if (socket.scope !== 'full' || !socket.e2eeRequired) return;
+		const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
+		console.log(
+			'[DEBUG-e2ee] SFU: requestEpochKeyPackageAfterJoin (post-ack)',
+			{
+				roomId,
+				participantId,
+				isHost: socket.isHost,
+				assignedSenderId: socket.senderId,
+				epochNumber,
+			},
+		);
+		if (socket.isHost) {
+			this.e2eeEpochRelay.requestKeyPackages(roomId, epochNumber, 'enable');
+			return;
+		}
+		this.e2eeEpochRelay.requestKeyPackageFromParticipant(
+			roomId,
+			participantId,
+			epochNumber,
+			'join',
+		);
 	}
 
 	private setupWebRTCHandlers(socket: Socket): void {
