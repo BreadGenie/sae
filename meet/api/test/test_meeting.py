@@ -35,7 +35,7 @@ class IntegrationTestMeetingApi(IntegrationTestCase):
 		self.assertEqual(result["meeting_id"], self.meeting.name)
 		self.assertTrue(result["auth_token"])
 		self.assertFalse(result["e2ee_required"])
-		self.assertIsNone(result["e2ee_host_public_key"])
+		self.assertNotIn("e2ee_host_public_key", result)
 		self.assertIn("is_host", result)
 		self.assertFalse(result["is_host"])
 		self.assertIn("is_cohost", result)

@@ -30,10 +30,6 @@ class SaeMeeting(Document):
 		banned_users: DF.Table[SaeMeetingUser]
 		co_hosts: DF.Table[SaeMeetingUser]
 		e2ee_enabled: DF.Check
-		e2ee_key_proof: DF.Data | None
-		e2ee_key_version: DF.Data | None
-		e2ee_host_public_key: DF.Data | None
-		e2ee_host_signing_public_key: DF.Data | None
 		meeting_type: DF.Literal["open", "restricted"]
 		members: DF.Table[SaeMeetingUser]
 		waiting_room: DF.Table[SaeMeetingUser]
@@ -381,34 +377,9 @@ class SaeMeeting(Document):
 		if self.is_user_banned(guest_id):
 			frappe.throw(_("Guest is banned from this meeting"))
 
-	def enable_e2ee(
-		self,
-		e2ee_key_proof: str | None = None,
-		e2ee_key_version: str | None = None,
-		e2ee_host_public_key: str | None = None,
-		e2ee_host_signing_public_key: str | None = None,
-	) -> bool:
-		"""Enable or rotate meeting E2EE.
-
-		The host's device generates an X25519 keypair (the meeting anchor)
-		and two ed25519 keypairs: an auth keypair (for proving ownership
-		of the meeting) and a signing keypair (for signing envelopes and
-		per-frame sender authentication under threat model B).
-		`e2ee_host_public_key` is the X25519 pubkey (base64).
-		`e2ee_host_signing_public_key` is the signing ed25519 pubkey
-		(base64). `e2ee_key_proof` is the ed25519 signature of
-		(x25519_pub || key_version) and is verified server-side in
-		`meeting.py._verify_e2ee_proof_signature` before this is called.
-		"""
+	def enable_e2ee(self) -> bool:
+		"""Enable epoch-based E2EE for this meeting."""
 		self.e2ee_enabled = True
-		if e2ee_key_proof is not None:
-			self.e2ee_key_proof = e2ee_key_proof
-		if e2ee_key_version is not None:
-			self.e2ee_key_version = e2ee_key_version
-		if e2ee_host_public_key is not None:
-			self.e2ee_host_public_key = e2ee_host_public_key
-		if e2ee_host_signing_public_key is not None:
-			self.e2ee_host_signing_public_key = e2ee_host_signing_public_key
 		self.save()
 		return True
 

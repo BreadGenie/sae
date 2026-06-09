@@ -16,10 +16,6 @@ interface ConnectionDetails {
 	tokenExpiresAt: number | null;
 	codecStrategy: string;
 	e2eeRequired: boolean;
-	e2eeHostPublicKey: string | null;
-	e2eeHostSigningPublicKey: string | null;
-	e2eeHostUserId: string | null;
-	e2eeKeyVersion: string | null;
 	isHost: boolean;
 	isCohost: boolean;
 	userData?: Record<string, unknown>;
@@ -48,10 +44,6 @@ interface SFUConnectionDetailsResponse {
 	expires_in: number;
 	codec_strategy: string;
 	e2ee_required?: boolean;
-	e2ee_host_public_key?: string;
-	e2ee_host_signing_public_key?: string;
-	e2ee_host_user_id?: string;
-	e2ee_key_version?: string;
 	is_host?: boolean;
 	is_cohost?: boolean;
 }
@@ -61,10 +53,6 @@ interface SFUGuestConnectionDetailsResponse {
 	sfu_port: string;
 	codec_strategy: string;
 	e2ee_required?: boolean;
-	e2ee_host_public_key?: string;
-	e2ee_host_signing_public_key?: string;
-	e2ee_host_user_id?: string;
-	e2ee_key_version?: string;
 	is_host?: boolean;
 	is_cohost?: boolean;
 }
@@ -74,10 +62,6 @@ interface SFUTokenRefreshResponse {
 	expires_in: number;
 	codec_strategy: string;
 	e2ee_required?: boolean;
-	e2ee_host_public_key?: string;
-	e2ee_host_signing_public_key?: string;
-	e2ee_host_user_id?: string;
-	e2ee_key_version?: string;
 }
 
 interface SFURouterCapabilitiesResponse {
@@ -139,10 +123,6 @@ export class SFUClient {
 			tokenExpiresAt: null,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeHostPublicKey: null,
-			e2eeHostSigningPublicKey: null,
-			e2eeHostUserId: null,
-			e2eeKeyVersion: null,
 			isHost: false,
 			isCohost: false,
 		};
@@ -238,11 +218,6 @@ export class SFUClient {
 					tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
 					codecStrategy: response.codec_strategy || "svc",
 					e2eeRequired: Boolean(response.e2ee_required),
-					e2eeHostPublicKey: response.e2ee_host_public_key || null,
-					e2eeHostSigningPublicKey:
-						response.e2ee_host_signing_public_key || null,
-					e2eeHostUserId: response.e2ee_host_user_id || null,
-					e2eeKeyVersion: response.e2ee_key_version || null,
 					isHost: Boolean(response.is_host),
 					isCohost: Boolean(response.is_cohost),
 				};
@@ -271,10 +246,6 @@ export class SFUClient {
 			tokenExpiresAt,
 			codecStrategy: normalizeCodecStrategy(response.codec_strategy),
 			e2eeRequired: Boolean(response.e2ee_required),
-			e2eeHostPublicKey: response.e2ee_host_public_key || null,
-			e2eeHostSigningPublicKey: response.e2ee_host_signing_public_key || null,
-			e2eeHostUserId: response.e2ee_host_user_id || null,
-			e2eeKeyVersion: response.e2ee_key_version || null,
 			isHost: Boolean(response.is_host),
 			isCohost: Boolean(response.is_cohost),
 		};
@@ -315,10 +286,6 @@ export class SFUClient {
 			tokenExpiresAt: null,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeHostPublicKey: null,
-			e2eeHostSigningPublicKey: null,
-			e2eeHostUserId: null,
-			e2eeKeyVersion: null,
 			isHost: false,
 			isCohost: false,
 		};
@@ -388,22 +355,6 @@ export class SFUClient {
 				response.codec_strategy || this.connectionDetails.codecStrategy,
 			);
 			this.connectionDetails.e2eeRequired = Boolean(response.e2ee_required);
-			if (response.e2ee_host_public_key !== undefined) {
-				this.connectionDetails.e2eeHostPublicKey =
-					response.e2ee_host_public_key || null;
-			}
-			if (response.e2ee_host_signing_public_key !== undefined) {
-				this.connectionDetails.e2eeHostSigningPublicKey =
-					response.e2ee_host_signing_public_key || null;
-			}
-			if (response.e2ee_host_user_id !== undefined) {
-				this.connectionDetails.e2eeHostUserId =
-					response.e2ee_host_user_id || null;
-			}
-			if (response.e2ee_key_version !== undefined) {
-				this.connectionDetails.e2eeKeyVersion =
-					response.e2ee_key_version || null;
-			}
 
 			this.signalChannel.updateAuth(response.auth_token);
 
@@ -709,29 +660,8 @@ export class SFUClient {
 		return result;
 	}
 
-	setE2EERequired(
-		required: boolean,
-		options: {
-			hostPublicKey?: string | null;
-			hostSigningPublicKey?: string | null;
-			keyVersion?: string | null;
-		} = {},
-	): void {
+	setE2EERequired(required: boolean): void {
 		this.connectionDetails.e2eeRequired = required;
-		if (options.hostPublicKey !== undefined) {
-			this.connectionDetails.e2eeHostPublicKey = options.hostPublicKey || null;
-		}
-		if (options.hostSigningPublicKey !== undefined) {
-			this.connectionDetails.e2eeHostSigningPublicKey =
-				options.hostSigningPublicKey || null;
-		}
-		if (options.keyVersion !== undefined) {
-			this.connectionDetails.e2eeKeyVersion = options.keyVersion || null;
-		}
-	}
-
-	getE2EEKeyVersion(): string | null {
-		return this.connectionDetails.e2eeKeyVersion;
 	}
 
 	isE2EERequired(): boolean {

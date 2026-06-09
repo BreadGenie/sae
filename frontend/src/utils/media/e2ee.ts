@@ -1,10 +1,4 @@
-import {
-	bufferToBase64,
-	bytesFromBase64,
-	encodeInfo,
-	INFO_ENVELOPE,
-	INFO_ENVELOPE_CONTEXT,
-} from "./e2eePrimitives";
+import { bufferToBase64, bytesFromBase64 } from "./e2eePrimitives";
 import {
 	buildSignedFramePayload,
 	decodeFrameHeader,
@@ -69,22 +63,6 @@ function getSubtle(): SubtleCrypto {
 		throw new Error("SubtleCrypto not available");
 	}
 	return subtle;
-}
-
-export function formatFingerprint(publicKeyB64: string): string {
-	try {
-		const raw = bytesFromBase64(publicKeyB64);
-		const hex = Array.from(raw, (b) => b.toString(16).padStart(2, "0")).join(
-			"",
-		);
-		const groups: string[] = [];
-		for (let i = 0; i < hex.length; i += 8) {
-			groups.push(hex.slice(i, i + 8));
-		}
-		return groups.slice(0, 4).join(" ");
-	} catch {
-		return publicKeyB64;
-	}
 }
 
 export async function x25519KeyPair(): Promise<CryptoKeyPair> {
@@ -191,28 +169,6 @@ async function _hkdfBits(
 	return out;
 }
 
-async function hkdfToAESKey(
-	ikm: Uint8Array<ArrayBuffer>,
-	info: Uint8Array<ArrayBuffer>,
-): Promise<CryptoKey> {
-	const subtle = getSubtle();
-	const baseKey = await subtle.importKey("raw", ikm, "HKDF", false, [
-		"deriveKey",
-	]);
-	return subtle.deriveKey(
-		{
-			name: "HKDF",
-			hash: "SHA-256",
-			salt: new Uint8Array(0),
-			info,
-		},
-		baseKey,
-		{ name: "AES-GCM", length: 256 },
-		false,
-		["encrypt", "decrypt"],
-	);
-}
-
 export async function generateMeetingSecret(): Promise<
 	Uint8Array<ArrayBuffer>
 > {
@@ -224,139 +180,6 @@ export {
 	chainTipToAESKey,
 	initSenderChain,
 } from "./frameCodec";
-
-interface OpenEnvelopeResult {
-	hostX25519PublicKey: Uint8Array<ArrayBuffer>;
-	hostSigningPublicKey: Uint8Array<ArrayBuffer>;
-	meetingSecret: Uint8Array<ArrayBuffer>;
-}
-
-class EnvelopeSignatureError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "EnvelopeSignatureError";
-	}
-}
-
-const ENVELOPE_HEADER_SIZE = 32 + 32;
-const ENVELOPE_IV_SIZE = 12;
-const ENVELOPE_SIGNATURE_SIZE = 64;
-const ENVELOPE_MIN_SIZE =
-	ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE + ENVELOPE_SIGNATURE_SIZE;
-
-function concatBytes(
-	parts: Uint8Array<ArrayBuffer>[],
-): Uint8Array<ArrayBuffer> {
-	const total = parts.reduce((n, p) => n + p.byteLength, 0);
-	const out = new Uint8Array(total);
-	let offset = 0;
-	for (const p of parts) {
-		out.set(p, offset);
-		offset += p.byteLength;
-	}
-	return out;
-}
-
-export async function createSignedEnvelope(
-	hostPriv: CryptoKey,
-	hostSigningPriv: CryptoKey,
-	joinerPub: CryptoKey,
-	hostX25519PublicKey: Uint8Array<ArrayBuffer>,
-	hostSigningPublicKey: Uint8Array<ArrayBuffer>,
-	meetingSecret: Uint8Array<ArrayBuffer>,
-	context: { meetingId: string; keyVersion: number },
-): Promise<Uint8Array<ArrayBuffer>> {
-	const shared = await ecdhKeyAgreement(hostPriv, joinerPub);
-	const info = encodeInfo(INFO_ENVELOPE(context.meetingId, context.keyVersion));
-	const aesKey = await hkdfToAESKey(shared, info);
-	const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-	const ciphertext = await getSubtle().encrypt(
-		{ name: "AES-GCM", iv },
-		aesKey,
-		meetingSecret,
-	);
-	const cipherBytes = new Uint8Array(ciphertext.byteLength);
-	cipherBytes.set(new Uint8Array(ciphertext));
-	const ctxBytes = encodeInfo(
-		INFO_ENVELOPE_CONTEXT(context.meetingId, context.keyVersion),
-	);
-	const signedData = concatBytes([
-		hostX25519PublicKey,
-		hostSigningPublicKey,
-		iv,
-		cipherBytes,
-		ctxBytes,
-	]);
-	const signature = await signWithEd25519(hostSigningPriv, signedData);
-	const result = new Uint8Array(
-		ENVELOPE_HEADER_SIZE +
-			ENVELOPE_IV_SIZE +
-			cipherBytes.byteLength +
-			ENVELOPE_SIGNATURE_SIZE,
-	);
-	result.set(hostX25519PublicKey, 0);
-	result.set(hostSigningPublicKey, 32);
-	result.set(iv, ENVELOPE_HEADER_SIZE);
-	result.set(cipherBytes, ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE);
-	result.set(
-		signature,
-		ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE + cipherBytes.byteLength,
-	);
-	return result;
-}
-
-export async function openSignedEnvelope(
-	joinerPriv: CryptoKey,
-	hostPub: CryptoKey,
-	hostSigningPub: CryptoKey,
-	signedEnvelope: Uint8Array<ArrayBuffer>,
-	context: { meetingId: string; keyVersion: number },
-): Promise<OpenEnvelopeResult> {
-	if (signedEnvelope.byteLength < ENVELOPE_MIN_SIZE) {
-		throw new EnvelopeSignatureError("envelope too short");
-	}
-	const hostX25519PublicKey = signedEnvelope.slice(0, 32);
-	const hostSigningPublicKey = signedEnvelope.slice(32, 64);
-	const iv = signedEnvelope.slice(
-		ENVELOPE_HEADER_SIZE,
-		ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE,
-	);
-	const cipherEnd = signedEnvelope.byteLength - ENVELOPE_SIGNATURE_SIZE;
-	const ciphertext = signedEnvelope.slice(
-		ENVELOPE_HEADER_SIZE + ENVELOPE_IV_SIZE,
-		cipherEnd,
-	);
-	const signature = signedEnvelope.slice(cipherEnd);
-	const ctxBytes = encodeInfo(
-		INFO_ENVELOPE_CONTEXT(context.meetingId, context.keyVersion),
-	);
-	const signedData = concatBytes([
-		hostX25519PublicKey,
-		hostSigningPublicKey,
-		iv,
-		ciphertext,
-		ctxBytes,
-	]);
-	const ok = await verifyWithEd25519(hostSigningPub, signature, signedData);
-	if (!ok) {
-		throw new EnvelopeSignatureError("envelope signature verification failed");
-	}
-	const shared = await ecdhKeyAgreement(joinerPriv, hostPub);
-	const info = encodeInfo(INFO_ENVELOPE(context.meetingId, context.keyVersion));
-	const aesKey = await hkdfToAESKey(shared, info);
-	const meetingSecret = await getSubtle().decrypt(
-		{ name: "AES-GCM", iv },
-		aesKey,
-		ciphertext,
-	);
-	const out = new Uint8Array(meetingSecret.byteLength);
-	out.set(new Uint8Array(meetingSecret));
-	return {
-		hostX25519PublicKey,
-		hostSigningPublicKey,
-		meetingSecret: out,
-	};
-}
 
 export async function featureDetectX25519(): Promise<boolean> {
 	if (typeof globalThis.crypto?.subtle === "undefined") {
@@ -370,15 +193,6 @@ export async function featureDetectX25519(): Promise<boolean> {
 	} catch {
 		return false;
 	}
-}
-
-export function generateE2EEKeyVersion(): string {
-	const bytes = new Uint8Array(4);
-	crypto.getRandomValues(bytes);
-	const hex = Array.from(bytes)
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-	return `${hex}`;
 }
 
 export class SenderChainState {

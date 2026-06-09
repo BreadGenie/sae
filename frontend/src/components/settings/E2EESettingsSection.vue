@@ -9,14 +9,6 @@
 			data-testid="e2ee-toggle"
 		/>
 
-		<div v-if="e2eeEnabled && e2eeFingerprint" class="space-y-2">
-			<p class="text-sm font-medium text-ink-gray-8">E2EE Fingerprint</p>
-			<ClickToCopyField :text-content="e2eeFingerprint" />
-			<p class="text-xs text-ink-gray-6">
-				Participants can verify they're in the right meeting by
-				comparing this fingerprint.
-			</p>
-		</div>
 	</div>
 </template>
 
@@ -24,17 +16,7 @@
 import { frappeRequest, Switch, toast } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useDeviceIdentity } from "../../composables/useDeviceIdentity";
-import {
-	exportEd25519PublicKey,
-	exportPublicKey,
-	featureDetectX25519,
-	formatFingerprint,
-	generateE2EEKeyVersion,
-	signProof,
-	x25519KeyPair,
-} from "../../utils/media/e2ee";
-import { bytesFromBase64 } from "../../utils/media/e2eePrimitives";
-import ClickToCopyField from "../ClickToCopyField.vue";
+import { featureDetectX25519 } from "../../utils/media/e2ee";
 
 interface MeetingDocument {
 	allow_guest?: boolean;
@@ -59,7 +41,6 @@ const props = defineProps<E2EESettingsSectionProps>();
 const { getIdentity } = useDeviceIdentity();
 
 const e2eeEnabled = ref<boolean>(props.globallyEnabled);
-const e2eeFingerprint = ref<string>("");
 const isConvertingToE2EE = ref(false);
 const isX25519Supported = ref<boolean | null>(null);
 
@@ -102,17 +83,12 @@ const loadE2EEDetails = async () => {
 			params: { meeting_id: props.meetingId },
 		})) as {
 			e2ee_enabled?: boolean;
-			e2ee_host_public_key?: string | null;
 			message?: {
 				e2ee_enabled?: boolean;
-				e2ee_host_public_key?: string | null;
 			};
 		};
 		const payload = response.message || response;
 		e2eeEnabled.value = Boolean(payload.e2ee_enabled);
-		if (payload.e2ee_host_public_key) {
-			e2eeFingerprint.value = formatFingerprint(payload.e2ee_host_public_key);
-		}
 	} catch (error) {
 		console.error("Failed to load E2EE details:", error);
 	}
@@ -145,22 +121,9 @@ watch(e2eeEnabled, async (val, oldVal) => {
 
 	isConvertingToE2EE.value = true;
 	try {
-		// E2EE: per-device ed25519 auth key + X25519 meeting anchor.
-		// See docs/adr/0003-per-device-host-identity.md and
-		// docs/refactors/e2ee-modernization.md.
+		// Register the device identity used to sign epoch key packages.
 		const identity = await getIdentity();
 		await registerE2EEDevice(identity);
-
-		const meetingKeyPair = await x25519KeyPair();
-		const meetingPublicKey = await exportPublicKey(meetingKeyPair.publicKey);
-		const keyVersion = generateE2EEKeyVersion();
-
-		// Build the signed proof: bytes(X25519_pub) || bytes(key_version_ascii)
-		const pubRaw = bytesFromBase64(meetingPublicKey);
-		const message = new Uint8Array(pubRaw.length + keyVersion.length);
-		message.set(pubRaw, 0);
-		message.set(new TextEncoder().encode(keyVersion), pubRaw.length);
-		const keyProof = await signProof(identity.authKeyPair.privateKey, message);
 
 		// Broadcast to this tab and other tabs that E2EE is coming online.
 		// Other tabs receive meeting:e2ee_enabled via realtime; the local
@@ -170,40 +133,26 @@ watch(e2eeEnabled, async (val, oldVal) => {
 			new CustomEvent("meet:e2ee-host-enabled", {
 				detail: {
 					hostSigningKeyPair: identity.signingKeyPair,
-					keyVersion,
+					keyVersion: "v1-epoch",
 				},
 			}),
-		);
-
-		const hostSigningPublicKey = await exportEd25519PublicKey(
-			identity.signingKeyPair.publicKey,
 		);
 
 		const response = (await frappeRequest({
 			url: "meet.api.meeting.convert_meeting_to_e2ee",
 			params: {
 				meeting_id: props.meetingId,
-				e2ee_key_proof: keyProof,
-				e2ee_key_version: keyVersion,
-				e2ee_host_public_key: meetingPublicKey,
-				e2ee_host_signing_public_key: hostSigningPublicKey,
-				e2ee_device_id: identity.deviceId,
 			},
 		})) as {
-			e2ee_host_public_key?: string;
-			message?: { e2ee_host_public_key?: string };
+			e2ee_enabled?: boolean;
+			message?: { e2ee_enabled?: boolean };
 		};
 
 		const payload = response.message || response;
-
-		if (payload.e2ee_host_public_key) {
-			e2eeFingerprint.value = formatFingerprint(payload.e2ee_host_public_key);
-		}
+		e2eeEnabled.value = Boolean(payload.e2ee_enabled);
 
 		await props.meetingDoc.reload();
-		toast.success(
-			"Meeting is now end-to-end encrypted. Compare the fingerprint to verify authenticity.",
-		);
+		toast.success("Meeting is now end-to-end encrypted.");
 	} catch (error) {
 		console.error("Failed to enable E2EE:", error);
 		e2eeEnabled.value = false;

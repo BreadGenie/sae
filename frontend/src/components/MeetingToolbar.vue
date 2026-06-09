@@ -193,7 +193,6 @@
 		v-model="showMeetingInfoDialog"
 		:meetingId="meetingId"
 		:meetingTitle="meetingTitle"
-		:e2eeFingerprint="e2eeFingerprint"
 	/>
 
 	<SettingsDialog
@@ -241,7 +240,6 @@ const props = defineProps<{
 	isReactionPickerOpen?: boolean;
 	meetingId?: string;
 	meetingTitle?: string;
-	e2eeFingerprint?: string;
 	currentUser?: unknown;
 	isFullscreen?: boolean;
 	cameraPermissionGranted?: boolean;

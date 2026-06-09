@@ -11,11 +11,7 @@
    "host_only_chat",
    "column_break_1",
    "e2ee_section",
-   "e2ee_enabled",
-   "e2ee_key_proof",
-   "e2ee_key_version",
-    "e2ee_host_public_key",
-    "e2ee_host_signing_public_key",
+    "e2ee_enabled",
     "users_section",
    "co_hosts",
    "members",
@@ -54,30 +50,6 @@
    "fieldname": "e2ee_enabled",
    "fieldtype": "Check",
    "label": "E2EE Enabled"
-  },
-  {
-   "fieldname": "e2ee_key_proof",
-   "fieldtype": "Data",
-   "label": "E2EE Key Proof",
-   "read_only": 1
-  },
-  {
-   "fieldname": "e2ee_key_version",
-   "fieldtype": "Data",
-   "label": "E2EE Key Version",
-   "read_only": 1
-  },
-  {
-   "fieldname": "e2ee_host_public_key",
-   "fieldtype": "Data",
-   "label": "E2EE Host Public Key (X25519, base64)",
-   "read_only": 1
-  },
-  {
-    "fieldname": "e2ee_host_signing_public_key",
-    "fieldtype": "Data",
-    "label": "E2EE Host Signing Public Key (Ed25519, base64)",
-    "read_only": 1
   },
   {
     "fieldname": "members",

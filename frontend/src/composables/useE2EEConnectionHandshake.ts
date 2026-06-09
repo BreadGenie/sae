@@ -28,9 +28,7 @@ export interface E2EEConnectionHandshake {
 	prepareJoiningHandshakeIfRequired: () => Promise<void>;
 	handleMeetingE2EEEnabled: (data: {
 		meeting_id?: string;
-		e2ee_host_public_key?: string;
-		e2ee_host_signing_public_key?: string;
-		e2ee_key_version?: string;
+		e2ee_enabled?: boolean;
 	}) => Promise<void>;
 	setupRealtimeEventListeners: () => void;
 	teardownRealtimeEventListeners: () => void;

@@ -95,7 +95,7 @@ export class E2EEHandshakeController {
 		if (this.isReconfiguringForE2EE) return;
 		this.isReconfiguringForE2EE = true;
 		try {
-			this.sfuClient.setE2EERequired(true, { keyVersion: "v1-epoch" });
+			this.sfuClient.setE2EERequired(true);
 			await this.reconfigureMediaForE2EE();
 		} catch (error) {
 			console.error("Failed to reconfigure host for E2EE:", error);
@@ -164,7 +164,7 @@ export class E2EEHandshakeController {
 	async handleMeetingE2EEEnabled(data: { meeting_id?: string }): Promise<void> {
 		if (data.meeting_id !== this.meetingId) return;
 		if (this.deps.isCurrentTabHost.value) return;
-		this.sfuClient.setE2EERequired(true, { keyVersion: "v1-epoch" });
+		this.sfuClient.setE2EERequired(true);
 		await this.prepareJoiningHandshakeIfRequired();
 	}
 

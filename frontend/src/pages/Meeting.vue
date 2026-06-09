@@ -147,7 +147,6 @@
 						@update:isReactionPickerOpen="isReactionPickerOpen = $event"
 						:meetingId="meetingId"
 						:meetingTitle="meetingTitle"
-						:e2eeFingerprint="e2eeFingerprint"
 						:currentUser="currentUser.currentUser.value"
 						:cameraPermissionGranted="mediaState.cameraPermissionGranted"
 						:microphonePermissionGranted="mediaState.microphonePermissionGranted"
@@ -244,7 +243,6 @@ import {
 import { session } from "../data/session";
 import { useSocket } from "../socket";
 import { deviceManager } from "../utils/media/DeviceManager";
-import { formatFingerprint } from "../utils/media/e2ee";
 import type { Participant } from "../utils/media/ParticipantManager";
 
 // Router
@@ -360,12 +358,6 @@ const sfuConnection = useSFUConnection({
 	onActiveSpeakerChanged: (participantIds: string[]) => {
 		participantStore.activeSpeakerIds = participantIds;
 	},
-});
-
-const e2eeFingerprint = computed(() => {
-	const pub = sfuConnection.sfuClient?.connectionDetails?.e2eeHostPublicKey;
-	if (!pub) return "";
-	return formatFingerprint(pub);
 });
 
 // --- Media Controls ---

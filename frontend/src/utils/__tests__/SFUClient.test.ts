@@ -356,10 +356,6 @@ describe("getConnectionDetails", () => {
 			expires_in: 3600,
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_host_public_key: "A".repeat(44),
-			e2ee_host_signing_public_key: "S".repeat(44),
-			e2ee_host_user_id: "host@example.com",
-			e2ee_key_version: "abcd1234",
 			is_host: true,
 			is_cohost: false,
 		});
@@ -369,10 +365,6 @@ describe("getConnectionDetails", () => {
 		expect(details.userId).toBe("usr-1");
 		expect(details.codecStrategy).toBe("svc");
 		expect(details.e2eeRequired).toBe(true);
-		expect(details.e2eeHostPublicKey).toBe("A".repeat(44));
-		expect(details.e2eeHostSigningPublicKey).toBe("S".repeat(44));
-		expect(details.e2eeHostUserId).toBe("host@example.com");
-		expect(details.e2eeKeyVersion).toBe("abcd1234");
 		expect(details.isHost).toBe(true);
 		expect(details.isCohost).toBe(false);
 		expect(frappeRequest).toHaveBeenCalledWith(
@@ -393,8 +385,6 @@ describe("getConnectionDetails", () => {
 			sfu_port: "443",
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_host_public_key: "B".repeat(44),
-			e2ee_host_user_id: "host@example.com",
 		});
 		const client = createClient();
 		const details = await client.getConnectionDetails("meet-2", "guest-token");
@@ -402,8 +392,6 @@ describe("getConnectionDetails", () => {
 		expect(details.userId).toBe("guest-1");
 		expect(details.userData?.is_guest).toBe(true);
 		expect(details.e2eeRequired).toBe(true);
-		expect(details.e2eeHostPublicKey).toBe("B".repeat(44));
-		expect(details.e2eeHostUserId).toBe("host@example.com");
 	});
 });
 
@@ -420,10 +408,6 @@ describe("connect refresh", () => {
 			tokenExpiresAt: Date.now() + 3600_000,
 			codecStrategy: "simulcast",
 			e2eeRequired: false,
-			e2eeHostPublicKey: null,
-			e2eeHostSigningPublicKey: null,
-			e2eeHostUserId: null,
-			e2eeKeyVersion: null,
 			isHost: false,
 			isCohost: false,
 		};
@@ -439,10 +423,6 @@ describe("connect refresh", () => {
 			expires_in: 3600,
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_host_public_key: "E".repeat(44),
-			e2ee_host_signing_public_key: "F".repeat(44),
-			e2ee_host_user_id: "host@example.com",
-			e2ee_key_version: "deadbeef",
 			is_host: true,
 			is_cohost: false,
 		});
@@ -450,12 +430,7 @@ describe("connect refresh", () => {
 		await client.connect("meet-1");
 
 		expect(client.connectionDetails.authToken).toBe("fresh-token");
-		expect(client.connectionDetails.e2eeHostPublicKey).toBe("E".repeat(44));
-		expect(client.connectionDetails.e2eeHostSigningPublicKey).toBe(
-			"F".repeat(44),
-		);
-		expect(client.connectionDetails.e2eeHostUserId).toBe("host@example.com");
-		expect(client.connectionDetails.e2eeKeyVersion).toBe("deadbeef");
+		expect(client.connectionDetails.e2eeRequired).toBe(true);
 		expect(client.connectionDetails.isHost).toBe(true);
 		expect(client.connectionDetails.isCohost).toBe(false);
 		expect(signalChannel.updateAuth).toHaveBeenCalledWith("fresh-token");
@@ -477,10 +452,6 @@ describe("connect refresh", () => {
 			tokenExpiresAt: Date.now() + 3600_000,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeHostPublicKey: null,
-			e2eeHostSigningPublicKey: null,
-			e2eeHostUserId: null,
-			e2eeKeyVersion: null,
 			isHost: false,
 			isCohost: false,
 		};
@@ -490,14 +461,11 @@ describe("connect refresh", () => {
 			sfu_port: "443",
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_host_public_key: "G".repeat(44),
-			e2ee_host_signing_public_key: "H".repeat(44),
 		});
 
 		await client.connect("meet-2", "guest-token-2");
 
 		expect(client.connectionDetails.e2eeRequired).toBe(true);
-		expect(client.connectionDetails.e2eeHostPublicKey).toBe("G".repeat(44));
 	});
 });
 
@@ -527,7 +495,6 @@ describe("E2EE signaling payloads", () => {
 		const client = createClient();
 		client.connected = true;
 		client.connectionDetails.e2eeRequired = true;
-		client.connectionDetails.e2eeHostPublicKey = "host-pub-b64";
 
 		const originalSender = (
 			globalThis as typeof globalThis & {
@@ -612,7 +579,6 @@ describe("E2EE signaling payloads", () => {
 		const client = createClient();
 		client.connected = true;
 		client.connectionDetails.e2eeRequired = true;
-		client.connectionDetails.e2eeHostPublicKey = "host-pub-b64";
 
 		const originalSender = globalThis.RTCRtpSender;
 		const originalReceiver = globalThis.RTCRtpReceiver;
@@ -699,35 +665,24 @@ describe("E2EE signaling payloads", () => {
 		);
 	});
 
-	it("picks up e2ee_host_public_key returned by refresh_sfu_token", async () => {
+	it("picks up e2ee_required returned by refresh_sfu_token", async () => {
 		vi.mocked(frappeRequest).mockResolvedValue({
 			auth_token: "tok-2",
 			expires_in: 3600,
 			codec_strategy: "svc",
 			e2ee_required: true,
-			e2ee_host_public_key: "C".repeat(44),
 		});
 		const client = createClient();
 		client.connectionDetails.e2eeRequired = false;
-		client.connectionDetails.e2eeHostPublicKey = null;
 		await client.refreshToken();
 		expect(client.connectionDetails.e2eeRequired).toBe(true);
-		expect(client.connectionDetails.e2eeHostPublicKey).toBe("C".repeat(44));
 	});
 
 	it("setE2EERequired updates connectionDetails for the realtime-event flow", () => {
 		const client = createClient();
 		client.connectionDetails.e2eeRequired = false;
-		client.connectionDetails.e2eeHostPublicKey = null;
-		client.connectionDetails.e2eeKeyVersion = null;
-		client.setE2EERequired(true, {
-			hostPublicKey: "D".repeat(44),
-			keyVersion: "abcd1234",
-		});
+		client.setE2EERequired(true);
 		expect(client.isE2EERequired()).toBe(true);
-		expect(client.connectionDetails.e2eeHostPublicKey).toBe("D".repeat(44));
-		expect(client.connectionDetails.e2eeKeyVersion).toBe("abcd1234");
-		expect(client.getE2EEKeyVersion()).toBe("abcd1234");
 	});
 });
 
@@ -744,10 +699,6 @@ describe("disconnect", () => {
 			tokenExpiresAt: 100,
 			codecStrategy: "svc",
 			e2eeRequired: false,
-			e2eeHostPublicKey: null,
-			e2eeHostSigningPublicKey: null,
-			e2eeHostUserId: null,
-			e2eeKeyVersion: null,
 			isHost: false,
 			isCohost: false,
 		};
