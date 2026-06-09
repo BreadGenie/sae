@@ -54,6 +54,13 @@ export class E2EEEpochSignalingController {
 
 	async handleEpochEnvelope(data: unknown): Promise<void> {
 		if (!this.isEpochEnvelope(data)) return;
+		const ownSenderId = this.deps.sfuClient.getOwnSenderId();
+		console.log("[DEBUG-e2ee] epoch envelope received", {
+			type: data.type,
+			ownSenderId,
+			isHost: this.deps.isCurrentTabHost.value,
+			envelope: data,
+		});
 		switch (data.type) {
 			case "key-package-request":
 				await this.publishKeyPackage(data.epochNumber);
@@ -61,6 +68,12 @@ export class E2EEEpochSignalingController {
 			case "commit-request":
 				if (this.shouldAuthorCommit(data.committerSenderId)) {
 					await this.authorAddMemberCommit(data);
+				} else {
+					console.log("[DEBUG-e2ee] ignoring commit-request (not designated)", {
+						committerSenderId: data.committerSenderId,
+						ownSenderId,
+						isHost: this.deps.isCurrentTabHost.value,
+					});
 				}
 				return;
 			case "key-package":
@@ -68,6 +81,12 @@ export class E2EEEpochSignalingController {
 					epochNumber: data.epochNumber,
 					participantId: data.fromParticipantId,
 					keyPackage: data.keyPackage,
+				});
+				console.log("[DEBUG-e2ee] cached key-package", {
+					fromSenderId: data.fromSenderId,
+					fromParticipantId: data.fromParticipantId,
+					epochNumber: data.epochNumber,
+					cacheSize: this.receivedKeyPackagesBySenderId.size,
 				});
 				return;
 			case "commit":
@@ -93,7 +112,15 @@ export class E2EEEpochSignalingController {
 
 	private async publishKeyPackage(epochNumber: number): Promise<void> {
 		const senderId = this.deps.sfuClient.getOwnSenderId();
-		if (senderId === null) return;
+		if (senderId === null) {
+			console.warn(
+				"[DEBUG-e2ee] publishKeyPackage aborted: ownSenderId is null",
+				{
+					epochNumber,
+				},
+			);
+			return;
+		}
 
 		const identity = await this.deps.getDeviceIdentity();
 		const userId = this.deps.currentUser.currentUser.value?.user_id;
@@ -130,10 +157,37 @@ export class E2EEEpochSignalingController {
 		request: Extract<E2eeEpochEnvelope, { type: "commit-request" }>,
 	): Promise<void> {
 		const activeEpoch = getActiveEpochState();
-		if (!activeEpoch || activeEpoch.epochNumber !== request.epochNumber) return;
+		console.log("[DEBUG-e2ee] authorAddMemberCommit: enter", {
+			requestEpochNumber: request.epochNumber,
+			activeEpochNumber: activeEpoch?.epochNumber ?? null,
+			receivedCacheSize: this.receivedKeyPackagesBySenderId.size,
+		});
+		if (!activeEpoch || activeEpoch.epochNumber !== request.epochNumber) {
+			console.warn(
+				"[DEBUG-e2ee] authorAddMemberCommit: epoch mismatch, abort",
+				{
+					activeEpochNumber: activeEpoch?.epochNumber ?? null,
+					requestEpochNumber: request.epochNumber,
+				},
+			);
+			return;
+		}
 
 		const joiningPackage = this.findJoiningKeyPackage(request.epochNumber);
-		if (!joiningPackage) return;
+		if (!joiningPackage) {
+			console.warn(
+				"[DEBUG-e2ee] authorAddMemberCommit: no cached key package for joiner",
+				{
+					cacheEntries: Array.from(
+						this.receivedKeyPackagesBySenderId.values(),
+					).map((e) => ({
+						fromParticipantId: e.participantId,
+						epochNumber: e.epochNumber,
+					})),
+				},
+			);
+			return;
+		}
 
 		const decodedKeyPackage = this.epochProtocolProvider.decodeKeyPackage(
 			bytesFromBase64(joiningPackage.keyPackage),
@@ -190,11 +244,19 @@ export class E2EEEpochSignalingController {
 		commitEnvelope: Extract<E2eeEpochEnvelope, { type: "commit" }>,
 	): Promise<void> {
 		const activeEpoch = getActiveEpochState();
+		console.log("[DEBUG-e2ee] processCommit: enter", {
+			activeEpochNumber: activeEpoch?.epochNumber ?? null,
+			previousEpochNumber: commitEnvelope.previousEpochNumber,
+			commitEpochNumber: commitEnvelope.epochNumber,
+			fromSenderId: commitEnvelope.fromSenderId,
+		});
 		if (
 			!activeEpoch ||
 			activeEpoch.epochNumber !== commitEnvelope.previousEpochNumber
-		)
+		) {
+			console.warn("[DEBUG-e2ee] processCommit: epoch mismatch, abort");
 			return;
+		}
 
 		const [decodedCommit] = decodeMlsMessage(
 			bytesFromBase64(commitEnvelope.mlsCommit),
@@ -234,13 +296,29 @@ export class E2EEEpochSignalingController {
 		welcomeEnvelope: Extract<E2eeEpochEnvelope, { type: "welcome" }>,
 	): Promise<void> {
 		const ownSenderId = this.deps.sfuClient.getOwnSenderId();
-		if (ownSenderId === null || welcomeEnvelope.toSenderId !== ownSenderId)
+		console.log("[DEBUG-e2ee] processWelcome: enter", {
+			ownSenderId,
+			toSenderId: welcomeEnvelope.toSenderId,
+			welcomeEpochNumber: welcomeEnvelope.epochNumber,
+			pendingKeyPackagesByEpoch: Array.from(
+				this.pendingKeyPackagesByEpoch.keys(),
+			),
+		});
+		if (ownSenderId === null || welcomeEnvelope.toSenderId !== ownSenderId) {
+			console.warn("[DEBUG-e2ee] processWelcome: not addressed to us");
 			return;
+		}
 
 		const pendingKeyPackage = this.pendingKeyPackagesByEpoch.get(
 			welcomeEnvelope.epochNumber - 1,
 		);
-		if (!pendingKeyPackage) return;
+		if (!pendingKeyPackage) {
+			console.warn("[DEBUG-e2ee] processWelcome: no pending key package", {
+				welcomeEpochNumber: welcomeEnvelope.epochNumber,
+				haveKeysFor: Array.from(this.pendingKeyPackagesByEpoch.keys()),
+			});
+			return;
+		}
 
 		const welcome = this.epochProtocolProvider.decodeWelcome(
 			bytesFromBase64(welcomeEnvelope.mlsWelcome),

@@ -573,6 +573,16 @@ export class SocketHandlerManager {
 
 				if (socket.e2eeRequired) {
 					const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
+					console.log(
+						'[DEBUG-e2ee] SFU: handleJoinRoom sending key-package-request',
+						{
+							roomId,
+							participantId,
+							isHost: socket.isHost,
+							assignedSenderId: socket.senderId,
+							epochNumber,
+						},
+					);
 					if (socket.isHost) {
 						this.e2eeEpochRelay.requestKeyPackages(
 							roomId,

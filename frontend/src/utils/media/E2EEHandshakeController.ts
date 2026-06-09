@@ -91,7 +91,13 @@ export class E2EEHandshakeController {
 	}
 
 	async handleHostE2EEKeySet(_detail: { keyVersion?: string }): Promise<void> {
+		console.log("[DEBUG-e2ee] handleHostE2EEKeySet: enter", {
+			detail: _detail,
+		});
 		await this.generateHostMeetingSecret();
+		console.log("[DEBUG-e2ee] handleHostE2EEKeySet: genesis complete", {
+			epochNumber: this.keyVersion,
+		});
 		if (this.isReconfiguringForE2EE) return;
 		this.isReconfiguringForE2EE = true;
 		try {

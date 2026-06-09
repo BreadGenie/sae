@@ -91,6 +91,12 @@ export class E2EEEpochRelay {
 		epochNumber: number,
 		reason: 'join' | 'reconnect',
 	): void {
+		console.log('[DEBUG-e2ee] SFU: targeted key-package-request', {
+			roomId,
+			participantId,
+			epochNumber,
+			reason,
+		});
 		this.emitToTarget(roomId, participantId, {
 			type: 'key-package-request',
 			epochNumber,
@@ -113,6 +119,13 @@ export class E2EEEpochRelay {
 			const roomId = socket.roomId;
 			const fromParticipantId = socket.participantId;
 			const fromSenderId = socket.senderId;
+			console.log('[DEBUG-e2ee] SFU: epoch envelope received', {
+				type: payload.type,
+				roomId,
+				fromParticipantId,
+				fromSenderId,
+				isHost: socket.isHost,
+			});
 			if (!roomId || !fromParticipantId || fromSenderId === undefined) return;
 
 			switch (payload.type) {
@@ -178,8 +191,23 @@ export class E2EEEpochRelay {
 			!this.isEpochNumber(payload.epochNumber) ||
 			!this.isOpaqueMlsBytes(payload.keyPackage)
 		) {
+			console.warn('[DEBUG-e2ee] SFU: key-package rejected by validation', {
+				roomId,
+				fromParticipantId,
+				fromSenderId,
+				epochNumber: payload.epochNumber,
+			});
 			return;
 		}
+		console.log(
+			'[DEBUG-e2ee] SFU: relaying key-package and requesting host commit',
+			{
+				roomId,
+				fromParticipantId,
+				fromSenderId,
+				epochNumber: payload.epochNumber,
+			},
+		);
 		this.emitToFullAccessParticipants(roomId, {
 			type: 'key-package',
 			fromParticipantId,
@@ -196,11 +224,24 @@ export class E2EEEpochRelay {
 		epochNumber: number,
 	): void {
 		const hostSocket = this.findHostSocket(roomId);
+		console.log('[DEBUG-e2ee] SFU: requestCommitFromHost lookup', {
+			roomId,
+			joiningSenderId,
+			epochNumber,
+			hostFound: !!hostSocket,
+			hostSenderId: hostSocket?.senderId,
+		});
 		if (
 			hostSocket?.senderId === undefined ||
 			hostSocket.senderId === joiningSenderId
-		)
+		) {
+			console.warn('[DEBUG-e2ee] SFU: no host committer available', {
+				roomId,
+				joiningSenderId,
+				hostFound: !!hostSocket,
+			});
 			return;
+		}
 		const nextEpochNumber = epochNumber + 1;
 		const membershipDeltaId = `add-${joiningSenderId}-to-${nextEpochNumber}`;
 		const membershipDeltaHash = Buffer.from(
