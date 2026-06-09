@@ -85,6 +85,19 @@ export class E2EEEpochRelay {
 		});
 	}
 
+	requestKeyPackageFromParticipant(
+		roomId: string,
+		participantId: string,
+		epochNumber: number,
+		reason: 'join' | 'reconnect',
+	): void {
+		this.emitToTarget(roomId, participantId, {
+			type: 'key-package-request',
+			epochNumber,
+			reason,
+		});
+	}
+
 	getCurrentEpochNumber(roomId: string): number {
 		return this.currentEpochByRoom.get(roomId) ?? 1;
 	}

@@ -573,11 +573,20 @@ export class SocketHandlerManager {
 
 				if (socket.e2eeRequired) {
 					const epochNumber = this.e2eeEpochRelay.getCurrentEpochNumber(roomId);
-					this.e2eeEpochRelay.requestKeyPackages(
-						roomId,
-						epochNumber,
-						socket.isHost ? 'enable' : 'join',
-					);
+					if (socket.isHost) {
+						this.e2eeEpochRelay.requestKeyPackages(
+							roomId,
+							epochNumber,
+							'enable',
+						);
+					} else {
+						this.e2eeEpochRelay.requestKeyPackageFromParticipant(
+							roomId,
+							participantId,
+							epochNumber,
+							'join',
+						);
+					}
 				}
 			} else if (socket.scope === 'presence-preview') {
 				if (!this.previewSockets.has(roomId)) {
