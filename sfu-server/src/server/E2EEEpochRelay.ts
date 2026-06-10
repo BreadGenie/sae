@@ -43,11 +43,18 @@ const MAX_OPAQUE_MLS_BYTES = 64 * 1024;
 const MAX_DELTA_ID_LENGTH = 128;
 const SENDER_ID_MAX = 0xffffffff;
 const RETAINED_EPOCHS = 3;
+const COMMIT_REQUEST_BATCH_MS = 250;
 
 type RetainedEpochMaterial = {
 	commit?: Extract<E2eeEpochEnvelope, { type: 'commit' }>;
 	welcomes: Map<number, Extract<E2eeEpochEnvelope, { type: 'welcome' }>>;
 	acks: Map<number, Set<number>>;
+};
+
+type CommitRequestBatch = {
+	joiningSenderIds: number[];
+	epochNumber: number;
+	timer: ReturnType<typeof setTimeout>;
 };
 
 export class E2EEEpochRelay {
@@ -60,6 +67,7 @@ export class E2EEEpochRelay {
 		Map<number, RetainedEpochMaterial>
 	>();
 	private currentEpochByRoom = new Map<string, number>();
+	private readonly commitRequestBatches = new Map<string, CommitRequestBatch>();
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -119,6 +127,7 @@ export class E2EEEpochRelay {
 	clearRoom(roomId: string): void {
 		this.currentEpochByRoom.delete(roomId);
 		this.retainedMaterial.delete(roomId);
+		this.flushPendingCommitRequests(roomId);
 	}
 
 	private async handle(
@@ -231,7 +240,7 @@ export class E2EEEpochRelay {
 			epochNumber: payload.epochNumber,
 			keyPackage: payload.keyPackage,
 		});
-		await this.requestCommitFromHost(
+		await this.enqueueCommitRequest(
 			roomId,
 			[fromSenderId],
 			payload.epochNumber,
@@ -341,6 +350,80 @@ export class E2EEEpochRelay {
 			removedSenderIds: sortedIds,
 		});
 		return true;
+	}
+
+	/**
+	 * Buffer key-package events and emit a single commit-request per
+	 * (roomId, epochNumber) batch within COMMIT_REQUEST_BATCH_MS. This
+	 * collapses simultaneous joiners (or successive joiners within a
+	 * short window) into a single add-member commit, instead of N
+	 * separate commits.
+	 *
+	 * The committer still sees a single `commit-request` with all the
+	 * accumulated joiningSenderIds, and uses the existing
+	 * authorAddMemberCommit / addMultipleMembers path to author one
+	 * commit. Removing this buffer would revert to the per-joiner
+	 * commit-request behavior; the committer is already capable of
+	 * handling a multi-joiner list (slice 9eeeed8).
+	 */
+	private enqueueCommitRequest(
+		roomId: string,
+		joiningSenderIds: number[],
+		epochNumber: number,
+	): void {
+		const key = `${roomId}:${epochNumber}`;
+		const existing = this.commitRequestBatches.get(key);
+		if (existing) {
+			clearTimeout(existing.timer);
+			for (const id of joiningSenderIds) {
+				if (!existing.joiningSenderIds.includes(id)) {
+					existing.joiningSenderIds.push(id);
+				}
+			}
+			existing.timer = setTimeout(() => {
+				this.commitRequestBatches.delete(key);
+				void this.requestCommitFromHost(
+					roomId,
+					existing.joiningSenderIds,
+					epochNumber,
+				);
+			}, COMMIT_REQUEST_BATCH_MS);
+			console.log('[DEBUG-e2ee] SFU: batching commit-request', {
+				roomId,
+				epochNumber,
+				bufferedSenderIds: existing.joiningSenderIds,
+			});
+			return;
+		}
+		const batch: CommitRequestBatch = {
+			joiningSenderIds: [...joiningSenderIds],
+			epochNumber,
+			timer: setTimeout(() => {
+				this.commitRequestBatches.delete(key);
+				void this.requestCommitFromHost(
+					roomId,
+					batch.joiningSenderIds,
+					epochNumber,
+				);
+			}, COMMIT_REQUEST_BATCH_MS),
+		};
+		this.commitRequestBatches.set(key, batch);
+		console.log('[DEBUG-e2ee] SFU: starting commit-request batch', {
+			roomId,
+			epochNumber,
+			joiningSenderIds,
+		});
+	}
+
+	private flushPendingCommitRequests(roomId: string): void {
+		// Cancel any pending batch timers for this room so they don't fire
+		// after the room is gone. The buffer map is also cleared.
+		const prefix = `${roomId}:`;
+		for (const [key, batch] of this.commitRequestBatches) {
+			if (!key.startsWith(prefix)) continue;
+			clearTimeout(batch.timer);
+			this.commitRequestBatches.delete(key);
+		}
 	}
 
 	private relayCommitRequest(roomId: string, payload: E2eeEpochPayload): void {
