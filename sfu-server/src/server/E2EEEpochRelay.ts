@@ -328,6 +328,13 @@ export class E2EEEpochRelay {
 		) {
 			return;
 		}
+		if (this.roster && !this.roster.get(roomId, fromSenderId)) {
+			console.warn(
+				'[DEBUG-e2ee] SFU: rejecting commit from non-roster senderId',
+				{ roomId, fromSenderId },
+			);
+			return;
+		}
 		const commit = {
 			type: 'commit' as const,
 			fromParticipantId,
