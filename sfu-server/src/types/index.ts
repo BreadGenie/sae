@@ -441,6 +441,7 @@ export type E2eeEpochCommitRequest = {
 	rosterHash: string;
 	committerSenderId: number;
 	joiningSenderIds: number[];
+	removedSenderIds?: number[];
 };
 
 export type E2eeEpochCommit = {

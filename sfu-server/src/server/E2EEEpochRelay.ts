@@ -28,6 +28,7 @@ type E2eeEpochPayload = {
 	toSenderId?: unknown;
 	committerSenderId?: unknown;
 	joiningSenderIds?: unknown;
+	removedSenderIds?: unknown;
 	membershipDeltaId?: unknown;
 	membershipDeltaHash?: unknown;
 	rosterHash?: unknown;
@@ -281,6 +282,53 @@ export class E2EEEpochRelay {
 		});
 	}
 
+	/**
+	 * Ask the roster to pick a committer to author a remove-only commit
+	 * (e.g. host kicked a participant). The committer's tab runs the
+	 * EpochProtocolProvider.removeMember path. Returns true if a committer
+	 * was found and a commit-request was emitted.
+	 */
+	requestCommitForRemoval(
+		roomId: string,
+		removedSenderIds: number[],
+		epochNumber: number,
+	): boolean {
+		if (removedSenderIds.length === 0) {
+			console.warn('[DEBUG-e2ee] SFU: no removals requested', { roomId });
+			return false;
+		}
+		const picked = this.roster?.pickCommitter(roomId, removedSenderIds) ?? null;
+		if (!picked) {
+			console.warn('[DEBUG-e2ee] SFU: no committer for removal', {
+				roomId,
+				removedSenderIds,
+			});
+			return false;
+		}
+		const nextEpochNumber = epochNumber + 1;
+		const sortedIds = [...removedSenderIds].sort((a, b) => a - b);
+		const membershipDeltaId = `remove-${sortedIds.join('-')}-to-${nextEpochNumber}`;
+		const membershipDeltaHash = Buffer.from(
+			JSON.stringify({
+				type: 'remove',
+				senderIds: sortedIds,
+				nextEpochNumber,
+			}),
+		).toString('base64');
+		this.emitToTarget(roomId, picked.participantId, {
+			type: 'commit-request',
+			epochNumber,
+			nextEpochNumber,
+			membershipDeltaId,
+			membershipDeltaHash,
+			rosterHash: membershipDeltaHash,
+			committerSenderId: picked.senderId,
+			joiningSenderIds: [],
+			removedSenderIds: sortedIds,
+		});
+		return true;
+	}
+
 	private relayCommitRequest(roomId: string, payload: E2eeEpochPayload): void {
 		if (
 			!this.isEpochNumber(payload.epochNumber) ||
@@ -290,7 +338,9 @@ export class E2EEEpochRelay {
 			!this.isHash(payload.membershipDeltaHash) ||
 			!this.isHash(payload.rosterHash) ||
 			!this.isSenderId(payload.committerSenderId) ||
-			!this.isSenderIdArray(payload.joiningSenderIds)
+			!this.isSenderIdArray(payload.joiningSenderIds) ||
+			(payload.removedSenderIds !== undefined &&
+				!this.isSenderIdArray(payload.removedSenderIds))
 		) {
 			return;
 		}

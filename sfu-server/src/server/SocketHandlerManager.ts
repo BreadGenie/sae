@@ -1153,7 +1153,8 @@ export class SocketHandlerManager {
 							roomId,
 						);
 						break;
-					case 'kick_participant':
+					case 'kick_participant': {
+						const targetSenderId = targetSocket.senderId;
 						targetSocket.emit('host_control_update', {
 							action,
 							targetParticipantId,
@@ -1162,11 +1163,23 @@ export class SocketHandlerManager {
 						});
 
 						loggers.socketHandler.info(
-							'Host %s kicked participant %s from room %s',
+							'Host %s kicked participant %s (senderId=%s) from room %s',
 							socket.participantId,
 							targetParticipantId,
+							targetSenderId,
 							roomId,
 						);
+
+						// If the room has E2EE, ask the relay to pick a committer
+						// to author a remove commit. The committer's tab will run
+						// the actual MLS remove via the EpochProtocolProvider.
+						if (targetSocket.e2eeRequired && targetSenderId !== undefined) {
+							this.e2eeEpochRelay.requestCommitForRemoval(
+								roomId,
+								[targetSenderId],
+								this.e2eeEpochRelay.getCurrentEpochNumber(roomId),
+							);
+						}
 
 						setTimeout(() => {
 							if (targetSocket.connected) {
@@ -1178,6 +1191,7 @@ export class SocketHandlerManager {
 							}
 						}, 1000);
 						break;
+					}
 					case 'lower_hand':
 						if (this.raisedHands[roomId]?.[targetParticipantId]) {
 							delete this.raisedHands[roomId][targetParticipantId];
