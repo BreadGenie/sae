@@ -14,6 +14,7 @@ import { loggers } from '../utils/logger';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
 import { E2EEEpochRelay } from './E2EEEpochRelay';
+import { InMemoryRosterPersistence } from './E2eeRosterPersistence';
 import { E2eeRosterStore } from './E2eeRosterStore';
 
 type TypedSocket = Socket<
@@ -51,7 +52,7 @@ export class SocketHandlerManager {
 			this.fullAccessSockets,
 			this.participantToSender,
 		);
-		this.e2eeRoster = new E2eeRosterStore();
+		this.e2eeRoster = new E2eeRosterStore(new InMemoryRosterPersistence());
 		this.e2eeEpochRelay.setRoster(this.e2eeRoster);
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
 			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
@@ -216,7 +217,7 @@ export class SocketHandlerManager {
 		}
 	}
 
-	private cleanupRoom(roomId: string): void {
+	private async cleanupRoom(roomId: string): Promise<void> {
 		this.fullAccessSockets.delete(roomId);
 		this.previewSockets.delete(roomId);
 		delete this.raisedHands[roomId];
@@ -224,7 +225,7 @@ export class SocketHandlerManager {
 		this.nextSenderIdByRoom.delete(roomId);
 		this.participantToSender.delete(roomId);
 		this.e2eeEpochRelay.clearRoom(roomId);
-		this.e2eeRoster.clearRoom(roomId);
+		await this.e2eeRoster.clearRoom(roomId);
 		this.mediasoup.closeRoom(roomId);
 	}
 
@@ -538,7 +539,7 @@ export class SocketHandlerManager {
 					this.fullAccessSockets.set(roomId, new Set());
 				}
 				this.fullAccessSockets.get(roomId)?.add(socket.id);
-				this.e2eeRoster.add(roomId, {
+				await this.e2eeRoster.add(roomId, {
 					participantId,
 					senderId,
 					isHost: Boolean(socket.isHost),
@@ -1174,7 +1175,7 @@ export class SocketHandlerManager {
 						// to author a remove commit. The committer's tab will run
 						// the actual MLS remove via the EpochProtocolProvider.
 						if (targetSocket.e2eeRequired && targetSenderId !== undefined) {
-							this.e2eeEpochRelay.requestCommitForRemoval(
+							await this.e2eeEpochRelay.requestCommitForRemoval(
 								roomId,
 								[targetSenderId],
 								this.e2eeEpochRelay.getCurrentEpochNumber(roomId),
@@ -1422,7 +1423,7 @@ export class SocketHandlerManager {
 					if (socket.scope === 'full') {
 						this.participantToSender.get(roomId)?.delete(participantId);
 						if (socket.senderId !== undefined) {
-							this.e2eeRoster.remove(roomId, socket.senderId);
+							await this.e2eeRoster.remove(roomId, socket.senderId);
 						}
 						await this.mediasoup.removePeer(roomId, participantId);
 
@@ -1460,7 +1461,7 @@ export class SocketHandlerManager {
 					const fullAccessCount = this.fullAccessSockets.get(roomId)?.size || 0;
 					const previewCount = this.previewSockets.get(roomId)?.size || 0;
 					if (fullAccessCount === 0 && previewCount === 0) {
-						this.cleanupRoom(roomId);
+						await this.cleanupRoom(roomId);
 					}
 				} catch (error) {
 					loggers.socketHandler.error('Error handling disconnect: %s', error);

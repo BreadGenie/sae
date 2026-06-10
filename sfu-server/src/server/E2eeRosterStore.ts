@@ -1,58 +1,73 @@
-// E2EE roster store — in-memory, per-room table of current SFU sockets.
+// E2EE roster store — in-memory, per-room table of current SFU sockets,
+// with pluggable persistence.
 //
 // Tier-1 MLS-adjacent state: this holds the SFU's view of "who is currently
 // in the room" and "who is online", not the ratchet tree. Path secrets and
 // meeting secrets remain client-side; the server is still server-blind on
 // MLS internals. See CONTEXT.md "Roster server (tier 1)" for the design.
-//
-// Responsibilities (slice 1, informational):
-//   - track each full-access peer by senderId with isHost + joinedAt
-//   - clear on socket disconnect and on room cleanup
-//   - expose pickCommitter() for slice 2
-//
-// Out of scope for slice 1:
-//   - validating commits against the roster
-//   - reconnect-via-roster (re-adds)
-//   - remove-member support
-//   - persistence (intentionally memory-only; room lifecycle owns the data)
 
-type RosterEntry = {
-	participantId: string;
-	senderId: number;
-	isHost: boolean;
-	joinedAt: number;
-};
+import type { RosterEntry, RosterPersistence } from './E2eeRosterPersistence';
 
 export class E2eeRosterStore {
 	private readonly entriesByRoom = new Map<string, Map<number, RosterEntry>>();
+	private hydrated = false;
+	private hydrationPromise: Promise<void> | null = null;
 
-	add(roomId: string, entry: RosterEntry): void {
+	constructor(private readonly persistence: RosterPersistence) {}
+
+	private async hydrate(): Promise<void> {
+		if (this.hydrated) return;
+		if (this.hydrationPromise) return this.hydrationPromise;
+		this.hydrationPromise = (async () => {
+			const all = await this.persistence.loadAll();
+			for (const [roomId, entries] of all) {
+				const map = new Map<number, RosterEntry>();
+				for (const e of entries) map.set(e.senderId, e);
+				this.entriesByRoom.set(roomId, map);
+			}
+			this.hydrated = true;
+		})();
+		return this.hydrationPromise;
+	}
+
+	async add(roomId: string, entry: RosterEntry): Promise<void> {
+		await this.hydrate();
 		let entries = this.entriesByRoom.get(roomId);
 		if (!entries) {
 			entries = new Map();
 			this.entriesByRoom.set(roomId, entries);
 		}
 		entries.set(entry.senderId, entry);
+		await this.persistence.addEntry(roomId, entry);
 	}
 
-	remove(roomId: string, senderId: number): void {
+	async remove(roomId: string, senderId: number): Promise<void> {
+		await this.hydrate();
 		const entries = this.entriesByRoom.get(roomId);
 		if (!entries) return;
 		entries.delete(senderId);
 		if (entries.size === 0) {
 			this.entriesByRoom.delete(roomId);
 		}
+		await this.persistence.removeEntry(roomId, senderId);
 	}
 
-	clearRoom(roomId: string): void {
+	async clearRoom(roomId: string): Promise<void> {
+		await this.hydrate();
 		this.entriesByRoom.delete(roomId);
+		await this.persistence.clearRoom(roomId);
 	}
 
-	get(roomId: string, senderId: number): RosterEntry | undefined {
+	async get(
+		roomId: string,
+		senderId: number,
+	): Promise<RosterEntry | undefined> {
+		await this.hydrate();
 		return this.entriesByRoom.get(roomId)?.get(senderId);
 	}
 
-	list(roomId: string): RosterEntry[] {
+	async list(roomId: string): Promise<RosterEntry[]> {
+		await this.hydrate();
 		const entries = this.entriesByRoom.get(roomId);
 		if (!entries) return [];
 		return Array.from(entries.values());
@@ -63,11 +78,11 @@ export class E2eeRosterStore {
 	 * joiners. Strategy: prefer host if online; else oldest current member
 	 * online; else null (the SFU will retain and rely on retry).
 	 */
-	pickCommitter(
+	async pickCommitter(
 		roomId: string,
 		excludeSenderIds: number[],
-	): RosterEntry | null {
-		const entries = this.list(roomId);
+	): Promise<RosterEntry | null> {
+		const entries = await this.list(roomId);
 		const excluded = new Set(excludeSenderIds);
 		const eligible = entries.filter((e) => !excluded.has(e.senderId));
 		if (eligible.length === 0) return null;

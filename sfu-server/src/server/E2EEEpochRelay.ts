@@ -77,7 +77,7 @@ export class E2EEEpochRelay {
 
 	setup(socket: Socket): void {
 		socket.on('e2ee:epoch', (payload: E2eeEpochPayload) => {
-			this.handle(socket, payload);
+			void this.handle(socket, payload);
 		});
 	}
 
@@ -121,7 +121,10 @@ export class E2EEEpochRelay {
 		this.retainedMaterial.delete(roomId);
 	}
 
-	private handle(socket: Socket, payload: E2eeEpochPayload): void {
+	private async handle(
+		socket: Socket,
+		payload: E2eeEpochPayload,
+	): Promise<void> {
 		try {
 			if (socket.scope !== 'full') return;
 			const roomId = socket.roomId;
@@ -141,7 +144,7 @@ export class E2EEEpochRelay {
 					this.relayKeyPackageRequest(roomId, payload);
 					return;
 				case 'key-package':
-					this.relayKeyPackage(
+					await this.relayKeyPackage(
 						roomId,
 						fromParticipantId,
 						fromSenderId,
@@ -152,7 +155,12 @@ export class E2EEEpochRelay {
 					this.relayCommitRequest(roomId, payload);
 					return;
 				case 'commit':
-					this.relayCommit(roomId, fromParticipantId, fromSenderId, payload);
+					await this.relayCommit(
+						roomId,
+						fromParticipantId,
+						fromSenderId,
+						payload,
+					);
 					return;
 				case 'welcome':
 					this.relayWelcome(roomId, fromParticipantId, fromSenderId, payload);
@@ -161,7 +169,7 @@ export class E2EEEpochRelay {
 					this.recordAck(roomId, fromParticipantId, fromSenderId, payload);
 					return;
 				case 'resync-request':
-					this.replayRetainedMaterial(roomId, fromSenderId, payload);
+					await this.replayRetainedMaterial(roomId, fromSenderId, payload);
 					return;
 			}
 		} catch (error) {
@@ -189,12 +197,12 @@ export class E2EEEpochRelay {
 		});
 	}
 
-	private relayKeyPackage(
+	private async relayKeyPackage(
 		roomId: string,
 		fromParticipantId: string,
 		fromSenderId: number,
 		payload: E2eeEpochPayload,
-	): void {
+	): Promise<void> {
 		if (
 			!this.isEpochNumber(payload.epochNumber) ||
 			!this.isOpaqueMlsBytes(payload.keyPackage)
@@ -223,14 +231,18 @@ export class E2EEEpochRelay {
 			epochNumber: payload.epochNumber,
 			keyPackage: payload.keyPackage,
 		});
-		this.requestCommitFromHost(roomId, [fromSenderId], payload.epochNumber);
+		await this.requestCommitFromHost(
+			roomId,
+			[fromSenderId],
+			payload.epochNumber,
+		);
 	}
 
-	private requestCommitFromHost(
+	private async requestCommitFromHost(
 		roomId: string,
 		joiningSenderIds: number[],
 		epochNumber: number,
-	): void {
+	): Promise<void> {
 		if (joiningSenderIds.length === 0) {
 			console.warn('[DEBUG-e2ee] SFU: no joiners to add', { roomId });
 			return;
@@ -238,7 +250,8 @@ export class E2EEEpochRelay {
 		// Pick a current epoch member to author the commit. Prefer host if
 		// online; else oldest current member online. Roster picker ignores
 		// the joiners.
-		const picked = this.roster?.pickCommitter(roomId, joiningSenderIds) ?? null;
+		const picked =
+			(await this.roster?.pickCommitter(roomId, joiningSenderIds)) ?? null;
 		const hostSocket = this.findHostSocket(roomId);
 		const hostExcluded = picked
 			? hostSocket?.senderId === undefined ||
@@ -288,16 +301,17 @@ export class E2EEEpochRelay {
 	 * EpochProtocolProvider.removeMember path. Returns true if a committer
 	 * was found and a commit-request was emitted.
 	 */
-	requestCommitForRemoval(
+	async requestCommitForRemoval(
 		roomId: string,
 		removedSenderIds: number[],
 		epochNumber: number,
-	): boolean {
+	): Promise<boolean> {
 		if (removedSenderIds.length === 0) {
 			console.warn('[DEBUG-e2ee] SFU: no removals requested', { roomId });
 			return false;
 		}
-		const picked = this.roster?.pickCommitter(roomId, removedSenderIds) ?? null;
+		const picked =
+			(await this.roster?.pickCommitter(roomId, removedSenderIds)) ?? null;
 		if (!picked) {
 			console.warn('[DEBUG-e2ee] SFU: no committer for removal', {
 				roomId,
@@ -361,12 +375,12 @@ export class E2EEEpochRelay {
 		});
 	}
 
-	private relayCommit(
+	private async relayCommit(
 		roomId: string,
 		fromParticipantId: string,
 		fromSenderId: number,
 		payload: E2eeEpochPayload,
-	): void {
+	): Promise<void> {
 		if (
 			!this.isEpochNumber(payload.previousEpochNumber) ||
 			!this.isEpochNumber(payload.epochNumber) ||
@@ -378,7 +392,7 @@ export class E2EEEpochRelay {
 		) {
 			return;
 		}
-		if (this.roster && !this.roster.get(roomId, fromSenderId)) {
+		if (this.roster && !(await this.roster.get(roomId, fromSenderId))) {
 			console.warn(
 				'[DEBUG-e2ee] SFU: rejecting commit from non-roster senderId',
 				{ roomId, fromSenderId },
@@ -453,11 +467,11 @@ export class E2EEEpochRelay {
 		});
 	}
 
-	private replayRetainedMaterial(
+	private async replayRetainedMaterial(
 		roomId: string,
 		fromSenderId: number,
 		payload: E2eeEpochPayload,
-	): void {
+	): Promise<void> {
 		if (
 			payload.knownEpochNumber !== undefined &&
 			!this.isEpochNumber(payload.knownEpochNumber)
