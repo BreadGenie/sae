@@ -58,6 +58,16 @@ function createController(options: { isHost?: boolean } = {}) {
 		encodedState: new Uint8Array([10]),
 		meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
 	}));
+	const removeMember = vi.fn(async (state: unknown, leafIndex: number) => ({
+		commit: { id: "commit" } as never,
+		epoch: {
+			epochNumber: 3,
+			state: state as never,
+			encodedState: new Uint8Array([11]),
+			meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+			_removedLeaf: leafIndex,
+		},
+	}));
 	const controller = new E2EEEpochSignalingController({
 		meetingId: "meeting-1",
 		sfuClient: {
@@ -84,7 +94,7 @@ function createController(options: { isHost?: boolean } = {}) {
 			decodeWelcome,
 			addMember,
 			addMultipleMembers,
-			removeMember: vi.fn(),
+			removeMember,
 			joinFromWelcome,
 			processCommit: vi.fn(),
 			exportMeetingSecret: vi.fn(),
@@ -96,6 +106,7 @@ function createController(options: { isHost?: boolean } = {}) {
 		generateKeyPackage,
 		addMember,
 		addMultipleMembers,
+		removeMember,
 		joinFromWelcome,
 	};
 }
@@ -247,6 +258,80 @@ describe("E2EEEpochSignalingController", () => {
 				epochNumber: 2,
 			}),
 		);
+		wipeActiveEpochState();
+	});
+
+	it("authors a remove commit when a remove-only commit-request arrives", async () => {
+		// Mock the ratchet tree: only the committer (senderId 7) is a member.
+		// The other leaf (senderId 9) is the to-be-removed participant.
+		const mockTree: unknown[] = [
+			{
+				nodeType: "leaf",
+				leaf: {
+					credential: {
+						credentialType: "basic",
+						identity: new TextEncoder().encode(
+							JSON.stringify({ senderId: 7, userId: "user-1" }),
+						),
+					},
+				},
+			},
+			undefined,
+			{
+				nodeType: "leaf",
+				leaf: {
+					credential: {
+						credentialType: "basic",
+						identity: new TextEncoder().encode(
+							JSON.stringify({ senderId: 9, userId: "user-2" }),
+						),
+					},
+				},
+			},
+			undefined,
+		];
+		installActiveEpochState({
+			epochNumber: 2,
+			state: { ratchetTree: mockTree } as never,
+			meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+		});
+		const { controller, sendE2EEEpochEnvelope, removeMember } =
+			createController({
+				isHost: true,
+			});
+
+		await controller.handleEpochEnvelope({
+			type: "commit-request",
+			epochNumber: 2,
+			nextEpochNumber: 3,
+			membershipDeltaId: "remove-9-to-3",
+			membershipDeltaHash: "cmVtb3Zl",
+			rosterHash: "cm9zdGVy",
+			committerSenderId: 7,
+			joiningSenderIds: [],
+			removedSenderIds: [9],
+		});
+
+		expect(removeMember).toHaveBeenCalled();
+		expect(
+			sendE2EEEpochEnvelope.mock.calls.some(
+				(call) =>
+					Array.isArray(call) &&
+					call[0] &&
+					typeof call[0] === "object" &&
+					call[0].type === "commit" &&
+					call[0].epochNumber === 3,
+			),
+		).toBe(true);
+		expect(
+			sendE2EEEpochEnvelope.mock.calls.some(
+				(call) =>
+					Array.isArray(call) &&
+					call[0] &&
+					typeof call[0] === "object" &&
+					call[0].type === "welcome",
+			),
+		).toBe(false);
 		wipeActiveEpochState();
 	});
 });

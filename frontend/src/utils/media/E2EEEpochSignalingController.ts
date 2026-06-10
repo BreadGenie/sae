@@ -1,5 +1,6 @@
 import { getGroupMembers } from "ts-mls/clientState.js";
 import { decodeMlsMessage } from "ts-mls/message.js";
+import { getCredentialFromLeafIndex } from "ts-mls/ratchetTree.js";
 import type { Ref } from "vue";
 import type { CurrentUser } from "../../composables/useCurrentUser";
 import type { SFUClient } from "../SFUClient";
@@ -66,14 +67,18 @@ export class E2EEEpochSignalingController {
 				await this.publishKeyPackage(data.epochNumber);
 				return;
 			case "commit-request":
-				if (this.shouldAuthorCommit(data.committerSenderId)) {
-					await this.authorAddMemberCommit(data);
-				} else {
+				if (!this.shouldAuthorCommit(data.committerSenderId)) {
 					console.log("[DEBUG-e2ee] ignoring commit-request (not designated)", {
 						committerSenderId: data.committerSenderId,
 						ownSenderId,
 						isHost: this.deps.isCurrentTabHost.value,
 					});
+					return;
+				}
+				if (data.removedSenderIds && data.removedSenderIds.length > 0) {
+					await this.authorRemoveCommit(data);
+				} else {
+					await this.authorAddMemberCommit(data);
 				}
 				return;
 			case "key-package":
@@ -250,6 +255,98 @@ export class E2EEEpochSignalingController {
 				epochNumber: result.epoch.epochNumber,
 				mlsWelcome: bufferToBase64(
 					this.epochProtocolProvider.encodeWelcome(result.welcome),
+				),
+			});
+		}
+	}
+
+	private async authorRemoveCommit(
+		request: Extract<E2eeEpochEnvelope, { type: "commit-request" }>,
+	): Promise<void> {
+		const removedIds = request.removedSenderIds ?? [];
+		if (removedIds.length === 0) {
+			console.warn("[DEBUG-e2ee] authorRemoveCommit: no removedSenderIds");
+			return;
+		}
+		const activeEpoch = getActiveEpochState();
+		console.log("[DEBUG-e2ee] authorRemoveCommit: enter", {
+			removedIds,
+			activeEpochNumber: activeEpoch?.epochNumber ?? null,
+		});
+		if (!activeEpoch || activeEpoch.epochNumber !== request.epochNumber) {
+			console.warn("[DEBUG-e2ee] authorRemoveCommit: epoch mismatch, abort", {
+				activeEpochNumber: activeEpoch?.epochNumber ?? null,
+				requestEpochNumber: request.epochNumber,
+			});
+			return;
+		}
+
+		// Resolve each removed senderId to a leaf index in the ratchet
+		// Walk the ratchet tree's leaves. ts-mls stores leaf nodes at
+		// even node indices; we use getCredentialFromLeafIndex to keep the
+		// leaf-index math out of the committer code.
+		const tree = activeEpoch.state.ratchetTree;
+		const senderIdByLeafIndex = new Map<number, number>();
+		for (let leafIndex = 0; leafIndex * 2 + 1 < tree.length; leafIndex += 1) {
+			const node = tree[leafIndex * 2];
+			if (!node) continue;
+			const credential = getCredentialFromLeafIndex(
+				tree as never,
+				leafIndex as never,
+			);
+			if (credential.credentialType !== "basic") continue;
+			const identity = JSON.parse(
+				new TextDecoder().decode(credential.identity),
+			);
+			if (typeof identity.senderId === "number") {
+				senderIdByLeafIndex.set(identity.senderId, leafIndex);
+			}
+		}
+
+		// Run one remove per leaf. ts-mls commits one remove at a time;
+		// for the common case (host kicks one participant) this is
+		// sufficient. Multiple removes would need separate commits.
+		for (const removedId of removedIds) {
+			const leafIndex = senderIdByLeafIndex.get(removedId);
+			if (leafIndex === undefined) {
+				console.warn(
+					"[DEBUG-e2ee] authorRemoveCommit: removed senderId not found in ratchet tree",
+					{ removedId },
+				);
+				return;
+			}
+			const result = await this.epochProtocolProvider.removeMember(
+				activeEpoch.state,
+				leafIndex,
+			);
+			const identity = await this.deps.getDeviceIdentity();
+			installActiveEpochState({
+				epochNumber: result.epoch.epochNumber,
+				state: result.epoch.state,
+				meetingSecret: result.epoch.meetingSecret,
+			});
+			E2EEMeeting.instance.setMeetingContext(
+				result.epoch.meetingSecret,
+				result.epoch.epochNumber,
+				identity.signingKeyPair.privateKey,
+			);
+			await this.syncSenderSigningPubs(result.epoch.state);
+
+			const fromSenderId = this.deps.sfuClient.getOwnSenderId();
+			const fromParticipantId =
+				this.deps.currentUser.currentUser.value?.user_id;
+			if (fromSenderId === null || !fromParticipantId) return;
+			this.deps.sfuClient.sendE2EEEpochEnvelope({
+				type: "commit",
+				fromParticipantId,
+				fromSenderId,
+				previousEpochNumber: request.epochNumber,
+				epochNumber: result.epoch.epochNumber,
+				membershipDeltaId: request.membershipDeltaId,
+				membershipDeltaHash: request.membershipDeltaHash,
+				rosterHash: request.rosterHash,
+				mlsCommit: bufferToBase64(
+					this.epochProtocolProvider.encodeCommit(result.commit),
 				),
 			});
 		}
