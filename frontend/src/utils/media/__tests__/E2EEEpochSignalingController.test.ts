@@ -84,6 +84,7 @@ function createController(options: { isHost?: boolean } = {}) {
 			decodeWelcome,
 			addMember,
 			addMultipleMembers,
+			removeMember: vi.fn(),
 			joinFromWelcome,
 			processCommit: vi.fn(),
 			exportMeetingSecret: vi.fn(),

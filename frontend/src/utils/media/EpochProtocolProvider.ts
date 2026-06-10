@@ -59,6 +59,11 @@ type AddMultipleMembersResult = {
 	epoch: EpochStateResult;
 };
 
+type RemoveMemberResult = {
+	commit: MLSMessage;
+	epoch: EpochStateResult;
+};
+
 type CreateGenesisWithMembersResult = EpochStateResult & {
 	joiningMembers: EpochMemberInput[];
 	welcome: Welcome;
@@ -87,6 +92,10 @@ export interface EpochProtocolProvider {
 		state: ClientState,
 		joiningMembers: KeyPackage[],
 	): Promise<AddMultipleMembersResult>;
+	removeMember(
+		state: ClientState,
+		removedLeafIndex: number,
+	): Promise<RemoveMemberResult>;
 	joinFromWelcome(
 		welcome: Welcome,
 		keyPackage: KeyPackage,
@@ -233,6 +242,29 @@ export class TsMlsEpochProtocolProvider implements EpochProtocolProvider {
 		return {
 			commit: commit.commit,
 			welcome: commit.welcome,
+			epoch: await this.buildStateResult(commit.newState),
+		};
+	}
+
+	async removeMember(
+		state: ClientState,
+		removedLeafIndex: number,
+	): Promise<RemoveMemberResult> {
+		if (!Number.isInteger(removedLeafIndex) || removedLeafIndex < 0) {
+			throw new Error("removedLeafIndex must be a non-negative integer");
+		}
+		const cipherSuite = await this.getCipherSuite();
+		const removeProposal: Proposal = {
+			proposalType: "remove",
+			remove: { removed: removedLeafIndex },
+		};
+		const commit = await createCommit(
+			{ state, cipherSuite },
+			{ extraProposals: [removeProposal], ratchetTreeExtension: true },
+		);
+		commit.consumed.forEach(zeroOutUint8Array);
+		return {
+			commit: commit.commit,
 			epoch: await this.buildStateResult(commit.newState),
 		};
 	}

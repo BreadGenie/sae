@@ -175,4 +175,37 @@ describe("TsMlsEpochProtocolProvider", () => {
 		expect([...bob.meetingSecret]).toEqual([...carol.meetingSecret]);
 		expect(getGroupMembers(result.state)).toHaveLength(3);
 	});
+
+	it("removes a member and rotates the meeting secret to a new value", async () => {
+		const provider = new TsMlsEpochProtocolProvider();
+		const alice = await provider.createGenesisEpoch({
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "alice@example.com",
+			deviceId: "alice-laptop",
+			senderId: 7,
+			signingPubKey,
+		});
+		const bobKeyPackage = await provider.generateKeyPackage({
+			groupId: "meeting-vscl-sabe-ykvp",
+			userId: "bob@example.com",
+			deviceId: "bob-phone",
+			senderId: 9,
+			signingPubKey,
+		});
+		const addBob = await provider.addMember(
+			alice.state,
+			bobKeyPackage.publicPackage,
+		);
+		expect(getGroupMembers(addBob.state)).toHaveLength(2);
+
+		const removeBob = await provider.removeMember(addBob.state, 1);
+		expect(removeBob.epoch.epochNumber).toBe(3);
+		expect(getGroupMembers(removeBob.epoch.state)).toHaveLength(1);
+		expect([...removeBob.epoch.meetingSecret]).not.toEqual([
+			...alice.meetingSecret,
+		]);
+		expect([...removeBob.epoch.meetingSecret]).not.toEqual([
+			...addBob.meetingSecret,
+		]);
+	});
 });
