@@ -12,7 +12,8 @@
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format .",
-		"format:write": "biome format --write ."
+		"format:write": "biome format --write .",
+		"test": "ts-node --transpile-only --project tsconfig.json src/server/__tests__/*.test.ts"
 	},
 	"keywords": [
 		"mediasoup",

@@ -14,6 +14,7 @@ import { loggers } from '../utils/logger';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
 import { E2EEEpochRelay } from './E2EEEpochRelay';
+import { E2eeRosterStore } from './E2eeRosterStore';
 
 type TypedSocket = Socket<
 	ClientToServerEvents,
@@ -34,6 +35,7 @@ export class SocketHandlerManager {
 	private nextSenderIdByRoom: Map<string, number> = new Map(); // roomId -> next senderId
 	private participantToSender: Map<string, Map<string, number>> = new Map(); // roomId -> (participantId -> senderId)
 	private e2eeEpochRelay: E2EEEpochRelay;
+	private e2eeRoster: E2eeRosterStore;
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -49,6 +51,7 @@ export class SocketHandlerManager {
 			this.fullAccessSockets,
 			this.participantToSender,
 		);
+		this.e2eeRoster = new E2eeRosterStore();
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
 			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
 				participantId: peerId,
@@ -220,6 +223,7 @@ export class SocketHandlerManager {
 		this.nextSenderIdByRoom.delete(roomId);
 		this.participantToSender.delete(roomId);
 		this.e2eeEpochRelay.clearRoom(roomId);
+		this.e2eeRoster.clearRoom(roomId);
 		this.mediasoup.closeRoom(roomId);
 	}
 
@@ -533,6 +537,12 @@ export class SocketHandlerManager {
 					this.fullAccessSockets.set(roomId, new Set());
 				}
 				this.fullAccessSockets.get(roomId)?.add(socket.id);
+				this.e2eeRoster.add(roomId, {
+					participantId,
+					senderId,
+					isHost: Boolean(socket.isHost),
+					joinedAt: Date.now(),
+				});
 
 				// If this peer is rejoining the room (e.g., host is
 				// reconfiguring for E2EE mid-meeting), drop any leftover
@@ -1396,6 +1406,9 @@ export class SocketHandlerManager {
 					// Only remove peer if full access
 					if (socket.scope === 'full') {
 						this.participantToSender.get(roomId)?.delete(participantId);
+						if (socket.senderId !== undefined) {
+							this.e2eeRoster.remove(roomId, socket.senderId);
+						}
 						await this.mediasoup.removePeer(roomId, participantId);
 
 						if (this.isRealParticipant(participantId)) {
