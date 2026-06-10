@@ -154,10 +154,10 @@ export class E2EEEpochSignalingController {
 	}
 
 	private shouldAuthorCommit(committerSenderId: number): boolean {
-		return (
-			this.deps.isCurrentTabHost.value &&
-			this.deps.sfuClient.getOwnSenderId() === committerSenderId
-		);
+		// The SFU roster picks the committer: prefer host, fall back to oldest
+		// current member. Any current member tab can author a commit; the SFU
+		// validates the committer against the roster in slice 3.
+		return this.deps.sfuClient.getOwnSenderId() === committerSenderId;
 	}
 
 	private async authorAddMemberCommit(

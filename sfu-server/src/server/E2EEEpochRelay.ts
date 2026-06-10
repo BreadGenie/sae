@@ -6,6 +6,7 @@ import type {
 	SocketData,
 } from '../types';
 import { loggers } from '../utils/logger';
+import type { E2eeRosterStore } from './E2eeRosterStore';
 
 type TypedSocket = Socket<
 	ClientToServerEvents,
@@ -52,6 +53,7 @@ export class E2EEEpochRelay {
 	private io: Server<ClientToServerEvents, ServerToClientEvents>;
 	private fullAccessSockets: Map<string, Set<string>>;
 	private participantToSender: Map<string, Map<string, number>>;
+	private roster: E2eeRosterStore | null = null;
 	private retainedMaterial = new Map<
 		string,
 		Map<number, RetainedEpochMaterial>
@@ -66,6 +68,10 @@ export class E2EEEpochRelay {
 		this.io = io;
 		this.fullAccessSockets = fullAccessSockets;
 		this.participantToSender = participantToSender;
+	}
+
+	setRoster(roster: E2eeRosterStore): void {
+		this.roster = roster;
 	}
 
 	setup(socket: Socket): void {
@@ -224,23 +230,32 @@ export class E2EEEpochRelay {
 		joiningSenderIds: number[],
 		epochNumber: number,
 	): void {
+		if (joiningSenderIds.length === 0) {
+			console.warn('[DEBUG-e2ee] SFU: no joiners to add', { roomId });
+			return;
+		}
+		// Pick a current epoch member to author the commit. Prefer host if
+		// online; else oldest current member online. Roster picker ignores
+		// the joiners.
+		const picked = this.roster?.pickCommitter(roomId, joiningSenderIds) ?? null;
 		const hostSocket = this.findHostSocket(roomId);
-		console.log('[DEBUG-e2ee] SFU: requestCommitFromHost lookup', {
+		const hostExcluded = picked
+			? hostSocket?.senderId === undefined ||
+				hostSocket.senderId !== picked.senderId
+			: true;
+		console.log('[DEBUG-e2ee] SFU: requestCommitFromHost picker', {
 			roomId,
 			joiningSenderIds,
 			epochNumber,
+			pickedSenderId: picked?.senderId ?? null,
+			pickedIsHost: picked?.isHost ?? null,
 			hostFound: !!hostSocket,
-			hostSenderId: hostSocket?.senderId,
+			hostOnline: !hostExcluded,
 		});
-		if (
-			hostSocket?.senderId === undefined ||
-			joiningSenderIds.length === 0 ||
-			joiningSenderIds.includes(hostSocket.senderId)
-		) {
-			console.warn('[DEBUG-e2ee] SFU: no host committer available', {
+		if (!picked) {
+			console.warn('[DEBUG-e2ee] SFU: no committer available', {
 				roomId,
 				joiningSenderIds,
-				hostFound: !!hostSocket,
 			});
 			return;
 		}
@@ -254,14 +269,14 @@ export class E2EEEpochRelay {
 				nextEpochNumber,
 			}),
 		).toString('base64');
-		this.emitToTarget(roomId, hostSocket.participantId ?? '', {
+		this.emitToTarget(roomId, picked.participantId, {
 			type: 'commit-request',
 			epochNumber,
 			nextEpochNumber,
 			membershipDeltaId,
 			membershipDeltaHash,
 			rosterHash: membershipDeltaHash,
-			committerSenderId: hostSocket.senderId,
+			committerSenderId: picked.senderId,
 			joiningSenderIds: sortedIds,
 		});
 	}

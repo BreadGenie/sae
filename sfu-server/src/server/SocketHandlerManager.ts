@@ -52,6 +52,7 @@ export class SocketHandlerManager {
 			this.participantToSender,
 		);
 		this.e2eeRoster = new E2eeRosterStore();
+		this.e2eeEpochRelay.setRoster(this.e2eeRoster);
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
 			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {
 				participantId: peerId,

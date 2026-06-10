@@ -206,4 +206,46 @@ describe("E2EEEpochSignalingController", () => {
 		});
 		wipeActiveEpochState();
 	});
+
+	it("authors an add-member commit when a non-host tab is the designated committer", async () => {
+		installActiveEpochState({
+			epochNumber: 1,
+			state: { id: "epoch-1-state" } as never,
+			meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+		});
+		// Same senderId 7, but isCurrentTabHost is now false — a non-host
+		// current member tab is the designated committer.
+		const { controller, sendE2EEEpochEnvelope, addMultipleMembers } =
+			createController({
+				isHost: false,
+			});
+
+		await controller.handleEpochEnvelope({
+			type: "key-package",
+			fromParticipantId: "joiner-1",
+			fromSenderId: 9,
+			epochNumber: 1,
+			keyPackage: "AQID",
+		});
+		await controller.handleEpochEnvelope({
+			type: "commit-request",
+			epochNumber: 1,
+			nextEpochNumber: 2,
+			membershipDeltaId: "delta-1",
+			membershipDeltaHash: "ZGVsdGE=",
+			rosterHash: "cm9zdGVy",
+			committerSenderId: 7,
+			joiningSenderIds: [9],
+		});
+
+		expect(addMultipleMembers).toHaveBeenCalled();
+		expect(sendE2EEEpochEnvelope).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "commit",
+				previousEpochNumber: 1,
+				epochNumber: 2,
+			}),
+		);
+		wipeActiveEpochState();
+	});
 });
