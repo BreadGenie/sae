@@ -70,4 +70,28 @@ assert(store.list(roomId).length === 0, 'clearRoom should remove all entries');
 // remove from non-existent room is a no-op
 store.remove('nonexistent', 99);
 
+// pickCommitter: reconnects a joiner who's still in the roster (transient
+// socket blip). The picker must not return the joiner themselves.
+const store3 = new E2eeRosterStore();
+store3.add(roomId, makeEntry(11, { isHost: true, joinedAt: 50 }));
+store3.add(roomId, makeEntry(13, { joinedAt: 100 }));
+store3.add(roomId, makeEntry(15, { joinedAt: 200 })); // the rejoining member
+
+const pickedReconnect = store3.pickCommitter(roomId, [15]);
+assert(
+	pickedReconnect?.senderId === 11,
+	`rejoin should not pick the joiner; got senderId=${pickedReconnect?.senderId}`,
+);
+
+// pickCommitter: only the rejoining member is in the roster (everyone else left
+// while the joiner was offline). Picker must return null rather than pick the
+// joiner.
+const store4 = new E2eeRosterStore();
+store4.add(roomId, makeEntry(15, { joinedAt: 200 }));
+const pickedLone = store4.pickCommitter(roomId, [15]);
+assert(
+	pickedLone === null,
+	'pickCommitter must skip the joiner even when they are the only roster entry',
+);
+
 console.log('E2eeRosterStore tests passed');
