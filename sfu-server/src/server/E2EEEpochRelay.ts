@@ -399,6 +399,7 @@ export class E2EEEpochRelay {
 		if (!targetParticipantId) return;
 		const retainedByEpoch = this.retainedMaterial.get(roomId);
 		if (!retainedByEpoch) return;
+		let sentAny = false;
 		for (const [epochNumber, retained] of retainedByEpoch.entries()) {
 			if (
 				payload.knownEpochNumber !== undefined &&
@@ -408,11 +409,29 @@ export class E2EEEpochRelay {
 			}
 			if (retained.commit) {
 				this.emitToTarget(roomId, targetParticipantId, retained.commit);
+				sentAny = true;
 			}
 			const welcome = retained.welcomes.get(fromSenderId);
 			if (welcome) {
 				this.emitToTarget(roomId, targetParticipantId, welcome);
+				sentAny = true;
 			}
+		}
+		if (!sentAny) {
+			console.log(
+				'[DEBUG-e2ee] SFU: resync-request had no retained material; requesting fresh key package',
+				{
+					roomId,
+					fromSenderId,
+					knownEpochNumber: payload.knownEpochNumber ?? null,
+				},
+			);
+			const epochNumber = this.getCurrentEpochNumber(roomId);
+			this.emitToTarget(roomId, targetParticipantId, {
+				type: 'key-package-request',
+				epochNumber,
+				reason: 'reconnect',
+			});
 		}
 	}
 

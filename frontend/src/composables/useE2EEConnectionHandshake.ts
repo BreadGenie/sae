@@ -81,14 +81,14 @@ export function useE2EEConnectionHandshake(
 	const handleEpochMessageBound = (data: unknown) => {
 		void epochSignalingController.handleEpochEnvelope(data);
 	};
-	const handleSFUReconnectBound = () => controller.handleSFUReconnect();
+	const handleSFUReconnectBound = () => controller.handleTransientReconnect();
 	const handleHostE2EEKeySetBound = (event: Event) => {
 		const detail = (event as CustomEvent).detail;
 		if (detail?.keyVersion) {
 			void controller.handleHostE2EEKeySet(detail);
 		}
 	};
-	const handleE2EEResyncBound = () => controller.handleSFUReconnect();
+	const handleE2EEResyncBound = () => controller.handleTransientReconnect();
 
 	function setupRealtimeEventListeners(): void {
 		if (realtimeListenersAttached) return;

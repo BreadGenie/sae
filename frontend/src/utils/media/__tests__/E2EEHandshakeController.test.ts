@@ -219,4 +219,105 @@ describe("E2EEHandshakeController", () => {
 		).toBe(true);
 		expect(controller.keyVersion).toBe(2);
 	});
+
+	it("transient reconnect sends a resync-request without wiping runtime state", async () => {
+		const sendE2EEEpochEnvelope = vi.fn();
+		const sfuClient = {
+			getOwnSenderId: vi.fn(() => 7),
+			setE2EERequired: vi.fn(),
+			isConnected: vi.fn(() => true),
+			sendE2EEEpochEnvelope,
+		} as never;
+		const controller = new E2EEHandshakeController({
+			meetingId: "meeting-1",
+			sfuClient,
+			sfuManager: shallowRef(null),
+			currentUser: {
+				currentUser: shallowRef({ user_id: "user-1" }),
+			} as never,
+			mediaState: {} as never,
+			isCurrentTabHost: shallowRef(false),
+			getDeviceIdentity: vi.fn(async () => ({
+				deviceId: "device-1",
+				signingPublicKey: "signing-public-key",
+				signingKeyPair: { privateKey: {} as CryptoKey } as CryptoKeyPair,
+			})),
+			epochProtocolProvider: {
+				createGenesisEpoch: vi.fn(),
+				createGenesisEpochWithMembers: vi.fn(),
+				generateKeyPackage: vi.fn(),
+				encodeKeyPackage: vi.fn(),
+				decodeKeyPackage: vi.fn(),
+				encodeCommit: vi.fn(),
+				encodeWelcome: vi.fn(),
+				decodeWelcome: vi.fn(),
+				addMember: vi.fn(),
+				addMultipleMembers: vi.fn(),
+				joinFromWelcome: vi.fn(),
+				processCommit: vi.fn(),
+				exportMeetingSecret: vi.fn(),
+			} as never,
+		});
+		controller.keyVersion = 3;
+
+		controller.handleTransientReconnect();
+
+		expect(sendE2EEEpochEnvelope).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "resync-request",
+				knownEpochNumber: 3,
+			}),
+		);
+		expect(controller.keyVersion).toBe(3);
+	});
+
+	it("hard reconnect (legacy) wipes runtime state before sending a resync-request", async () => {
+		const sendE2EEEpochEnvelope = vi.fn();
+		const sfuClient = {
+			getOwnSenderId: vi.fn(() => 7),
+			setE2EERequired: vi.fn(),
+			isConnected: vi.fn(() => true),
+			sendE2EEEpochEnvelope,
+		} as never;
+		const controller = new E2EEHandshakeController({
+			meetingId: "meeting-1",
+			sfuClient,
+			sfuManager: shallowRef(null),
+			currentUser: {
+				currentUser: shallowRef({ user_id: "user-1" }),
+			} as never,
+			mediaState: {} as never,
+			isCurrentTabHost: shallowRef(false),
+			getDeviceIdentity: vi.fn(async () => ({
+				deviceId: "device-1",
+				signingPublicKey: "signing-public-key",
+				signingKeyPair: { privateKey: {} as CryptoKey } as CryptoKeyPair,
+			})),
+			epochProtocolProvider: {
+				createGenesisEpoch: vi.fn(),
+				createGenesisEpochWithMembers: vi.fn(),
+				generateKeyPackage: vi.fn(),
+				encodeKeyPackage: vi.fn(),
+				decodeKeyPackage: vi.fn(),
+				encodeCommit: vi.fn(),
+				encodeWelcome: vi.fn(),
+				decodeWelcome: vi.fn(),
+				addMember: vi.fn(),
+				addMultipleMembers: vi.fn(),
+				joinFromWelcome: vi.fn(),
+				processCommit: vi.fn(),
+				exportMeetingSecret: vi.fn(),
+			} as never,
+		});
+		controller.keyVersion = 3;
+		controller.meetingSecret = new Uint8Array(32) as Uint8Array<ArrayBuffer>;
+
+		controller.handleSFUReconnect();
+
+		expect(controller.keyVersion).toBeNull();
+		expect(controller.meetingSecret).toBeNull();
+		expect(sendE2EEEpochEnvelope).toHaveBeenCalledWith(
+			expect.objectContaining({ type: "resync-request" }),
+		);
+	});
 });

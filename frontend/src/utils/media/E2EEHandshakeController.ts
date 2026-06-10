@@ -353,6 +353,25 @@ export class E2EEHandshakeController {
 		});
 	}
 
+	/**
+	 * Transient socket reconnect: the SFU socket reconnected to the same
+	 * meeting. Do NOT wipe the in-memory meeting secret or pending key
+	 * packages — the relay can replay retained commits/welcomes and the
+	 * client can re-join via processCommit / processWelcome.
+	 */
+	handleTransientReconnect(): void {
+		if (this.deps.isCurrentTabHost.value) return;
+		console.log("[DEBUG-e2ee] handleTransientReconnect: requesting resync", {
+			knownEpochNumber: this.keyVersion ?? null,
+		});
+		this.sfuClient.sendE2EEEpochEnvelope({
+			type: "resync-request",
+			fromParticipantId: this.ownParticipantId(),
+			fromSenderId: this.sfuClient.getOwnSenderId?.() ?? 0,
+			knownEpochNumber: this.keyVersion ?? undefined,
+		});
+	}
+
 	async handleMeetingE2EEEnabled(data: { meeting_id?: string }): Promise<void> {
 		if (data.meeting_id !== this.meetingId) return;
 		if (this.deps.isCurrentTabHost.value) return;
