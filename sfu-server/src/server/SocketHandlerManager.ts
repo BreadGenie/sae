@@ -15,7 +15,7 @@ import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
 import { E2EEEpochRelay } from './E2EEEpochRelay';
 import { InMemoryRosterPersistence } from './E2eeRosterPersistence';
-import { E2eeRosterStore } from './E2eeRosterStore';
+import type { E2eeRosterStore } from './E2eeRosterStore';
 
 type TypedSocket = Socket<
 	ClientToServerEvents,
@@ -42,6 +42,7 @@ export class SocketHandlerManager {
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
 		mediasoup: MediasoupManager,
 		authManager: AuthManager,
+		roster: E2eeRosterStore,
 	) {
 		this.io = io;
 		this.mediasoup = mediasoup;
@@ -52,7 +53,7 @@ export class SocketHandlerManager {
 			this.fullAccessSockets,
 			this.participantToSender,
 		);
-		this.e2eeRoster = new E2eeRosterStore(new InMemoryRosterPersistence());
+		this.e2eeRoster = roster;
 		this.e2eeEpochRelay.setRoster(this.e2eeRoster);
 		this.mediasoup.onNetworkQualityUpdate((roomId, peerId, quality) => {
 			this.emitToFullAccessParticipants(roomId, 'network_quality_update', {

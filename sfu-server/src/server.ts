@@ -1,10 +1,14 @@
 import 'dotenv/config';
 import http from 'node:http';
+import { join } from 'node:path';
 import cors from 'cors';
 import express, { type Application } from 'express';
 import { Server } from 'socket.io';
 import { MediasoupManager } from './mediasoup/MediasoupManager';
 import { AuthManager } from './server/AuthManager';
+import { InMemoryRosterPersistence } from './server/E2eeRosterPersistence';
+import { FileRosterPersistence } from './server/E2eeRosterPersistenceFile';
+import { E2eeRosterStore } from './server/E2eeRosterStore';
 import { RouteManager } from './server/RouteManager';
 import { SocketHandlerManager } from './server/SocketHandlerManager';
 import type { ServerConfig } from './types';
@@ -55,10 +59,18 @@ export class SFUServer {
 		this.mediasoup = new MediasoupManager();
 		this.authManager = new AuthManager(this.config.jwtSecret);
 		this.routeManager = new RouteManager(this.app, this.mediasoup);
+		const e2eeRoster = new E2eeRosterStore(
+			process.env.E2EE_ROSTER_PERSISTENCE_DIR
+				? new FileRosterPersistence(
+						join(process.env.E2EE_ROSTER_PERSISTENCE_DIR, 'roster.json'),
+					)
+				: new InMemoryRosterPersistence(),
+		);
 		this.socketHandlerManager = new SocketHandlerManager(
 			this.io,
 			this.mediasoup,
 			this.authManager,
+			e2eeRoster,
 		);
 
 		this.setupMiddleware();
