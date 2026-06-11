@@ -14,7 +14,6 @@ import { loggers } from '../utils/logger';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
 import { E2EEEpochRelay } from './E2EEEpochRelay';
-import { InMemoryRosterPersistence } from './E2eeRosterPersistence';
 import type { E2eeRosterStore } from './E2eeRosterStore';
 
 type TypedSocket = Socket<

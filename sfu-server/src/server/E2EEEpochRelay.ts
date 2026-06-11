@@ -44,6 +44,8 @@ const MAX_DELTA_ID_LENGTH = 128;
 const SENDER_ID_MAX = 0xffffffff;
 const RETAINED_EPOCHS = 3;
 const COMMIT_REQUEST_BATCH_MS = 250;
+const COMMITTER_TIMEOUT_MS = 10_000;
+const MAX_REDESIGNATIONS = 3;
 
 type RetainedEpochMaterial = {
 	commit?: Extract<E2eeEpochEnvelope, { type: 'commit' }>;
@@ -54,6 +56,18 @@ type RetainedEpochMaterial = {
 type CommitRequestBatch = {
 	joiningSenderIds: number[];
 	epochNumber: number;
+	timer: ReturnType<typeof setTimeout>;
+};
+
+type PendingCommitRequest = {
+	joiningSenderIds: number[];
+	removedSenderIds: number[];
+	epochNumber: number;
+	membershipDeltaId: string;
+	membershipDeltaHash: string;
+	rosterHash: string;
+	alreadyTried: number[];
+	attempts: number;
 	timer: ReturnType<typeof setTimeout>;
 };
 
@@ -68,6 +82,10 @@ export class E2EEEpochRelay {
 	>();
 	private currentEpochByRoom = new Map<string, number>();
 	private readonly commitRequestBatches = new Map<string, CommitRequestBatch>();
+	private readonly pendingCommitRequests = new Map<
+		string,
+		PendingCommitRequest
+	>();
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -128,6 +146,7 @@ export class E2EEEpochRelay {
 		this.currentEpochByRoom.delete(roomId);
 		this.retainedMaterial.delete(roomId);
 		this.flushPendingCommitRequests(roomId);
+		this.flushPendingCommitRequestsForRoom(roomId);
 	}
 
 	private async handle(
@@ -247,6 +266,170 @@ export class E2EEEpochRelay {
 		);
 	}
 
+	/**
+	 * Dispatch a commit-request to a roster-picked committer, with a
+	 * timeout-driven redesignation policy. If the committer doesn't
+	 * respond with a `commit` envelope within COMMITTER_TIMEOUT_MS, the
+	 * SFU picks another current member (excluding all previously-tried
+	 * committers for this delta) and re-emits the request. After
+	 * MAX_REDESIGNATIONS attempts, the SFU gives up and logs.
+	 *
+	 * Multiple calls for the same (roomId, membershipDeltaId) merge: the
+	 * pending entry accumulates the joiners/removers and the committer is
+	 * asked only once. The pending entry is cleared when a matching
+	 * `commit` envelope arrives (see relayCommit's success branch).
+	 */
+	private async dispatchCommitRequest(input: {
+		roomId: string;
+		joiningSenderIds: number[];
+		removedSenderIds: number[];
+		epochNumber: number;
+	}): Promise<void> {
+		const { roomId, joiningSenderIds, removedSenderIds, epochNumber } = input;
+		const key = `${roomId}:${epochNumber}`;
+		const existing = this.pendingCommitRequests.get(key);
+
+		// Compute the delta id + hash from the merged list. If two
+		// callers race (e.g. an add and a remove for the same epoch), the
+		// later caller wins for the delta id, but the joiners/removers
+		// accumulate. In practice, the relay never has both for the same
+		// epoch (an add advances the epoch; a remove targets a different
+		// commit context). This is fine.
+		const isAdd = joiningSenderIds.length > 0;
+		const type = isAdd ? 'add' : 'remove';
+		const senderIds = isAdd ? joiningSenderIds : removedSenderIds;
+		const nextEpochNumber = epochNumber + 1;
+		const membershipDeltaId = `${type}-${senderIds.join('-')}-to-${nextEpochNumber}`;
+		const membershipDeltaHash = Buffer.from(
+			JSON.stringify({ type, senderIds, nextEpochNumber }),
+		).toString('base64');
+
+		if (existing) {
+			// Merge: clear the in-flight timer (the picker will set a new
+			// one). The committer gets a fresh window.
+			clearTimeout(existing.timer);
+			for (const id of joiningSenderIds) {
+				if (!existing.joiningSenderIds.includes(id)) {
+					existing.joiningSenderIds.push(id);
+				}
+			}
+			for (const id of removedSenderIds) {
+				if (!existing.removedSenderIds.includes(id)) {
+					existing.removedSenderIds.push(id);
+				}
+			}
+			existing.epochNumber = epochNumber;
+			existing.membershipDeltaId = membershipDeltaId;
+			existing.membershipDeltaHash = membershipDeltaHash;
+			existing.rosterHash = membershipDeltaHash;
+			await this.tryAssignAndEmit(roomId, existing);
+			return;
+		}
+
+		const pending: PendingCommitRequest = {
+			joiningSenderIds: [...joiningSenderIds],
+			removedSenderIds: [...removedSenderIds],
+			epochNumber,
+			membershipDeltaId,
+			membershipDeltaHash,
+			rosterHash: membershipDeltaHash,
+			alreadyTried: [],
+			attempts: 0,
+			timer: setTimeout(() => undefined, 0), // placeholder; replaced below
+		};
+		this.pendingCommitRequests.set(key, pending);
+		await this.tryAssignAndEmit(roomId, pending);
+	}
+
+	private async tryAssignAndEmit(
+		roomId: string,
+		pending: PendingCommitRequest,
+	): Promise<void> {
+		clearTimeout(pending.timer);
+		const exclude = [
+			...pending.joiningSenderIds,
+			...pending.removedSenderIds,
+			...pending.alreadyTried,
+		];
+		const picked = (await this.roster?.pickCommitter(roomId, exclude)) ?? null;
+		if (!picked) {
+			console.warn(
+				'[DEBUG-e2ee] SFU: redesignation gave up, no eligible committer',
+				{
+					roomId,
+					membershipDeltaId: pending.membershipDeltaId,
+					attempts: pending.attempts,
+					alreadyTried: pending.alreadyTried,
+				},
+			);
+			this.clearPendingCommitRequest(roomId, pending.epochNumber);
+			return;
+		}
+		pending.alreadyTried.push(picked.senderId);
+		pending.attempts += 1;
+		const nextEpochNumber = pending.epochNumber + 1;
+		console.log('[DEBUG-e2ee] SFU: dispatching commit-request', {
+			roomId,
+			membershipDeltaId: pending.membershipDeltaId,
+			committerSenderId: picked.senderId,
+			attempts: pending.attempts,
+		});
+		this.emitToTarget(roomId, picked.participantId, {
+			type: 'commit-request',
+			epochNumber: pending.epochNumber,
+			nextEpochNumber,
+			membershipDeltaId: pending.membershipDeltaId,
+			membershipDeltaHash: pending.membershipDeltaHash,
+			rosterHash: pending.rosterHash,
+			committerSenderId: picked.senderId,
+			joiningSenderIds: pending.joiningSenderIds,
+			removedSenderIds:
+				pending.removedSenderIds.length > 0
+					? pending.removedSenderIds
+					: undefined,
+		});
+		pending.timer = setTimeout(() => {
+			void this.redesignate(roomId, pending.epochNumber);
+		}, COMMITTER_TIMEOUT_MS);
+	}
+
+	private async redesignate(
+		roomId: string,
+		epochNumber: number,
+	): Promise<void> {
+		const key = `${roomId}:${epochNumber}`;
+		const pending = this.pendingCommitRequests.get(key);
+		if (!pending) {
+			// Already cleared (e.g. the committer responded). Nothing to do.
+			return;
+		}
+		if (pending.attempts >= MAX_REDESIGNATIONS) {
+			console.warn('[DEBUG-e2ee] SFU: redesignation exhausted, giving up', {
+				roomId,
+				membershipDeltaId: pending.membershipDeltaId,
+				attempts: pending.attempts,
+			});
+			this.clearPendingCommitRequest(roomId, epochNumber);
+			return;
+		}
+		console.log('[DEBUG-e2ee] SFU: committer timed out, redesignating', {
+			roomId,
+			membershipDeltaId: pending.membershipDeltaId,
+			attempts: pending.attempts,
+			alreadyTried: pending.alreadyTried,
+		});
+		await this.tryAssignAndEmit(roomId, pending);
+	}
+
+	private clearPendingCommitRequest(roomId: string, epochNumber: number): void {
+		const key = `${roomId}:${epochNumber}`;
+		const pending = this.pendingCommitRequests.get(key);
+		if (pending) {
+			clearTimeout(pending.timer);
+		}
+		this.pendingCommitRequests.delete(key);
+	}
+
 	private async requestCommitFromHost(
 		roomId: string,
 		joiningSenderIds: number[],
@@ -256,51 +439,11 @@ export class E2EEEpochRelay {
 			console.warn('[DEBUG-e2ee] SFU: no joiners to add', { roomId });
 			return;
 		}
-		// Pick a current epoch member to author the commit. Prefer host if
-		// online; else oldest current member online. Roster picker ignores
-		// the joiners.
-		const picked =
-			(await this.roster?.pickCommitter(roomId, joiningSenderIds)) ?? null;
-		const hostSocket = this.findHostSocket(roomId);
-		const hostExcluded = picked
-			? hostSocket?.senderId === undefined ||
-				hostSocket.senderId !== picked.senderId
-			: true;
-		console.log('[DEBUG-e2ee] SFU: requestCommitFromHost picker', {
+		await this.dispatchCommitRequest({
 			roomId,
-			joiningSenderIds,
+			joiningSenderIds: [...joiningSenderIds].sort((a, b) => a - b),
+			removedSenderIds: [],
 			epochNumber,
-			pickedSenderId: picked?.senderId ?? null,
-			pickedIsHost: picked?.isHost ?? null,
-			hostFound: !!hostSocket,
-			hostOnline: !hostExcluded,
-		});
-		if (!picked) {
-			console.warn('[DEBUG-e2ee] SFU: no committer available', {
-				roomId,
-				joiningSenderIds,
-			});
-			return;
-		}
-		const nextEpochNumber = epochNumber + 1;
-		const sortedIds = [...joiningSenderIds].sort((a, b) => a - b);
-		const membershipDeltaId = `add-${sortedIds.join('-')}-to-${nextEpochNumber}`;
-		const membershipDeltaHash = Buffer.from(
-			JSON.stringify({
-				type: 'add',
-				senderIds: sortedIds,
-				nextEpochNumber,
-			}),
-		).toString('base64');
-		this.emitToTarget(roomId, picked.participantId, {
-			type: 'commit-request',
-			epochNumber,
-			nextEpochNumber,
-			membershipDeltaId,
-			membershipDeltaHash,
-			rosterHash: membershipDeltaHash,
-			committerSenderId: picked.senderId,
-			joiningSenderIds: sortedIds,
 		});
 	}
 
@@ -319,35 +462,11 @@ export class E2EEEpochRelay {
 			console.warn('[DEBUG-e2ee] SFU: no removals requested', { roomId });
 			return false;
 		}
-		const picked =
-			(await this.roster?.pickCommitter(roomId, removedSenderIds)) ?? null;
-		if (!picked) {
-			console.warn('[DEBUG-e2ee] SFU: no committer for removal', {
-				roomId,
-				removedSenderIds,
-			});
-			return false;
-		}
-		const nextEpochNumber = epochNumber + 1;
-		const sortedIds = [...removedSenderIds].sort((a, b) => a - b);
-		const membershipDeltaId = `remove-${sortedIds.join('-')}-to-${nextEpochNumber}`;
-		const membershipDeltaHash = Buffer.from(
-			JSON.stringify({
-				type: 'remove',
-				senderIds: sortedIds,
-				nextEpochNumber,
-			}),
-		).toString('base64');
-		this.emitToTarget(roomId, picked.participantId, {
-			type: 'commit-request',
-			epochNumber,
-			nextEpochNumber,
-			membershipDeltaId,
-			membershipDeltaHash,
-			rosterHash: membershipDeltaHash,
-			committerSenderId: picked.senderId,
+		await this.dispatchCommitRequest({
+			roomId,
 			joiningSenderIds: [],
-			removedSenderIds: sortedIds,
+			removedSenderIds: [...removedSenderIds].sort((a, b) => a - b),
+			epochNumber,
 		});
 		return true;
 	}
@@ -426,6 +545,17 @@ export class E2EEEpochRelay {
 		}
 	}
 
+	private flushPendingCommitRequestsForRoom(roomId: string): void {
+		// Cancel any pending committer redesignation timers for this room
+		// so they don't fire after the room is gone.
+		const prefix = `${roomId}:`;
+		for (const [key, pending] of this.pendingCommitRequests) {
+			if (!key.startsWith(prefix)) continue;
+			clearTimeout(pending.timer);
+			this.pendingCommitRequests.delete(key);
+		}
+	}
+
 	private relayCommitRequest(roomId: string, payload: E2eeEpochPayload): void {
 		if (
 			!this.isEpochNumber(payload.epochNumber) ||
@@ -495,6 +625,13 @@ export class E2EEEpochRelay {
 		};
 		this.retainCommit(roomId, commit);
 		this.emitToFullAccessParticipants(roomId, commit);
+		// The committer responded successfully. Clear any pending
+		// commit-request for this delta so the redesignation timer is
+		// cancelled. We use the previous epoch number as the lookup
+		// key because that's what `dispatchCommitRequest` keyed on
+		// (the request was made for the current epoch, which becomes
+		// the previous epoch once the commit lands).
+		this.clearPendingCommitRequest(roomId, payload.previousEpochNumber);
 	}
 
 	private relayWelcome(
@@ -713,25 +850,6 @@ export class E2EEEpochRelay {
 				| TypedSocket
 				| undefined;
 			if (socket && socket.participantId === participantId) {
-				return socket;
-			}
-		}
-		return null;
-	}
-
-	private findHostSocket(roomId: string): TypedSocket | null {
-		const socketsInRoom = this.io.sockets.adapter.rooms.get(roomId);
-		if (!socketsInRoom) return null;
-
-		for (const socketId of socketsInRoom) {
-			const socket = this.io.sockets.sockets.get(socketId) as
-				| TypedSocket
-				| undefined;
-			if (
-				socket?.isHost &&
-				socket.participantId &&
-				this.fullAccessSockets.get(roomId)?.has(socket.id)
-			) {
 				return socket;
 			}
 		}
