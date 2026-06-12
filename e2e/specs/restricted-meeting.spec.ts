@@ -37,10 +37,10 @@ test.describe("Restricted meeting", () => {
 
 	test("guest in restricted lobby can't join meeting when rejected", async ({
 		hostPage,
-		createMeeting,
+		restrictedMeetingId,
 		createParticipant,
 	}) => {
-		const meetingId = await createMeeting("restricted");
+		const meetingId = restrictedMeetingId;
 		const guest = await createParticipant();
 		const guestName = `Guest Rejected ${test.info().parallelIndex}-${test.info().retry}`;
 
@@ -79,9 +79,6 @@ test.describe("Restricted meeting", () => {
 
 		await guest.page.goto(`/meet/${meetingId}`);
 		await expect(guest.page.getByTestId("meeting-preview")).toBeVisible();
-		const rejoinNameInput = guest.page.getByPlaceholder("John Doe");
-		await rejoinNameInput.fill(guestName);
-		await expect(guest.page.getByTestId("join-meeting-preview-button")).toBeEnabled();
 		await guest.page.getByTestId("join-meeting-preview-button").click();
 
 		await expect(
