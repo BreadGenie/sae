@@ -142,7 +142,9 @@ jobs:
       - name: Start Frappe Server
         working-directory: /home/runner/frappe-bench
         run: |
-          bench serve --port 8000 &> bench_serve.log &
+          sed -i 's/^watch:/# watch:/g' Procfile
+          sed -i 's/^schedule:/# schedule:/g' Procfile
+          bench start &> bench_start.log &
           echo "Waiting for Frappe server to start..."
           timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
           echo "Frappe server is ready!"
