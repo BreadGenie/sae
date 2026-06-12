@@ -79,6 +79,9 @@ test.describe("Restricted meeting", () => {
 
 		await guest.page.goto(`/meet/${meetingId}`);
 		await expect(guest.page.getByTestId("meeting-preview")).toBeVisible();
+		const rejoinNameInput = guest.page.getByPlaceholder("John Doe");
+		await rejoinNameInput.fill(guestName);
+		await expect(guest.page.getByTestId("join-meeting-preview-button")).toBeEnabled();
 		await guest.page.getByTestId("join-meeting-preview-button").click();
 
 		await expect(
