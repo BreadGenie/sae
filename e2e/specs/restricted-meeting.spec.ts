@@ -37,10 +37,10 @@ test.describe("Restricted meeting", () => {
 
 	test("guest in restricted lobby can't join meeting when rejected", async ({
 		hostPage,
-		restrictedMeetingId,
+		createMeeting,
 		createParticipant,
 	}) => {
-		const meetingId = restrictedMeetingId;
+		const meetingId = await createMeeting("restricted");
 		const guest = await createParticipant();
 		const guestName = `Guest Rejected ${test.info().parallelIndex}-${test.info().retry}`;
 
