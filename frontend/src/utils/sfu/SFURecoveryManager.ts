@@ -96,10 +96,13 @@ export class SFURecoveryManager {
 		const now = Date.now();
 		for (const [direction, since] of this.disconnectedSince) {
 			if (now - since >= SFURecoveryManager.DISCONNECTED_GRACE_MS) {
-				this.disconnectedSince.delete(direction);
 				void this.recoverTransportIce(
 					`transport_${direction}_disconnected_timeout`,
-				);
+				).then((recovered) => {
+					if (recovered) {
+						this.disconnectedSince.delete(direction);
+					}
+				});
 			}
 		}
 	}
