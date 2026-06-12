@@ -128,25 +128,29 @@ describe("SFUMediaManager.handleConsumerLost", () => {
 		expect(transportManager.createConsumer).not.toHaveBeenCalled();
 	});
 
-	it("caps retries at 3 and gives up", async () => {
+	it("caps retries at 3, then resets and tries again on the next lost event", async () => {
 		const { mediaManager, transportManager } = createManager();
 		transportManager.createConsumer.mockRejectedValue(new Error("server down"));
 
-		await mediaManager.handleConsumerLost(baseInfo);
-		await vi.advanceTimersByTimeAsync(250);
-		expect(transportManager.createConsumer).toHaveBeenCalledTimes(1);
-
-		await mediaManager.handleConsumerLost(baseInfo);
-		await vi.advanceTimersByTimeAsync(250);
-		expect(transportManager.createConsumer).toHaveBeenCalledTimes(2);
-
-		await mediaManager.handleConsumerLost(baseInfo);
-		await vi.advanceTimersByTimeAsync(250);
+		for (let i = 0; i < 3; i++) {
+			await mediaManager.handleConsumerLost(baseInfo);
+			await vi.advanceTimersByTimeAsync(250);
+		}
 		expect(transportManager.createConsumer).toHaveBeenCalledTimes(3);
 
 		await mediaManager.handleConsumerLost(baseInfo);
 		await vi.advanceTimersByTimeAsync(250);
 		expect(transportManager.createConsumer).toHaveBeenCalledTimes(3);
+
+		await mediaManager.handleConsumerLost(baseInfo);
+		await vi.advanceTimersByTimeAsync(250);
+		expect(transportManager.createConsumer).toHaveBeenCalledTimes(4);
+
+		for (let i = 0; i < 2; i++) {
+			await mediaManager.handleConsumerLost(baseInfo);
+			await vi.advanceTimersByTimeAsync(250);
+		}
+		expect(transportManager.createConsumer).toHaveBeenCalledTimes(6);
 	});
 
 	it("treats a successful re-subscribe as a fresh retry budget", async () => {

@@ -249,6 +249,7 @@ export class SFUMediaManager {
 				kind: info.kind,
 				attempts,
 			});
+			this.resubscribeAttempts.delete(key);
 			return;
 		}
 		this.resubscribeAttempts.set(key, attempts + 1);
