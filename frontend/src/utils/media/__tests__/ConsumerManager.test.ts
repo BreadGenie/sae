@@ -301,24 +301,42 @@ describe("consumer @close handling", () => {
 		consumer: ReturnType<typeof mockConsumer> & {
 			once: ReturnType<typeof vi.fn>;
 		};
-		closeHandler: () => void;
+		fire: (event: string) => void;
 	} {
-		let stored: () => void = () => {};
-		const once = vi.fn((_event: string, handler: () => void) => {
-			stored = handler;
+		const handlers = new Map<string, () => void>();
+		const once = vi.fn((event: string, handler: () => void) => {
+			handlers.set(event, handler);
 		});
 		const consumer = mockConsumer({ once, ...overrides });
-		return { consumer, closeHandler: () => stored() };
+		return { consumer, fire: (event: string) => handlers.get(event)?.() };
 	}
 
 	it("fires onConsumerLost when consumer emits @close unexpectedly", () => {
 		const cm = createManager();
-		const { consumer, closeHandler } = setupMockConsumerWithClose();
+		const { consumer, fire } = setupMockConsumerWithClose();
 		const lost = vi.fn();
 		cm.setEventHandlers({ onConsumerLost: lost });
 
 		cm.addConsumer(consumer);
-		closeHandler();
+		fire("@close");
+
+		expect(lost).toHaveBeenCalledWith({
+			consumerId: "c1",
+			participantId: "p1",
+			producerId: "producer-1",
+			kind: "video",
+			isScreen: false,
+		});
+	});
+
+	it("fires onConsumerLost when consumer emits trackended", () => {
+		const cm = createManager();
+		const { consumer, fire } = setupMockConsumerWithClose();
+		const lost = vi.fn();
+		cm.setEventHandlers({ onConsumerLost: lost });
+
+		cm.addConsumer(consumer);
+		fire("trackended");
 
 		expect(lost).toHaveBeenCalledWith({
 			consumerId: "c1",

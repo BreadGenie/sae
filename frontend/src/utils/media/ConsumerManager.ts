@@ -92,7 +92,7 @@ export class ConsumerManager {
 
 		this.consumers.set(consumer.id as string, entry);
 
-		consumer.once("@close", () => {
+		const emitLost = () => {
 			if (this.localCloseInProgress.has(consumer.id)) {
 				return;
 			}
@@ -105,7 +105,10 @@ export class ConsumerManager {
 					isScreen: entry.isScreen,
 				});
 			}
-		});
+		};
+
+		consumer.once("@close", emitLost);
+		consumer.once("trackended", emitLost);
 
 		if (this.eventHandlers.onConsumerAdded) {
 			this.eventHandlers.onConsumerAdded(entry);
