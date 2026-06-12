@@ -104,9 +104,6 @@ jobs:
       - name: Install Meet
         working-directory: /home/runner/frappe-bench
         run: |
-          if [ "${{ steps.cache-bench.outputs.cache-hit }}" != "true" ]; then
-            bench setup requirements --dev
-          fi
           rm -rf apps/meet sites/meet.test
           bench get-app meet $GITHUB_WORKSPACE
           mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
