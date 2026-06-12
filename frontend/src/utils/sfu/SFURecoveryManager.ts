@@ -12,6 +12,8 @@ interface RecoveryManagerOptions {
 	meetingId: () => string | null;
 }
 
+type TransportDirection = "send" | "recv";
+
 export class SFURecoveryManager {
 	private sfuClient: SFUClient;
 	private transportManager: TransportManager;
@@ -19,6 +21,10 @@ export class SFURecoveryManager {
 	private recoveryInProgress = false;
 	private lastRecoveryAt = 0;
 	private static readonly RECOVERY_COOLDOWN_MS = 7000;
+	private static readonly DISCONNECTED_GRACE_MS = 3000;
+	private static readonly WATCHDOG_INTERVAL_MS = 1000;
+	private disconnectedSince: Map<TransportDirection, number> = new Map();
+	private watchdogHandle: ReturnType<typeof setInterval> | null = null;
 
 	constructor(options: RecoveryManagerOptions) {
 		this.sfuClient = options.sfuClient;
@@ -70,7 +76,31 @@ export class SFURecoveryManager {
 
 	handleTransportConnectionStateChange(direction: string, state: string): void {
 		if (state === "failed" || state === "closed") {
+			this.disconnectedSince.delete(direction as TransportDirection);
 			this.recoverTransportIce(`transport_${direction}_${state}`);
+			return;
+		}
+
+		if (state === "disconnected") {
+			if (!this.disconnectedSince.has(direction as TransportDirection)) {
+				this.disconnectedSince.set(direction as TransportDirection, Date.now());
+			}
+			return;
+		}
+
+		this.disconnectedSince.delete(direction as TransportDirection);
+	}
+
+	private runWatchdog(): void {
+		if (this.disconnectedSince.size === 0) return;
+		const now = Date.now();
+		for (const [direction, since] of this.disconnectedSince) {
+			if (now - since >= SFURecoveryManager.DISCONNECTED_GRACE_MS) {
+				this.disconnectedSince.delete(direction);
+				void this.recoverTransportIce(
+					`transport_${direction}_disconnected_timeout`,
+				);
+			}
 		}
 	}
 
@@ -86,10 +116,22 @@ export class SFURecoveryManager {
 				this.handleTransportConnectionStateChange(direction, state);
 			},
 		});
+
+		if (this.watchdogHandle === null) {
+			this.watchdogHandle = setInterval(
+				() => this.runWatchdog(),
+				SFURecoveryManager.WATCHDOG_INTERVAL_MS,
+			);
+		}
 	}
 
 	reset(): void {
 		this.recoveryInProgress = false;
 		this.lastRecoveryAt = 0;
+		this.disconnectedSince.clear();
+		if (this.watchdogHandle !== null) {
+			clearInterval(this.watchdogHandle);
+			this.watchdogHandle = null;
+		}
 	}
 }
