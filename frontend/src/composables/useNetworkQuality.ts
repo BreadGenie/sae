@@ -1,4 +1,9 @@
 import { inject, onMounted, onUnmounted, type Ref, ref } from "vue";
+import {
+	type ConsumerSample,
+	extractInboundBytesReceived,
+	StallDetector,
+} from "../utils/media/stallDetector";
 import type { SFUMeetingManager } from "../utils/SFUMeetingManager";
 
 type NetworkQuality = "good" | "poor" | "critical";
@@ -22,6 +27,7 @@ export function useNetworkQuality() {
 	const networkQuality = ref<NetworkQuality>("good");
 	const isPolling = ref(false);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
+	const stallDetector = new StallDetector();
 
 	const pollIntervalMs = 3000;
 	const sfuManagerRef = inject<Ref<SFUMeetingManager | null>>("sfuManager");
@@ -59,6 +65,47 @@ export function useNetworkQuality() {
 		}
 	};
 
+	const checkConsumerStalls = async (): Promise<void> => {
+		const sfuManager = sfuManagerRef?.value;
+		if (!sfuManager) return;
+
+		const consumerManager = sfuManager.mediaManager?.consumerManager;
+		if (!consumerManager) return;
+
+		const consumers = consumerManager.getAllConsumers();
+		if (consumers.length === 0) return;
+
+		const statsResults = await Promise.all(
+			consumers.map(async (entry) => {
+				let bytes: number | null = null;
+				try {
+					const stats = await entry.consumer.getStats();
+					bytes = extractInboundBytesReceived(stats);
+				} catch {
+					bytes = null;
+				}
+				return { entry, bytes };
+			}),
+		);
+
+		const samples: ConsumerSample[] = statsResults.map(({ entry, bytes }) => ({
+			id: entry.id,
+			isPaused: () => entry.consumer.paused,
+			isMuted: () => entry.track?.muted ?? false,
+			getBytesReceived: () => bytes,
+			getCreatedAt: () => entry.createdAt,
+		}));
+
+		const stalledIds = stallDetector.check(samples);
+		if (stalledIds.length === 0) return;
+
+		const recoveryManager = sfuManager.recoveryManager;
+		if (!recoveryManager) return;
+		void recoveryManager.recoverTransportIce(
+			`consumer_stall_${stalledIds.join(",")}`,
+		);
+	};
+
 	const pollStats = async () => {
 		if (isPolling.value) return;
 
@@ -88,6 +135,8 @@ export function useNetworkQuality() {
 				const stats = await transportManager.getNetworkStats();
 				updateQuality(stats);
 			}
+
+			await checkConsumerStalls();
 		} finally {
 			isPolling.value = false;
 		}
@@ -102,6 +151,7 @@ export function useNetworkQuality() {
 			clearInterval(pollInterval);
 			pollInterval = null;
 		}
+		stallDetector.reset();
 	});
 
 	return {
