@@ -80,6 +80,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-playwright-
 
+      - name: Cache bench directory
+        id: cache-bench
+        uses: actions/cache@v4
+        with:
+          path: ~/frappe-bench
+          key: ${{ runner.os }}-bench-${{ hashFiles('**/pyproject.toml', '**/yarn.lock', '**/requirements.txt', '**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bench-
+
       - name: Install MariaDB Client
         run: |
           sudo apt update
@@ -88,15 +97,20 @@ jobs:
       - name: Setup Bench
         run: |
           pip install frappe-bench
-          bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
-          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
-          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+          if [ "${{ steps.cache-bench.outputs.cache-hit }}" != "true" ]; then
+            bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          fi
 
       - name: Install Meet
         working-directory: /home/runner/frappe-bench
         run: |
+          if [ "${{ steps.cache-bench.outputs.cache-hit }}" != "true" ]; then
+            bench setup requirements --dev
+          fi
           bench get-app meet $GITHUB_WORKSPACE
-          bench setup requirements --dev
+          rm -rf sites/meet.test
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
           bench new-site --db-root-password root --admin-password admin meet.test
           bench --site meet.test install-app meet
           bench build
@@ -128,9 +142,7 @@ jobs:
       - name: Start Frappe Server
         working-directory: /home/runner/frappe-bench
         run: |
-          sed -i 's/^watch:/# watch:/g' Procfile
-          sed -i 's/^schedule:/# schedule:/g' Procfile
-          bench start &> bench_start.log &
+          bench serve --port 8000 &> bench_serve.log &
           echo "Waiting for Frappe server to start..."
           timeout 60 bash -c 'until curl -s http://meet.test:8000 > /dev/null; do sleep 2; done'
           echo "Frappe server is ready!"
