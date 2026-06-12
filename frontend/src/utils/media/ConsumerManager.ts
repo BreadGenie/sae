@@ -8,6 +8,7 @@ import type { Consumer } from "mediasoup-client/types";
 export interface ConsumerEntry {
 	id: string;
 	participantId: string;
+	producerId: string;
 	kind: string;
 	isScreen: boolean;
 	track?: MediaStreamTrack;
@@ -19,6 +20,14 @@ export interface ConsumerEntry {
 	resume?: () => void;
 }
 
+interface ConsumerLostInfo {
+	consumerId: string;
+	participantId: string;
+	producerId: string;
+	kind: string;
+	isScreen: boolean;
+}
+
 interface ConsumerEventHandlers {
 	onConsumerAdded?: (entry: ConsumerEntry) => void;
 	onConsumerRemoved?: (consumerId: string, consumer: ConsumerEntry) => void;
@@ -28,6 +37,7 @@ interface ConsumerEventHandlers {
 		updates: Record<string, unknown>,
 	) => void;
 	onAllConsumersCleared?: (consumerIds: string[]) => void;
+	onConsumerLost?: (info: ConsumerLostInfo) => void;
 }
 
 interface ConsumerStats {
@@ -44,6 +54,7 @@ interface ConsumerStats {
 export class ConsumerManager {
 	consumers: Map<string, ConsumerEntry>;
 	eventHandlers: ConsumerEventHandlers;
+	private localCloseInProgress: Set<string> = new Set();
 
 	constructor() {
 		this.consumers = new Map();
@@ -67,6 +78,7 @@ export class ConsumerManager {
 			id: consumer.id,
 			participantId:
 				participantIdOverride || (consumer.appData?.userId as string) || "",
+			producerId: consumer.producerId,
 			kind: consumer.kind,
 			isScreen: consumer.appData?.type === "screen" || false,
 			track: consumer.track,
@@ -80,6 +92,21 @@ export class ConsumerManager {
 
 		this.consumers.set(consumer.id as string, entry);
 
+		consumer.once("@close", () => {
+			if (this.localCloseInProgress.has(consumer.id)) {
+				return;
+			}
+			if (this.eventHandlers.onConsumerLost) {
+				this.eventHandlers.onConsumerLost({
+					consumerId: consumer.id,
+					participantId: entry.participantId,
+					producerId: entry.producerId,
+					kind: entry.kind,
+					isScreen: entry.isScreen,
+				});
+			}
+		});
+
 		if (this.eventHandlers.onConsumerAdded) {
 			this.eventHandlers.onConsumerAdded(entry);
 		}
@@ -90,6 +117,7 @@ export class ConsumerManager {
 	removeConsumer(consumerId: string): ConsumerEntry | undefined {
 		const consumer = this.consumers.get(consumerId);
 		if (consumer) {
+			this.localCloseInProgress.add(consumerId);
 			if (typeof consumer.close === "function") {
 				try {
 					consumer.close();
@@ -97,6 +125,7 @@ export class ConsumerManager {
 					console.warn(`Error closing consumer ${consumerId}:`, error);
 				}
 			}
+			this.localCloseInProgress.delete(consumerId);
 
 			this.consumers.delete(consumerId);
 
@@ -283,6 +312,9 @@ export class ConsumerManager {
 		const consumerIds = Array.from(this.consumers.keys());
 
 		// Close all consumers
+		for (const consumerId of consumerIds) {
+			this.localCloseInProgress.add(consumerId);
+		}
 		for (const consumer of this.consumers.values()) {
 			if (typeof consumer.close === "function") {
 				try {
@@ -291,6 +323,9 @@ export class ConsumerManager {
 					console.warn("Error closing consumer during cleanup:", error);
 				}
 			}
+		}
+		for (const consumerId of consumerIds) {
+			this.localCloseInProgress.delete(consumerId);
 		}
 
 		this.consumers.clear();

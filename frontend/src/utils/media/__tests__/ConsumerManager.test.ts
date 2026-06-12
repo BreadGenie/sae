@@ -12,12 +12,14 @@ function createManager() {
 function mockConsumer(overrides: Record<string, unknown> = {}) {
 	const consumer = {
 		id: "c1",
+		producerId: "producer-1",
 		kind: "video",
 		track: { kind: "video" } as MediaStreamTrack,
 		appData: { userId: "p1", type: "camera" },
 		close: vi.fn(),
 		pause: vi.fn(),
 		resume: vi.fn(),
+		once: vi.fn(),
 		...overrides,
 	};
 	return consumer as never;
@@ -289,5 +291,76 @@ describe("clear", () => {
 		cm.addConsumer(mockConsumer());
 		cm.clear();
 		expect(handler).toHaveBeenCalledWith(["c1"]);
+	});
+});
+
+describe("consumer @close handling", () => {
+	function setupMockConsumerWithClose(
+		overrides: Record<string, unknown> = {},
+	): {
+		consumer: ReturnType<typeof mockConsumer> & {
+			once: ReturnType<typeof vi.fn>;
+		};
+		closeHandler: () => void;
+	} {
+		let stored: () => void = () => {};
+		const once = vi.fn((_event: string, handler: () => void) => {
+			stored = handler;
+		});
+		const consumer = mockConsumer({ once, ...overrides });
+		return { consumer, closeHandler: () => stored() };
+	}
+
+	it("fires onConsumerLost when consumer emits @close unexpectedly", () => {
+		const cm = createManager();
+		const { consumer, closeHandler } = setupMockConsumerWithClose();
+		const lost = vi.fn();
+		cm.setEventHandlers({ onConsumerLost: lost });
+
+		cm.addConsumer(consumer);
+		closeHandler();
+
+		expect(lost).toHaveBeenCalledWith({
+			consumerId: "c1",
+			participantId: "p1",
+			producerId: "producer-1",
+			kind: "video",
+			isScreen: false,
+		});
+	});
+
+	it("does not fire onConsumerLost when removeConsumer is the trigger", () => {
+		const cm = createManager();
+		const { consumer } = setupMockConsumerWithClose();
+		const lost = vi.fn();
+		cm.setEventHandlers({ onConsumerLost: lost });
+
+		cm.addConsumer(consumer);
+		cm.removeConsumer("c1");
+
+		expect(lost).not.toHaveBeenCalled();
+	});
+
+	it("does not fire onConsumerLost when clear() is the trigger", () => {
+		const cm = createManager();
+		const { consumer } = setupMockConsumerWithClose();
+		const lost = vi.fn();
+		cm.setEventHandlers({ onConsumerLost: lost });
+
+		cm.addConsumer(consumer);
+		cm.clear();
+
+		expect(lost).not.toHaveBeenCalled();
+	});
+
+	it("captures producerId on the entry", () => {
+		const cm = createManager();
+		const entry = cm.addConsumer(
+			mockConsumer({ id: "c2", producerId: "producer-2" }),
+		);
+		assertEntry(entry);
+		expect((entry as unknown as { producerId: string }).producerId).toBe(
+			"producer-2",
+		);
 	});
 });

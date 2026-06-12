@@ -77,6 +77,9 @@ export class SFUMediaManager {
 
 	private eventHandlers: MediaEventHandlers = {};
 	private getCurrentUserId: () => string | null;
+	private resubscribeAttempts: Map<string, number> = new Map();
+	private static readonly MAX_RESUBSCRIBE_ATTEMPTS = 3;
+	private static readonly RESUBSCRIBE_DELAY_MS = 250;
 
 	constructor(
 		options: MediaManagerOptions,
@@ -209,9 +212,64 @@ export class SFUMediaManager {
 			return null;
 		}
 
-		return this.subscribeToProducer(producerId, participantId, {
+		const result = await this.subscribeToProducer(producerId, participantId, {
 			isScreen: !!isScreen,
 		});
+		this.resubscribeAttempts.delete(
+			this.resubscribeKey(participantId, producerId),
+		);
+		return result;
+	}
+
+	async handleConsumerLost(info: {
+		consumerId: string;
+		participantId: string;
+		producerId: string;
+		kind: string;
+		isScreen: boolean;
+	}): Promise<void> {
+		if (!info.participantId || !info.producerId) {
+			return;
+		}
+
+		if (info.participantId === this.getCurrentUserId()) {
+			return;
+		}
+
+		if (!this.participantManager.hasParticipant(info.participantId)) {
+			return;
+		}
+
+		const key = this.resubscribeKey(info.participantId, info.producerId);
+		const attempts = this.resubscribeAttempts.get(key) ?? 0;
+		if (attempts >= SFUMediaManager.MAX_RESUBSCRIBE_ATTEMPTS) {
+			console.warn("Giving up on re-subscribing to lost consumer", {
+				participantId: info.participantId,
+				producerId: info.producerId,
+				kind: info.kind,
+				attempts,
+			});
+			return;
+		}
+		this.resubscribeAttempts.set(key, attempts + 1);
+
+		setTimeout(() => {
+			void this.subscribeToRemoteProducer({
+				producerId: info.producerId,
+				participantId: info.participantId,
+				isScreen: info.isScreen,
+			}).catch((error: unknown) => {
+				console.warn("Failed to re-subscribe to lost consumer", {
+					participantId: info.participantId,
+					producerId: info.producerId,
+					error: (error as Error).message,
+				});
+			});
+		}, SFUMediaManager.RESUBSCRIBE_DELAY_MS);
+	}
+
+	private resubscribeKey(participantId: string, producerId: string): string {
+		return `${participantId}:${producerId}`;
 	}
 
 	async handleNewConsumer(consumer: ConsumerEntry): Promise<void> {

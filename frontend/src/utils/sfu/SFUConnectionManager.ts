@@ -331,6 +331,9 @@ export class SFUConnectionManager {
 					}
 				}
 			},
+			onConsumerLost: (info) => {
+				void this.mediaManager.handleConsumerLost(info);
+			},
 		});
 
 		this.mediaManager.setEventHandlers({
