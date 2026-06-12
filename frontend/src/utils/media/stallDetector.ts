@@ -92,11 +92,6 @@ export class StallDetector {
 			const previous = st.lastBytesReceived;
 			st.lastBytesReceived = bytes;
 
-			if (previous === 0) {
-				st.stallStartedAt = null;
-				continue;
-			}
-
 			if (bytes > previous) {
 				st.stallStartedAt = null;
 				continue;
