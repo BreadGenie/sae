@@ -5,14 +5,21 @@
  * receiving any media bytes. A stalled consumer usually means a transport
  * is wedged (browser decoder issue, congestion that producer scores hide,
  * or background tab throttling) and the only recovery is an ICE restart.
+ *
+ * Audio consumers are checked with a much shorter window than video: silence
+ * for even ~1.5s is a much worse user experience than a frozen video frame,
+ * and audio is also the leading indicator of a wedged transport (audio
+ * packets stop arriving before the congestion controller can drop video).
  */
 
 const DEFAULT_STALL_TIMEOUT_MS = 5000;
+const DEFAULT_AUDIO_STALL_TIMEOUT_MS = 1500;
 const DEFAULT_MIN_CONSUMER_AGE_MS = 3000;
 const DEFAULT_RECOVERY_COOLDOWN_MS = 30_000;
 
 export interface ConsumerSample {
 	id: string;
+	kind?: string;
 	isPaused: () => boolean;
 	isMuted: () => boolean;
 	getBytesReceived: () => number | null;
@@ -21,6 +28,7 @@ export interface ConsumerSample {
 
 interface StallDetectorOptions {
 	stallTimeoutMs?: number;
+	audioStallTimeoutMs?: number;
 	minConsumerAgeMs?: number;
 	recoveryCooldownMs?: number;
 	now?: () => number;
@@ -34,6 +42,7 @@ interface ConsumerState {
 
 export class StallDetector {
 	private readonly stallTimeoutMs: number;
+	private readonly audioStallTimeoutMs: number;
 	private readonly minConsumerAgeMs: number;
 	private readonly recoveryCooldownMs: number;
 	private readonly now: () => number;
@@ -41,6 +50,8 @@ export class StallDetector {
 
 	constructor(options: StallDetectorOptions = {}) {
 		this.stallTimeoutMs = options.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS;
+		this.audioStallTimeoutMs =
+			options.audioStallTimeoutMs ?? DEFAULT_AUDIO_STALL_TIMEOUT_MS;
 		this.minConsumerAgeMs =
 			options.minConsumerAgeMs ?? DEFAULT_MIN_CONSUMER_AGE_MS;
 		this.recoveryCooldownMs =
@@ -55,6 +66,7 @@ export class StallDetector {
 
 		for (const sample of samples) {
 			activeIds.add(sample.id);
+			const timeoutMs = this.timeoutFor(sample.kind);
 
 			if (sample.isPaused()) {
 				this.state.delete(sample.id);
@@ -73,7 +85,7 @@ export class StallDetector {
 					st.stallStartedAt = now;
 				}
 				if (
-					now - st.stallStartedAt >= this.stallTimeoutMs &&
+					now - st.stallStartedAt >= timeoutMs &&
 					this.shouldRecover(st, now)
 				) {
 					stalled.push(sample.id);
@@ -101,10 +113,7 @@ export class StallDetector {
 				st.stallStartedAt = now;
 			}
 
-			if (
-				now - st.stallStartedAt >= this.stallTimeoutMs &&
-				this.shouldRecover(st, now)
-			) {
+			if (now - st.stallStartedAt >= timeoutMs && this.shouldRecover(st, now)) {
 				stalled.push(sample.id);
 				st.lastRecoveredAt = now;
 			}
@@ -117,6 +126,10 @@ export class StallDetector {
 		}
 
 		return stalled;
+	}
+
+	private timeoutFor(kind: string | undefined): number {
+		return kind === "audio" ? this.audioStallTimeoutMs : this.stallTimeoutMs;
 	}
 
 	private ensureState(id: string): ConsumerState {

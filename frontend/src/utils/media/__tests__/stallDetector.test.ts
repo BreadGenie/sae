@@ -161,6 +161,67 @@ describe("StallDetector", () => {
 		const fresh = makeSample({ id: "c1", createdAt: now, bytes: 0 });
 		expect(det.check([toSample(fresh)])).toEqual([]);
 	});
+
+	describe("per-kind timeout", () => {
+		it("reports an audio stall after the shorter audio window", () => {
+			const det = detector();
+			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });
+			const audioSample = { ...toSample(sample), kind: "audio" };
+
+			det.check([audioSample]);
+			now += 1_000;
+			sample.bytes = 1000;
+			expect(det.check([audioSample])).toEqual([]);
+
+			now += 1_600;
+			sample.bytes = 1000;
+			expect(det.check([audioSample])).toEqual(["c1"]);
+		});
+
+		it("uses the longer default window for video", () => {
+			const det = detector();
+			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });
+			const videoSample = { ...toSample(sample), kind: "video" };
+
+			det.check([videoSample]);
+			now += 4_000;
+			sample.bytes = 1000;
+			expect(det.check([videoSample])).toEqual([]);
+
+			now += 6_000;
+			sample.bytes = 1000;
+			expect(det.check([videoSample])).toEqual(["c1"]);
+		});
+
+		it("falls back to the default window when kind is missing", () => {
+			const det = detector();
+			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });
+
+			det.check([toSample(sample)]);
+			now += 4_000;
+			sample.bytes = 1000;
+			expect(det.check([toSample(sample)])).toEqual([]);
+
+			now += 6_000;
+			sample.bytes = 1000;
+			expect(det.check([toSample(sample)])).toEqual(["c1"]);
+		});
+
+		it("honours a custom audioStallTimeoutMs option", () => {
+			const det = new StallDetector({ now: getNow, audioStallTimeoutMs: 500 });
+			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });
+			const audioSample = { ...toSample(sample), kind: "audio" };
+
+			det.check([audioSample]);
+			now += 400;
+			sample.bytes = 1000;
+			expect(det.check([audioSample])).toEqual([]);
+
+			now += 500;
+			sample.bytes = 1000;
+			expect(det.check([audioSample])).toEqual(["c1"]);
+		});
+	});
 });
 
 describe("extractInboundBytesReceived", () => {
