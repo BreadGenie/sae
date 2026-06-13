@@ -19,6 +19,7 @@ interface CodecOptions {
 	opusDtx?: number;
 	opusFec?: number;
 	opusMaxAverageBitrate?: number;
+	opusMaxPlaybackRate?: number;
 }
 
 export const videoEncodings: VideoEncodingLayer[] = [
@@ -54,5 +55,6 @@ export const audioCodecOptions: CodecOptions = {
 	opusStereo: 0, // disable stereo to save bandwidth, as most meetings are voice-only
 	opusDtx: 1, // enable DTX to save bandwidth during silence periods
 	opusFec: 1, // enable FEC to improve audio quality in case of packet loss
-	opusMaxAverageBitrate: 48000,
+	opusMaxAverageBitrate: 64000, // 64 kbps gives noticeably fuller voice than 48 kbps; still efficient for speech
+	opusMaxPlaybackRate: 24000, // cap encoder at 24 kHz (wideband) - full transparency for voice, ~25% bitrate savings vs 48 kHz fullband
 };
