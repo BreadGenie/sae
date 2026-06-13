@@ -112,7 +112,7 @@
 <script setup lang="ts">
 import data from "@emoji-mart/data";
 import { init, SearchIndex } from "emoji-mart";
-import { Button, FormControl, Dropdown } from "frappe-ui";
+import { Button, Dropdown, FormControl } from "frappe-ui";
 import {
 	computed,
 	inject,
@@ -127,7 +127,8 @@ import { tokenizeChatMessage } from "../utils/chatMessageTokens";
 import EmojiPicker from "./EmojiPicker.vue";
 import CreatePollModal from "./CreatePollModal.vue";
 import { usePollStore } from "@/composables/usePollStore.js";
-
+import CreatePollModal from "./CreatePollModal.vue";
+import EmojiPicker from "./EmojiPicker.vue";
 
 interface ChatMessage {
 	id: string | number;
@@ -158,20 +159,21 @@ const props = defineProps<{
 	hostOnlyChat?: boolean;
 }>();
 
-const pollStore = usePollStore()
+const pollStore = usePollStore();
 
-const poll = inject("poll") as any
-const showPollModal = ref(false)
+const poll = inject("poll") as any;
+const showPollModal = ref(false);
 
 const activePolls = computed(() => pollStore.activePolls);
 
-const handlePollSubmit = (payload: { question: string; options: { text: string }[] }) => {
-    if (poll) {
-        poll.createPoll(payload.question, payload.options);
-    }
+const handlePollSubmit = (payload: {
+	question: string;
+	options: { text: string }[];
+}) => {
+	if (poll) {
+		poll.createPoll(payload.question, payload.options);
+	}
 };
-
-
 
 const emit = defineEmits<{
 	close: [];

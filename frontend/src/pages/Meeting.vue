@@ -194,7 +194,8 @@
 import { Button, frappeRequest, toast } from "frappe-ui";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-
+import { usePoll } from "@/composables/usePoll.js";
+import { usePollStore } from "@/composables/usePollStore.js";
 import ChatNotificationQueue from "../components/ChatNotificationQueue.vue";
 import ChatPanel from "../components/ChatPanel.vue";
 import JoinRequestNotifications from "../components/JoinRequestNotifications.vue";
@@ -208,8 +209,6 @@ import Spinner from "../components/Spinner.vue";
 import { useBackgroundEffects } from "../composables/useBackgroundEffects";
 import { useChat } from "../composables/useChat";
 import { useChatStore } from "../composables/useChatStore";
-import { usePoll } from "@/composables/usePoll.js";
-import { usePollStore } from "@/composables/usePollStore.js";
 import { useConnectionState } from "../composables/useConnectionState";
 import { useCurrentUser } from "../composables/useCurrentUser";
 import { useGridLayout } from "../composables/useGridLayout";
@@ -405,8 +404,8 @@ const chat = useChat({
 const poll = usePoll({
 	pollStore,
 	currentUser,
-	sfuClient: sfuConnection.sfuClient
-})
+	sfuClient: sfuConnection.sfuClient,
+});
 
 // --- Reactions ---
 const reactions = useReactions({
@@ -480,7 +479,7 @@ provide(
 	}),
 );
 
-provide("poll", poll)
+provide("poll", poll);
 
 // --- Computed properties ---
 const isConnecting = computed(() => connectionState.isConnecting);
@@ -633,7 +632,7 @@ onMounted(async () => {
 	mediaState.$reset();
 	participantStore.$reset();
 	chatStore.$reset();
-	pollStore.$reset()
+	pollStore.$reset();
 	lobbyStore.$reset();
 	reactionStore.$reset();
 	raiseHandStore.$reset();
@@ -678,7 +677,7 @@ onMounted(async () => {
 	chat.setupChatEvents(chatNotificationQueue.value);
 	reactions.setupReactionEvents();
 	raiseHand.setupRaiseHandEvents();
-	poll.setupPollEvents()
+	poll.setupPollEvents();
 
 	// Setup notification context watchers
 

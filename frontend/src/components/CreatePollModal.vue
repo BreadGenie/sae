@@ -64,66 +64,66 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { Dialog, FormControl, Button } from 'frappe-ui'; 
+import { Button, Dialog, FormControl } from "frappe-ui";
+import { computed, ref, watch } from "vue";
 
 const props = defineProps<{
-    modelValue: boolean;
+	modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
-    'update:modelValue': [value: boolean];
-    'submit': [payload: { question: string, options: { text: string }[] }];
+	"update:modelValue": [value: boolean];
+	submit: [payload: { question: string; options: { text: string }[] }];
 }>();
 
 // --- Local State ---
 const isOpen = computed({
-    get: () => props.modelValue,
-    set: (value) => emit('update:modelValue', value)
+	get: () => props.modelValue,
+	set: (value) => emit("update:modelValue", value),
 });
 
 const question = ref("");
-const options = ref([{ text: "" }, { text: "" }]); 
+const options = ref([{ text: "" }, { text: "" }]);
 
 const isValid = computed(() => {
-    if (!question.value.trim()) return false;
-    
-    const validOptions = options.value.filter(opt => opt.text.trim() !== "");
-    return validOptions.length >= 2;
+	if (!question.value.trim()) return false;
+
+	const validOptions = options.value.filter((opt) => opt.text.trim() !== "");
+	return validOptions.length >= 2;
 });
 
 // --- Methods ---
 const addOption = () => {
-    options.value.push({ text: "" });
+	options.value.push({ text: "" });
 };
 
 const removeOption = (index: number) => {
-    options.value.splice(index, 1);
+	options.value.splice(index, 1);
 };
 
 const closeModal = () => {
-    isOpen.value = false;
+	isOpen.value = false;
 };
 
 const handleSubmit = () => {
-    if (!isValid.value) return;
+	if (!isValid.value) return;
 
-    const cleanedOptions = options.value
-        .filter(opt => opt.text.trim() !== "")
-        .map(opt => ({ text: opt.text.trim() }));
+	const cleanedOptions = options.value
+		.filter((opt) => opt.text.trim() !== "")
+		.map((opt) => ({ text: opt.text.trim() }));
 
-    emit('submit', { 
-        question: question.value.trim(), 
-        options: cleanedOptions 
-    });
+	emit("submit", {
+		question: question.value.trim(),
+		options: cleanedOptions,
+	});
 
-    closeModal();
+	closeModal();
 };
 
 watch(isOpen, (newVal) => {
-    if (newVal) {
-        question.value = "";
-        options.value = [{ text: "" }, { text: "" }];
-    }
+	if (newVal) {
+		question.value = "";
+		options.value = [{ text: "" }, { text: "" }];
+	}
 });
 </script>

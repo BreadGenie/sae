@@ -242,6 +242,11 @@ export class SocketHandlerManager {
 		this.previewSockets.delete(roomId);
 		delete this.raisedHands[roomId];
 		delete this.hostOnlyChat[roomId];
+
+		delete this.hostOnlyChat[roomId];
+		delete this.activePolls[roomId];
+
+		delete this.activePolls[roomId];
 		this.mediasoup.closeRoom(roomId);
 	}
 
