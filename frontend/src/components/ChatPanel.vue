@@ -13,14 +13,36 @@
 				data-testid="chat-panel"
 			>
 				<div class="flex items-center justify-between p-4 border-b border-gray-200">
-					<div class="text-gray-900 text-base font-medium">Chat</div>
-					<lucide-x
-						@click="$emit('close')"
-						class="w-4 h-4 text-gray-900 cursor-pointer hover:text-gray-600"
-					/>
-				</div>
+                    <div class="text-gray-900 text-base font-medium">Chat</div>
+                    
+                    <div class="flex items-center gap-1">
+                        <Dropdown 
+                            v-if="isHost || isCohost"
+                            :options="[
+                                {
+                                    label: 'Launch Poll',
+                                    icon: 'bar-chart-2',
+                                    onClick: () => { showPollModal = true; }
+                                }
+                            ]"
+                        >
+                            <Button variant="ghost" icon="more-horizontal" class="text-gray-600 hover:bg-gray-100" />
+                        </Dropdown>
+
+                        <Button variant="ghost" class="text-gray-600 hover:bg-gray-100" @click="$emit('close')">
+                            <lucide-x class="w-4 h-4 text-gray-900 cursor-pointer hover:text-gray-600" />
+                        </Button>
+                    </div>
+                </div>
 
 				<div ref="listEl" class="flex-1 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
+					<div v-if="activePolls.length > 0" class="space-y-3 mb-4 border-b border-gray-100 pb-4">
+                         <PollMessageCard 
+                            v-for="p in activePolls" 
+                            :key="p.pollId" 
+                            :poll="p" 
+                        />
+                    </div>
 					<div v-for="group in groupedMessages" :key="group.id" class="min-w-0">
 						<div class="text-xs flex items-center gap-2">
 							<span class="truncate font-medium">{{ group.user_name }}</span>
@@ -78,6 +100,10 @@
 						The host has restricted chat to hosts and co-hosts only.
 					</div>
 				</form>
+				<CreatePollModal 
+                    v-model="showPollModal" 
+                    @submit="handlePollSubmit" 
+                />
 			</div>
 		</div>
 	</Transition>
@@ -86,9 +112,10 @@
 <script setup lang="ts">
 import data from "@emoji-mart/data";
 import { init, SearchIndex } from "emoji-mart";
-import { Button, FormControl } from "frappe-ui";
+import { Button, FormControl, Dropdown } from "frappe-ui";
 import {
 	computed,
+	inject,
 	nextTick,
 	onMounted,
 	type Ref,
@@ -98,6 +125,9 @@ import {
 } from "vue";
 import { tokenizeChatMessage } from "../utils/chatMessageTokens";
 import EmojiPicker from "./EmojiPicker.vue";
+import CreatePollModal from "./CreatePollModal.vue";
+import { usePollStore } from "@/composables/usePollStore.js";
+
 
 interface ChatMessage {
 	id: string | number;
@@ -127,6 +157,21 @@ const props = defineProps<{
 	isCohost?: boolean;
 	hostOnlyChat?: boolean;
 }>();
+
+const pollStore = usePollStore()
+
+const poll = inject("poll") as any
+const showPollModal = ref(false)
+
+const activePolls = computed(() => pollStore.activePolls);
+
+const handlePollSubmit = (payload: { question: string; options: { text: string }[] }) => {
+    if (poll) {
+        poll.createPoll(payload.question, payload.options);
+    }
+};
+
+
 
 const emit = defineEmits<{
 	close: [];
@@ -363,5 +408,5 @@ async function scrollToBottom() {
 	el.scrollTop = el.scrollHeight;
 }
 
-watch(messages, scrollToBottom, { deep: true });
+watch([messages, activePolls], scrollToBottom, { deep: true });
 </script>
