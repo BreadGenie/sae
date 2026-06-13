@@ -1,9 +1,14 @@
 /**
  * Video Element Manager
  *
- * Manages video and audio elements for participants.
+ * Manages <video> elements for participant streams and delegates audio
+ * playback to an AudioMixer. The mixer owns the Web Audio graph and the
+ * single shared <audio> output element; this class is only responsible
+ * for video lifecycle and acting as a thin facade so existing callers
+ * (Meeting.vue, useMediaControls.ts) don't need to know the audio topology.
  */
 import { selectedSpeakerId } from "../../data/mediaPreferences";
+import { AudioMixer, MIXER_OUTPUT_KEY } from "./AudioMixer";
 
 interface DeferredAttachment {
 	stream: MediaStream;
@@ -12,19 +17,29 @@ interface DeferredAttachment {
 
 const STALE_REATTACH_MS = 60_000;
 
+export { MIXER_OUTPUT_KEY };
+// Re-export so existing `import { MIXER_OUTPUT_KEY } from "./VideoElementManager"`
+// callers keep working.
+
 export class VideoElementManager {
 	videoElements: Map<string, HTMLVideoElement>;
 	audioElements: Map<string, HTMLAudioElement>;
 	deferredAttachments: Map<string, DeferredAttachment>;
 	private lastVideoAttachAt: Map<string, number>;
-	private lastAudioAttachAt: Map<string, number>;
+	mixer: AudioMixer;
 
 	constructor() {
 		this.videoElements = new Map();
 		this.audioElements = new Map();
 		this.deferredAttachments = new Map();
 		this.lastVideoAttachAt = new Map();
-		this.lastAudioAttachAt = new Map();
+		this.mixer = new AudioMixer(selectedSpeakerId.value, (el) => {
+			if (el) {
+				this.audioElements.set(MIXER_OUTPUT_KEY, el);
+			} else {
+				this.audioElements.delete(MIXER_OUTPUT_KEY);
+			}
+		});
 	}
 
 	registerVideoElement(participantId: string, element: HTMLElement): void {
@@ -138,57 +153,21 @@ export class VideoElementManager {
 		participantId: string,
 		audioTracks: MediaStreamTrack[],
 	): void {
-		let audioElement = this.audioElements.get(participantId);
-
-		if (!audioElement) {
-			audioElement = document.createElement("audio");
-			audioElement.autoplay = true;
-			audioElement.setAttribute("playsinline", "");
-			audioElement.style.display = "none";
-			document.body.appendChild(audioElement);
-
-			if (selectedSpeakerId.value) {
-				(
-					audioElement as HTMLAudioElement & {
-						setSinkId?: (id: string) => Promise<void>;
-					}
-				)
-					.setSinkId?.(selectedSpeakerId.value)
-					.catch((err: Error) => {
-						console.warn(
-							`Failed to set initial speaker for ${participantId}:`,
-							err,
-						);
-					});
-			}
-
-			this.audioElements.set(participantId, audioElement);
-			console.log(`Created separate audio element for ${participantId}`);
-		}
-
 		const newAudioTrack = audioTracks[0];
-		const existingAudioTrack = (
-			audioElement.srcObject as MediaStream | null
-		)?.getAudioTracks?.()?.[0];
-		const lastAttach = this.lastAudioAttachAt.get(participantId);
-		const isStale =
-			lastAttach !== undefined && Date.now() - lastAttach > STALE_REATTACH_MS;
-		const audioTrackChanged =
-			!existingAudioTrack || existingAudioTrack.id !== newAudioTrack.id;
+		if (!newAudioTrack) return;
+		this.mixer.attachParticipant(participantId, newAudioTrack);
+	}
 
-		if (!audioElement.srcObject || audioTrackChanged || isStale) {
-			const audioStream = new MediaStream(audioTracks);
-			audioElement.srcObject = audioStream;
-			this.lastAudioAttachAt.set(participantId, Date.now());
+	async setSinkId(sinkId: string): Promise<void> {
+		await this.mixer.setSinkId(sinkId);
+	}
 
-			// Try to play audio
-			audioElement.play().catch((err: Error) => {
-				console.warn(
-					`Audio autoplay failed for ${participantId}:`,
-					err.message,
-				);
-			});
-		}
+	setParticipantVolume(participantId: string, gain: number): void {
+		this.mixer.setParticipantVolume(participantId, gain);
+	}
+
+	setMasterVolume(gain: number): void {
+		this.mixer.setMasterVolume(gain);
 	}
 
 	async playVideo(
@@ -247,29 +226,15 @@ export class VideoElementManager {
 			element.srcObject = null;
 		}
 
-		const audioElement = this.audioElements.get(participantId);
-		if (audioElement) {
-			if (audioElement.srcObject) {
-				for (const track of (
-					audioElement.srcObject as MediaStream
-				).getTracks()) {
-					track.stop();
-				}
-				audioElement.srcObject = null;
-			}
-			audioElement.remove();
-			this.audioElements.delete(participantId);
-		}
+		this.mixer.detachParticipant(participantId);
 
 		this.videoElements.delete(participantId);
 		this.deferredAttachments.delete(participantId);
 		this.lastVideoAttachAt.delete(participantId);
-		this.lastAudioAttachAt.delete(participantId);
 
-		console.log(`Video/Audio elements removed for ${participantId}`, {
+		console.log(`Video element removed for ${participantId}`, {
 			hadStream,
 			elementExists: !!element,
-			hadAudioElement: !!audioElement,
 		});
 	}
 
@@ -283,22 +248,11 @@ export class VideoElementManager {
 			}
 		}
 
-		for (const [_participantId, audioElement] of this.audioElements.entries()) {
-			if (audioElement?.srcObject) {
-				for (const track of (
-					audioElement.srcObject as MediaStream
-				).getTracks()) {
-					track.stop();
-				}
-				audioElement.srcObject = null;
-			}
-			audioElement.remove();
-		}
+		this.mixer.dispose();
+		// audioElements is kept in sync via the mixer's onOutputElementChange callback
 
 		this.videoElements.clear();
-		this.audioElements.clear();
 		this.deferredAttachments.clear();
 		this.lastVideoAttachAt.clear();
-		this.lastAudioAttachAt.clear();
 	}
 }

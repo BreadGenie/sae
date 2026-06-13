@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VideoElementManager } from "../VideoElementManager";
+import { AudioMixer } from "../AudioMixer";
+import { MIXER_OUTPUT_KEY, VideoElementManager } from "../VideoElementManager";
+import { installAudioContextMock } from "./audioContextMock";
 
 type StreamCtor = new (tracks: MediaStreamTrack[]) => MediaStream;
 
@@ -28,10 +30,13 @@ beforeEach(() => {
 	}
 });
 
-function makeTrack(id: string): MediaStreamTrack {
+function makeTrack(
+	id: string,
+	kind: "audio" | "video" = "video",
+): MediaStreamTrack {
 	return {
 		id,
-		kind: "video",
+		kind,
 		stop: vi.fn(),
 	} as unknown as MediaStreamTrack;
 }
@@ -47,7 +52,7 @@ function makeVideoElement(): HTMLVideoElement {
 	return el;
 }
 
-describe("VideoElementManager.attachStream stale re-attach", () => {
+describe("VideoElementManager video element lifecycle", () => {
 	let manager: VideoElementManager;
 
 	beforeEach(() => {
@@ -119,47 +124,215 @@ describe("VideoElementManager.attachStream stale re-attach", () => {
 		await manager.attachStream("p1", makeStream([makeTrack("t1")]), false);
 		expect((el2.srcObject as MediaStream).getVideoTracks()[0].id).toBe("t1");
 	});
+
+	it("does not attach audio for local streams", () => {
+		manager.attachStream("p1", makeStream([makeTrack("a1", "audio")]), true);
+		expect(manager.audioElements.size).toBe(0);
+	});
 });
 
-describe("VideoElementManager.attachAudioStream stale re-attach", () => {
+describe("VideoElementManager audio mixer integration", () => {
+	let mock: ReturnType<typeof installAudioContextMock>;
 	let manager: VideoElementManager;
 
 	beforeEach(() => {
+		mock = installAudioContextMock();
+		// jsdom does not implement HTMLMediaElement.play(); stub it so the
+		// mixer can call it without throwing.
+		HTMLMediaElement.prototype.play = vi
+			.fn()
+			.mockResolvedValue(undefined) as never;
 		manager = new VideoElementManager();
 	});
 
 	afterEach(() => {
-		vi.useRealTimers();
+		manager.cleanup();
+		(mock as unknown as { __restore: () => void }).__restore();
 	});
 
-	it("re-attaches audio when the last attach is older than the stale threshold", () => {
-		vi.useFakeTimers();
-		vi.setSystemTime(new Date(1_000_000));
+	it("does not create an AudioContext until the first remote audio attach", () => {
+		expect(mock.installedContexts).toHaveLength(0);
+		expect(manager.audioElements.size).toBe(0);
+	});
 
-		const createElementSpy = vi
-			.spyOn(document, "createElement")
-			.mockImplementation(((tag: string) => {
-				const el = document.createElementNS
-					? document.createElementNS("http://www.w3.org/1999/xhtml", tag)
-					: ({} as HTMLElement);
-				Object.defineProperty(el, "play", {
-					value: vi.fn().mockResolvedValue(undefined),
-					writable: true,
-				});
-				return el as HTMLElement;
-			}) as never);
+	it("creates a single shared output <audio> on the first remote audio attach", () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		expect(mock.installedContexts).toHaveLength(1);
+		expect(manager.audioElements.size).toBe(1);
+		expect(manager.audioElements.has(MIXER_OUTPUT_KEY)).toBe(true);
+	});
 
-		const track = { id: "a1", kind: "audio" } as MediaStreamTrack;
-		manager.attachAudioStream("p1", [track]);
-		const audioEl = manager.audioElements.get("p1");
-		expect(audioEl).toBeDefined();
-		const originalSrc = audioEl?.srcObject;
+	it("routes a second remote track through the same mixer (no second AudioContext)", () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		manager.attachAudioStream("p2", [makeTrack("a2", "audio")]);
+		expect(mock.installedContexts).toHaveLength(1);
+		expect(manager.audioElements.size).toBe(1);
+	});
 
-		vi.setSystemTime(new Date(1_000_000 + 70_000));
+	it("removes a participant from the mixer when removeVideoElement is called", () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		manager.attachAudioStream("p2", [makeTrack("a2", "audio")]);
+		const ctx = manager.mixer._audioContext as unknown as {
+			createMediaStreamSource: ReturnType<typeof vi.fn>;
+		};
+		expect(ctx.createMediaStreamSource).toHaveBeenCalledTimes(2);
 
-		manager.attachAudioStream("p1", [track]);
-		expect(audioEl?.srcObject).not.toBe(originalSrc);
+		manager.removeVideoElement("p1");
+		// Source for p1 should have been disconnected.
+		const allSources = ctx.createMediaStreamSource.mock.results.flatMap(
+			(r) => r.value as { disconnect: ReturnType<typeof vi.fn> },
+		);
+		const p1Source = allSources[0];
+		expect(p1Source.disconnect).toHaveBeenCalled();
+	});
 
-		createElementSpy.mockRestore();
+	it("replaces a participant's chain when their audio track id changes", () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		manager.attachAudioStream("p1", [makeTrack("a2", "audio")]);
+		const ctx = manager.mixer._audioContext as unknown as {
+			createMediaStreamSource: ReturnType<typeof vi.fn>;
+		};
+		// Old chain disconnected, new source created
+		expect(ctx.createMediaStreamSource).toHaveBeenCalledTimes(2);
+	});
+
+	it("exposes setParticipantVolume and setMasterVolume", () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		expect(() => manager.setParticipantVolume("p1", 0.5)).not.toThrow();
+		expect(() => manager.setMasterVolume(0.8)).not.toThrow();
+	});
+
+	it("setSinkId is forwarded to the shared output element", async () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		const out = manager.audioElements.get(MIXER_OUTPUT_KEY) as
+			| (HTMLAudioElement & { setSinkId: ReturnType<typeof vi.fn> })
+			| undefined;
+		expect(out).toBeDefined();
+		(out as { setSinkId: ReturnType<typeof vi.fn> }).setSinkId = vi
+			.fn()
+			.mockResolvedValue(undefined);
+		await manager.setSinkId("sink-1");
+		expect(out?.setSinkId).toHaveBeenCalledWith("sink-1");
+	});
+
+	it("cleanup disposes the mixer and clears the audio map", () => {
+		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
+		const ctx = manager.mixer._audioContext as unknown as {
+			close: ReturnType<typeof vi.fn>;
+		};
+		manager.cleanup();
+		expect(ctx.close).toHaveBeenCalled();
+		expect(manager.audioElements.size).toBe(0);
+	});
+});
+
+describe("AudioMixer", () => {
+	let mock: ReturnType<typeof installAudioContextMock>;
+	let mixer: AudioMixer;
+
+	beforeEach(() => {
+		mock = installAudioContextMock();
+		HTMLMediaElement.prototype.play = vi
+			.fn()
+			.mockResolvedValue(undefined) as never;
+		mixer = new AudioMixer();
+	});
+
+	afterEach(() => {
+		mixer.dispose();
+		(mock as unknown as { __restore: () => void }).__restore();
+	});
+
+	it("creates the AudioContext lazily on first attach", () => {
+		expect(mock.installedContexts).toHaveLength(0);
+		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		expect(mock.installedContexts).toHaveLength(1);
+	});
+
+	it("wires the per-participant chain into the master gain", () => {
+		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		const chain = mixer._getChain("p1");
+		expect(chain).toBeDefined();
+		if (!chain) return;
+		const ctx = mixer._audioContext as unknown as {
+			createMediaStreamSource: ReturnType<typeof vi.fn>;
+			createDynamicsCompressor: ReturnType<typeof vi.fn>;
+		};
+		const source = ctx.createMediaStreamSource.mock.results[0].value as {
+			connect: ReturnType<typeof vi.fn>;
+		};
+		const compressor = ctx.createDynamicsCompressor.mock.results[0].value as {
+			connect: ReturnType<typeof vi.fn>;
+		};
+
+		expect(source.connect).toHaveBeenCalledWith(chain.gain);
+		expect(chain.gain.connect).toHaveBeenCalledWith(compressor);
+	});
+
+	it("applies voice-tuned defaults to the compressor", () => {
+		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		const ctx = mixer._audioContext as unknown as {
+			createDynamicsCompressor: ReturnType<typeof vi.fn>;
+		};
+		expect(ctx.createDynamicsCompressor).toHaveBeenCalledWith(
+			expect.objectContaining({
+				threshold: -24,
+				knee: 6,
+				ratio: 4,
+				attack: 0.003,
+				release: 0.25,
+			}),
+		);
+	});
+
+	it("clamps setParticipantVolume to [0, 2]", () => {
+		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		const chain = mixer._getChain("p1");
+		expect(chain).toBeDefined();
+		if (!chain) return;
+
+		mixer.setParticipantVolume("p1", 5);
+		expect(chain.gain.gain.setTargetAtTime).toHaveBeenLastCalledWith(
+			2,
+			expect.any(Number),
+			0.01,
+		);
+
+		mixer.setParticipantVolume("p1", -1);
+		expect(chain.gain.gain.setTargetAtTime).toHaveBeenLastCalledWith(
+			0,
+			expect.any(Number),
+			0.01,
+		);
+	});
+
+	it("is a no-op to setParticipantVolume for an unknown participant", () => {
+		expect(() => mixer.setParticipantVolume("nope", 0.5)).not.toThrow();
+	});
+
+	it("disconnectParticipant disconnects source, gain, and compressor", () => {
+		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		mixer.detachParticipant("p1");
+		expect(mixer._participantIds).toEqual([]);
+	});
+
+	it("dispose closes the AudioContext and removes the output element", () => {
+		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		const ctx = mixer._audioContext as unknown as {
+			close: ReturnType<typeof vi.fn>;
+		};
+		const out = mixer._outputElement;
+		expect(out).toBeTruthy();
+		expect(out?.parentNode).toBe(document.body);
+
+		mixer.dispose();
+
+		expect(ctx.close).toHaveBeenCalled();
+		expect(mixer._outputElement).toBeNull();
+	});
+
+	it("dispose is idempotent", () => {
+		mixer.dispose();
+		expect(() => mixer.dispose()).not.toThrow();
 	});
 });
