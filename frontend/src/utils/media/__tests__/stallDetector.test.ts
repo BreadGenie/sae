@@ -194,7 +194,22 @@ describe("StallDetector", () => {
 
 			now += 5_000;
 			sample.bytes = 0;
-			expect(det.check([audioSample])).toEqual(["c1"]);
+			expect(det.check([audioSample])).toEqual([]);
+		});
+
+		it("does not report a startup video stall before RTP arrives", () => {
+			const det = detector();
+			const sample = makeSample({ createdAt: now - 10_000, bytes: 0 });
+			const videoSample = { ...toSample(sample), kind: "video" };
+
+			det.check([videoSample]);
+			now += 4_000;
+			sample.bytes = 0;
+			expect(det.check([videoSample])).toEqual([]);
+
+			now += 6_000;
+			sample.bytes = 0;
+			expect(det.check([videoSample])).toEqual([]);
 		});
 
 		it("uses the longer default window for video", () => {

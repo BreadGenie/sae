@@ -82,6 +82,13 @@ export class StallDetector {
 			if (bytes !== null && bytes > 0) {
 				st.hasReceivedBytes = true;
 			}
+
+			if (!st.hasReceivedBytes) {
+				st.stallStartedAt = null;
+				st.lastBytesReceived = bytes ?? 0;
+				continue;
+			}
+
 			const timeoutMs = this.timeoutFor(sample.kind, st.hasReceivedBytes);
 
 			if (sample.isMuted()) {
