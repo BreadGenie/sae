@@ -178,6 +178,25 @@ describe("StallDetector", () => {
 			expect(det.check([audioSample])).toEqual(["c1"]);
 		});
 
+		it("uses the longer startup window for audio before RTP arrives", () => {
+			const det = detector();
+			const sample = makeSample({ createdAt: now - 10_000, bytes: 0 });
+			const audioSample = { ...toSample(sample), kind: "audio" };
+
+			det.check([audioSample]);
+			now += 1_000;
+			sample.bytes = 0;
+			expect(det.check([audioSample])).toEqual([]);
+
+			now += 1_600;
+			sample.bytes = 0;
+			expect(det.check([audioSample])).toEqual([]);
+
+			now += 5_000;
+			sample.bytes = 0;
+			expect(det.check([audioSample])).toEqual(["c1"]);
+		});
+
 		it("uses the longer default window for video", () => {
 			const det = detector();
 			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });

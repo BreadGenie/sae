@@ -36,6 +36,7 @@ interface StallDetectorOptions {
 
 interface ConsumerState {
 	lastBytesReceived: number;
+	hasReceivedBytes: boolean;
 	stallStartedAt: number | null;
 	lastRecoveredAt: number | null;
 }
@@ -66,7 +67,6 @@ export class StallDetector {
 
 		for (const sample of samples) {
 			activeIds.add(sample.id);
-			const timeoutMs = this.timeoutFor(sample.kind);
 
 			if (sample.isPaused()) {
 				this.state.delete(sample.id);
@@ -78,9 +78,13 @@ export class StallDetector {
 			}
 
 			const bytes = sample.getBytesReceived();
+			const st = this.ensureState(sample.id);
+			if (bytes !== null && bytes > 0) {
+				st.hasReceivedBytes = true;
+			}
+			const timeoutMs = this.timeoutFor(sample.kind, st.hasReceivedBytes);
 
 			if (sample.isMuted()) {
-				const st = this.ensureState(sample.id);
 				if (st.stallStartedAt === null) {
 					st.stallStartedAt = now;
 				}
@@ -100,7 +104,6 @@ export class StallDetector {
 				continue;
 			}
 
-			const st = this.ensureState(sample.id);
 			const previous = st.lastBytesReceived;
 			st.lastBytesReceived = bytes;
 
@@ -128,8 +131,13 @@ export class StallDetector {
 		return stalled;
 	}
 
-	private timeoutFor(kind: string | undefined): number {
-		return kind === "audio" ? this.audioStallTimeoutMs : this.stallTimeoutMs;
+	private timeoutFor(
+		kind: string | undefined,
+		hasReceivedBytes: boolean,
+	): number {
+		return kind === "audio" && hasReceivedBytes
+			? this.audioStallTimeoutMs
+			: this.stallTimeoutMs;
 	}
 
 	private ensureState(id: string): ConsumerState {
@@ -137,6 +145,7 @@ export class StallDetector {
 		if (!st) {
 			st = {
 				lastBytesReceived: 0,
+				hasReceivedBytes: false,
 				stallStartedAt: null,
 				lastRecoveredAt: null,
 			};
