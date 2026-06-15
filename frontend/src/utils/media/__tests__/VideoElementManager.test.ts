@@ -147,7 +147,7 @@ describe("VideoElementManager audio mixer integration", () => {
 
 	afterEach(() => {
 		manager.cleanup();
-		(mock as unknown as { __restore: () => void }).__restore();
+		mock.reset();
 	});
 
 	it("does not create an AudioContext until the first remote audio attach", () => {
@@ -196,6 +196,20 @@ describe("VideoElementManager audio mixer integration", () => {
 		expect(ctx.createMediaStreamSource).toHaveBeenCalledTimes(2);
 	});
 
+	it("does not re-create a chain when reattaching the same track id", () => {
+		const track = makeTrack("a1", "audio");
+		manager.attachAudioStream("p1", [track]);
+		manager.attachAudioStream("p1", [track]);
+		manager.attachAudioStream("p1", [track]);
+		const ctx = manager.mixer._audioContext as unknown as {
+			createMediaStreamSource: ReturnType<typeof vi.fn>;
+		};
+		// Idempotent: one chain for the same track id, regardless of how
+		// many times the consumer reannounces it.
+		expect(ctx.createMediaStreamSource).toHaveBeenCalledTimes(1);
+		expect(manager.mixer._participantIds).toEqual(["p1"]);
+	});
+
 	it("exposes setParticipantVolume and setMasterVolume", () => {
 		manager.attachAudioStream("p1", [makeTrack("a1", "audio")]);
 		expect(() => manager.setParticipantVolume("p1", 0.5)).not.toThrow();
@@ -240,7 +254,7 @@ describe("AudioMixer", () => {
 
 	afterEach(() => {
 		mixer.dispose();
-		(mock as unknown as { __restore: () => void }).__restore();
+		mock.reset();
 	});
 
 	it("creates the AudioContext lazily on first attach", () => {

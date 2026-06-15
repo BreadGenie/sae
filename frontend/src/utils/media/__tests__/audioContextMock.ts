@@ -142,13 +142,8 @@ export function installAudioContextMock(): {
 		installedContexts,
 		reset: () => {
 			installedContexts.length = 0;
-		},
-		__restore: () => {
 			w.AudioContext = originalAudio;
 			w.webkitAudioContext = originalWebkit;
 		},
-	} as unknown as {
-		installedContexts: MockAudioContext[];
-		reset: () => void;
 	};
 }
