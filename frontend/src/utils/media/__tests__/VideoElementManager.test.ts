@@ -326,7 +326,15 @@ describe("AudioMixer", () => {
 
 	it("disconnectParticipant disconnects source, gain, and compressor", () => {
 		mixer.attachParticipant("p1", makeTrack("a1", "audio"));
+		const chain = mixer._getChain("p1");
+		expect(chain).toBeDefined();
+		if (!chain) return;
+
 		mixer.detachParticipant("p1");
+
+		expect(chain.source.disconnect).toHaveBeenCalled();
+		expect(chain.gain.disconnect).toHaveBeenCalled();
+		expect(chain.compressor.disconnect).toHaveBeenCalled();
 		expect(mixer._participantIds).toEqual([]);
 	});
 

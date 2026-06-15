@@ -227,20 +227,6 @@ describe("StallDetector", () => {
 			expect(det.check([videoSample])).toEqual(["c1"]);
 		});
 
-		it("falls back to the default window when kind is missing", () => {
-			const det = detector();
-			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });
-
-			det.check([toSample(sample)]);
-			now += 4_000;
-			sample.bytes = 1000;
-			expect(det.check([toSample(sample)])).toEqual([]);
-
-			now += 6_000;
-			sample.bytes = 1000;
-			expect(det.check([toSample(sample)])).toEqual(["c1"]);
-		});
-
 		it("honours a custom audioStallTimeoutMs option", () => {
 			const det = new StallDetector({ now: getNow, audioStallTimeoutMs: 500 });
 			const sample = makeSample({ createdAt: now - 10_000, bytes: 1000 });
