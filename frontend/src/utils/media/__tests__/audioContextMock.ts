@@ -29,20 +29,20 @@ class MockAudioParam implements ParamValue {
 	}
 }
 
-export interface MockAudioNode {
+interface MockAudioNode {
 	connect: ReturnType<typeof vi.fn>;
 	disconnect: ReturnType<typeof vi.fn>;
 }
 
-export interface MockMediaStreamAudioSourceNode extends MockAudioNode {
+interface MockMediaStreamAudioSourceNode extends MockAudioNode {
 	mediaStream: MediaStream;
 }
 
-export interface MockGainNode extends MockAudioNode {
+interface MockGainNode extends MockAudioNode {
 	gain: ParamValue;
 }
 
-export interface MockDynamicsCompressorNode extends MockAudioNode {
+interface MockDynamicsCompressorNode extends MockAudioNode {
 	threshold: MockAudioParam;
 	knee: MockAudioParam;
 	ratio: MockAudioParam;
@@ -50,7 +50,7 @@ export interface MockDynamicsCompressorNode extends MockAudioNode {
 	release: MockAudioParam;
 }
 
-export interface MockMediaStreamAudioDestinationNode extends MockAudioNode {
+interface MockMediaStreamAudioDestinationNode extends MockAudioNode {
 	stream: MediaStream;
 }
 
@@ -88,7 +88,7 @@ class MockDestination implements MockMediaStreamAudioDestinationNode {
 	}
 }
 
-export interface MockAudioContext {
+interface MockAudioContext {
 	currentTime: number;
 	state: string;
 	resume: ReturnType<typeof vi.fn>;
