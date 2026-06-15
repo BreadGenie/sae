@@ -35,6 +35,47 @@ function makeEntry(
 	};
 }
 
+type CommitRequestEnvelope = {
+	type: string;
+	committerSenderId?: number;
+	epochNumber?: number;
+	nextEpochNumber?: number;
+	membershipDeltaId?: string;
+	joiningSenderIds?: number[];
+};
+
+type CommitEnvelope = {
+	type: string;
+	fromParticipantId: string;
+	fromSenderId: number;
+	previousEpochNumber: number;
+	epochNumber: number;
+	membershipDeltaId: string;
+	membershipDeltaHash: string;
+	rosterHash: string;
+	mlsCommit: string;
+};
+
+type TestRelay = {
+	emitToTarget: (
+		roomId: string,
+		participantId: string,
+		envelope: CommitRequestEnvelope,
+	) => void;
+	requestCommitFromHost: (
+		roomId: string,
+		joiningSenderIds: number[],
+		epochNumber: number,
+	) => Promise<void>;
+	redesignate: (roomId: string, epochNumber: number) => Promise<void>;
+	relayCommit: (
+		roomId: string,
+		fromParticipantId: string,
+		fromSenderId: number,
+		payload: CommitEnvelope,
+	) => Promise<void>;
+};
+
 async function main(): Promise<void> {
 	const sent: Array<{
 		room: string;
@@ -75,21 +116,13 @@ async function main(): Promise<void> {
 	await roster.add('meeting-1', makeEntry(9, { joinedAt: 2 }));
 	await roster.add('meeting-1', makeEntry(11, { joinedAt: 3 }));
 	relay.setRoster(roster);
+	const testRelay = relay as unknown as TestRelay;
 
-	const originalEmit = (
-		relay as unknown as { emitToTarget: Function }
-	).emitToTarget.bind(relay);
-	(relay as unknown as { emitToTarget: Function }).emitToTarget = (
+	const originalEmit = testRelay.emitToTarget.bind(relay);
+	testRelay.emitToTarget = (
 		roomId: string,
 		participantId: string,
-		envelope: {
-			type: string;
-			committerSenderId?: number;
-			epochNumber?: number;
-			nextEpochNumber?: number;
-			membershipDeltaId?: string;
-			joiningSenderIds?: number[];
-		},
+		envelope: CommitRequestEnvelope,
 	) => {
 		if (envelope.type === 'commit-request') {
 			sent.push({
@@ -105,10 +138,31 @@ async function main(): Promise<void> {
 		originalEmit(roomId, participantId, envelope);
 	};
 
+	// -------- Test 0: no committer keeps request pending --------
+	await roster.add('meeting-empty', makeEntry(13, { joinedAt: 1 }));
+	await testRelay.requestCommitFromHost('meeting-empty', [13], 1);
+	assert(
+		(sent as { length: number }).length === 0,
+		`expected no commit-request without an eligible committer, got ${(sent as { length: number }).length}`,
+	);
+	await roster.add(
+		'meeting-empty',
+		makeEntry(7, { participantId: 'host-empty', isHost: true, joinedAt: 2 }),
+	);
+	await relay.retryPendingCommitRequests('meeting-empty');
+	assert(
+		(sent as { length: number }).length === 1,
+		`expected pending commit-request to retry after member joins, got ${(sent as { length: number }).length}`,
+	);
+	assert(
+		sent[0].target === 'host-empty',
+		`expected retry to target host-empty, got ${sent[0].target}`,
+	);
+	relay.clearRoom('meeting-empty');
+	sent.splice(0, sent.length);
+
 	// -------- Test 1: redesignation after timeout --------
-	await (
-		relay as unknown as { requestCommitFromHost: Function }
-	).requestCommitFromHost('meeting-1', [13], 1);
+	await testRelay.requestCommitFromHost('meeting-1', [13], 1);
 	assert(
 		(sent as { length: number }).length === 1,
 		`expected first commit-request immediately, got ${(sent as { length: number }).length}`,
@@ -123,10 +177,7 @@ async function main(): Promise<void> {
 	);
 
 	// Trigger redesignation directly (avoid waiting COMMITTER_TIMEOUT_MS).
-	await (relay as unknown as { redesignate: Function }).redesignate(
-		'meeting-1',
-		1,
-	);
+	await testRelay.redesignate('meeting-1', 1);
 	assert(
 		(sent as { length: number }).length === 2,
 		`expected second commit-request after redesignate, got ${(sent as { length: number }).length}`,
@@ -141,10 +192,7 @@ async function main(): Promise<void> {
 		`second attempt should target oldest non-host (alice, 9), got ${second.committerSenderId}`,
 	);
 
-	await (relay as unknown as { redesignate: Function }).redesignate(
-		'meeting-1',
-		1,
-	);
+	await testRelay.redesignate('meeting-1', 1);
 	assert(
 		(sent as { length: number }).length === 3,
 		`expected third commit-request after second redesignate, got ${(sent as { length: number }).length}`,
@@ -155,47 +203,35 @@ async function main(): Promise<void> {
 		`third attempt should target bob (11), got ${third.committerSenderId}`,
 	);
 
-	await (relay as unknown as { redesignate: Function }).redesignate(
-		'meeting-1',
-		1,
-	);
+	await testRelay.redesignate('meeting-1', 1);
 	assert(
 		(sent as { length: number }).length === 3,
 		`expected no further commit-requests after MAX_REDESIGNATIONS, got ${(sent as { length: number }).length}`,
 	);
+	relay.clearRoom('meeting-1');
 
 	// -------- Test 2: relay commit clears pending --------
 	sent.splice(0, sent.length);
-	await (
-		relay as unknown as { requestCommitFromHost: Function }
-	).requestCommitFromHost('meeting-1', [15], 2);
+	await testRelay.requestCommitFromHost('meeting-1', [15], 2);
 	assert(
 		(sent as { length: number }).length === 1,
 		`expected one commit-request after fresh request, got ${(sent as { length: number }).length}`,
 	);
 	const first = sent[0];
 
-	await (relay as unknown as { relayCommit: Function }).relayCommit(
-		'meeting-1',
-		'host-1',
-		7,
-		{
-			type: 'commit',
-			fromParticipantId: 'host-1',
-			fromSenderId: 7,
-			previousEpochNumber: first.epochNumber,
-			epochNumber: first.nextEpochNumber,
-			membershipDeltaId: first.membershipDeltaId,
-			membershipDeltaHash: 'YWFhYWE=',
-			rosterHash: 'YWFhYWE=',
-			mlsCommit: Buffer.from([1, 2, 3]).toString('base64'),
-		},
-	);
+	await testRelay.relayCommit('meeting-1', 'host-1', 7, {
+		type: 'commit',
+		fromParticipantId: 'host-1',
+		fromSenderId: 7,
+		previousEpochNumber: first.epochNumber,
+		epochNumber: first.nextEpochNumber,
+		membershipDeltaId: first.membershipDeltaId,
+		membershipDeltaHash: 'YWFhYWE=',
+		rosterHash: 'YWFhYWE=',
+		mlsCommit: Buffer.from([1, 2, 3]).toString('base64'),
+	});
 
-	await (relay as unknown as { redesignate: Function }).redesignate(
-		'meeting-1',
-		first.epochNumber,
-	);
+	await testRelay.redesignate('meeting-1', first.epochNumber);
 	assert(
 		(sent as { length: number }).length === 1,
 		`expected no further commit-requests after commit cleared pending, got ${(sent as { length: number }).length}`,

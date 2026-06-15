@@ -5,6 +5,7 @@
 // module-level singleton (E2EEMeeting.instance) or instantiate directly
 // in tests.
 
+import { notifyE2EEContextReady } from "./E2EEContextReady";
 import {
 	createDecryptionTransformStream,
 	createEncryptionTransformStream,
@@ -81,6 +82,7 @@ export class E2EEMeeting {
 		this.senderChains.clear();
 		this.receiverChain = null;
 		void this.setupPendingTransforms();
+		notifyE2EEContextReady();
 	}
 
 	hasMeetingContext(): boolean {

@@ -10,6 +10,7 @@ import { useRouter } from "vue-router";
 import { useSocket } from "../socket";
 import audioNotificationManager from "../utils/audioNotifications";
 import { getErrorMessage } from "../utils/error";
+import { waitForE2EEContextReady } from "../utils/media/E2EEContextReady";
 import { SocketIOSignalChannel } from "../utils/media/SignalChannel";
 import { SFUClient } from "../utils/SFUClient";
 import { SFUMeetingManager } from "../utils/SFUMeetingManager";
@@ -367,6 +368,9 @@ export function useSFUConnection(deps: {
 				audio_enabled: mediaState.isMicOn,
 				video_enabled: mediaState.isCameraOn,
 			});
+			if (sfuClient.isE2EERequired()) {
+				await waitForE2EEContextReady(0);
+			}
 
 			await manager.initializeDevice();
 			await manager.createReceiveTransport();

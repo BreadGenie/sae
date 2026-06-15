@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { shallowRef } from "vue";
 import { E2EEEpochSignalingController } from "../E2EEEpochSignalingController";
 import {
+	getActiveEpochState,
 	installActiveEpochState,
 	wipeActiveEpochState,
 } from "../E2EEEpochStateStore";
@@ -68,6 +69,12 @@ function createController(options: { isHost?: boolean } = {}) {
 			_removedLeaf: leafIndex,
 		},
 	}));
+	const createGenesisEpoch = vi.fn(async () => ({
+		epochNumber: 1,
+		state: { id: "genesis-state" } as never,
+		encodedState: new Uint8Array([12]),
+		meetingSecret: new Uint8Array(32) as Uint8Array<ArrayBuffer>,
+	}));
 	const controller = new E2EEEpochSignalingController({
 		meetingId: "meeting-1",
 		sfuClient: {
@@ -84,7 +91,7 @@ function createController(options: { isHost?: boolean } = {}) {
 			signingKeyPair: { privateKey: {} as CryptoKey } as CryptoKeyPair,
 		})),
 		epochProtocolProvider: {
-			createGenesisEpoch: vi.fn(),
+			createGenesisEpoch,
 			createGenesisEpochWithMembers: vi.fn(),
 			generateKeyPackage,
 			encodeKeyPackage,
@@ -108,6 +115,7 @@ function createController(options: { isHost?: boolean } = {}) {
 		addMultipleMembers,
 		removeMember,
 		joinFromWelcome,
+		createGenesisEpoch,
 	};
 }
 
@@ -137,6 +145,51 @@ describe("E2EEEpochSignalingController", () => {
 			keyPackage: "AQID",
 		});
 		expect(controller.getPendingKeyPackage(1)).not.toBeNull();
+	});
+
+	it("creates a fresh genesis epoch when the SFU requests one", async () => {
+		wipeActiveEpochState();
+		const { controller, createGenesisEpoch } = createController();
+
+		await controller.handleEpochEnvelope({
+			type: "genesis-request",
+			epochNumber: 1,
+			message: "Starting a fresh E2EE session.",
+		});
+
+		expect(createGenesisEpoch).toHaveBeenCalledWith({
+			groupId: "meeting-1",
+			userId: "user-1",
+			deviceId: "device-1",
+			senderId: 7,
+			signingPubKey: "signing-public-key",
+		});
+		expect(getActiveEpochState()?.epochNumber).toBe(1);
+		wipeActiveEpochState();
+	});
+
+	it("dispatches a pending join status event", async () => {
+		const { controller } = createController();
+		const listener = vi.fn();
+		document.addEventListener("meet:e2ee-join-status", listener);
+
+		await controller.handleEpochEnvelope({
+			type: "join-status",
+			status: "pending",
+			epochNumber: 1,
+			message: "Waiting for an encrypted participant to admit you.",
+		});
+
+		expect(listener).toHaveBeenCalledWith(
+			expect.objectContaining({
+				detail: {
+					status: "pending",
+					epochNumber: 1,
+					message: "Waiting for an encrypted participant to admit you.",
+				},
+			}),
+		);
+		document.removeEventListener("meet:e2ee-join-status", listener);
 	});
 
 	it("authors an add-member commit when this host is the designated committer", async () => {

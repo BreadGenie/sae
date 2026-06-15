@@ -63,6 +63,12 @@ export class E2EEEpochSignalingController {
 			envelope: data,
 		});
 		switch (data.type) {
+			case "genesis-request":
+				await this.createGenesisIfNeeded(data);
+				return;
+			case "join-status":
+				this.dispatchJoinStatus(data);
+				return;
 			case "key-package-request":
 				await this.publishKeyPackage(data.epochNumber);
 				return;
@@ -95,15 +101,69 @@ export class E2EEEpochSignalingController {
 				});
 				return;
 			case "commit":
+				this.clearJoinStatus();
 				await this.processCommit(data);
 				return;
 			case "ack":
 			case "resync-request":
 				return;
 			case "welcome":
+				this.clearJoinStatus();
 				await this.processWelcome(data);
 				return;
 		}
+	}
+
+	private async createGenesisIfNeeded(
+		_request: Extract<E2eeEpochEnvelope, { type: "genesis-request" }>,
+	): Promise<void> {
+		if (getActiveEpochState()) return;
+		const senderId = this.deps.sfuClient.getOwnSenderId();
+		if (senderId === null) return;
+		const identity = await this.deps.getDeviceIdentity();
+		const userId = this.deps.currentUser.currentUser.value?.user_id;
+		if (!userId) return;
+
+		const genesis = await this.epochProtocolProvider.createGenesisEpoch({
+			groupId: this.deps.meetingId,
+			userId,
+			deviceId: identity.deviceId,
+			senderId,
+			signingPubKey: identity.signingPublicKey,
+		});
+		installActiveEpochState({
+			epochNumber: genesis.epochNumber,
+			state: genesis.state,
+			meetingSecret: genesis.meetingSecret,
+		});
+		E2EEMeeting.instance.setMeetingContext(
+			genesis.meetingSecret,
+			genesis.epochNumber,
+			identity.signingKeyPair.privateKey,
+		);
+		this.clearJoinStatus();
+	}
+
+	private dispatchJoinStatus(
+		data: Extract<E2eeEpochEnvelope, { type: "join-status" }>,
+	): void {
+		document.dispatchEvent(
+			new CustomEvent("meet:e2ee-join-status", {
+				detail: {
+					status: data.status,
+					epochNumber: data.epochNumber,
+					message: data.message,
+				},
+			}),
+		);
+	}
+
+	private clearJoinStatus(): void {
+		document.dispatchEvent(
+			new CustomEvent("meet:e2ee-join-status", {
+				detail: { status: "clear" },
+			}),
+		);
 	}
 
 	getPendingKeyPackage(epochNumber: number): PendingKeyPackage | null {

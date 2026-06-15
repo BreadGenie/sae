@@ -545,6 +545,7 @@ export class SocketHandlerManager {
 					isHost: Boolean(socket.isHost),
 					joinedAt: Date.now(),
 				});
+				await this.e2eeEpochRelay.retryPendingCommitRequests(roomId);
 
 				// If this peer is rejoining the room (e.g., host is
 				// reconfiguring for E2EE mid-meeting), drop any leftover
@@ -626,6 +627,10 @@ export class SocketHandlerManager {
 				epochNumber,
 			},
 		);
+		if (this.fullAccessSockets.get(roomId)?.size === 1) {
+			this.e2eeEpochRelay.requestGenesisFromParticipant(roomId, participantId);
+			return;
+		}
 		if (socket.isHost) {
 			this.e2eeEpochRelay.requestKeyPackages(roomId, epochNumber, 'enable');
 			return;

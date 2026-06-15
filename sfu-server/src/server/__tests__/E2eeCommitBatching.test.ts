@@ -31,6 +31,26 @@ function makeEntry(
 	};
 }
 
+type CommitRequestEnvelope = {
+	type: string;
+	joiningSenderIds?: number[];
+	epochNumber?: number;
+};
+
+type TestRelay = {
+	emitToTarget: (
+		roomId: string,
+		participantId: string,
+		envelope: CommitRequestEnvelope,
+	) => void;
+	enqueueCommitRequest: (
+		roomId: string,
+		joiningSenderIds: number[],
+		epochNumber: number,
+	) => void;
+	flushPendingCommitRequests: (roomId: string) => void;
+};
+
 async function main(): Promise<void> {
 	// We can't easily mock socket.io's `io`, so we exercise the batching
 	// via the public enqueueCommitRequest path indirectly. The relay
@@ -57,20 +77,15 @@ async function main(): Promise<void> {
 	const roster = new E2eeRosterStore(new InMemoryRosterPersistence());
 	await roster.add('meeting-1', makeEntry(7, { isHost: true }));
 	relay.setRoster(roster);
+	const testRelay = relay as unknown as TestRelay;
 
 	// Patch relay internals so we can observe emitted commit-requests
 	// without spinning up a real socket.io server.
-	const originalEmit = (
-		relay as unknown as { emitToTarget: Function }
-	).emitToTarget.bind(relay);
-	(relay as unknown as { emitToTarget: Function }).emitToTarget = (
+	const originalEmit = testRelay.emitToTarget.bind(relay);
+	testRelay.emitToTarget = (
 		roomId: string,
 		participantId: string,
-		envelope: {
-			type: string;
-			joiningSenderIds?: number[];
-			epochNumber?: number;
-		},
+		envelope: CommitRequestEnvelope,
 	) => {
 		if (envelope.type === 'commit-request') {
 			sent.push({
@@ -83,17 +98,9 @@ async function main(): Promise<void> {
 	};
 
 	// Two rapid key-package events for the same room+epoch.
-	(relay as unknown as { enqueueCommitRequest: Function }).enqueueCommitRequest(
-		'meeting-1',
-		[9],
-		1,
-	);
+	testRelay.enqueueCommitRequest('meeting-1', [9], 1);
 	// Second joiner arrives within the batching window.
-	(relay as unknown as { enqueueCommitRequest: Function }).enqueueCommitRequest(
-		'meeting-1',
-		[11],
-		1,
-	);
+	testRelay.enqueueCommitRequest('meeting-1', [11], 1);
 
 	// Within the window, no commit-request should have been emitted yet.
 	assert(
@@ -111,17 +118,12 @@ async function main(): Promise<void> {
 	);
 	const first = sent[0] ?? {};
 	assert(first.room === 'meeting-1', 'commit-request should target meeting-1');
+	relay.clearRoom('meeting-1');
 
 	// flushPendingCommitRequests cancels the timer.
 	sent.splice(0, sent.length);
-	(relay as unknown as { enqueueCommitRequest: Function }).enqueueCommitRequest(
-		'meeting-1',
-		[13],
-		2,
-	);
-	(
-		relay as unknown as { flushPendingCommitRequests: Function }
-	).flushPendingCommitRequests('meeting-1');
+	testRelay.enqueueCommitRequest('meeting-1', [13], 2);
+	testRelay.flushPendingCommitRequests('meeting-1');
 	await new Promise((resolve) => setTimeout(resolve, 400));
 	assert(
 		sent.length === 0,

@@ -138,8 +138,27 @@ export class E2EEEpochRelay {
 		});
 	}
 
+	requestGenesisFromParticipant(roomId: string, participantId: string): void {
+		this.emitToTarget(roomId, participantId, {
+			type: 'genesis-request',
+			epochNumber: 1,
+			message: 'Starting a fresh E2EE session for this empty encrypted room.',
+		});
+	}
+
 	getCurrentEpochNumber(roomId: string): number {
 		return this.currentEpochByRoom.get(roomId) ?? 1;
+	}
+
+	async retryPendingCommitRequests(roomId: string): Promise<void> {
+		const prefix = `${roomId}:`;
+		for (const [key, pending] of this.pendingCommitRequests) {
+			if (!key.startsWith(prefix)) continue;
+			clearTimeout(pending.timer);
+			pending.alreadyTried = [];
+			pending.attempts = 0;
+			await this.tryAssignAndEmit(roomId, pending);
+		}
 	}
 
 	clearRoom(roomId: string): void {
@@ -354,7 +373,7 @@ export class E2EEEpochRelay {
 		const picked = (await this.roster?.pickCommitter(roomId, exclude)) ?? null;
 		if (!picked) {
 			console.warn(
-				'[DEBUG-e2ee] SFU: redesignation gave up, no eligible committer',
+				'[DEBUG-e2ee] SFU: no eligible committer; keeping request pending',
 				{
 					roomId,
 					membershipDeltaId: pending.membershipDeltaId,
@@ -362,7 +381,7 @@ export class E2EEEpochRelay {
 					alreadyTried: pending.alreadyTried,
 				},
 			);
-			this.clearPendingCommitRequest(roomId, pending.epochNumber);
+			this.notifyPendingJoiners(roomId, pending);
 			return;
 		}
 		pending.alreadyTried.push(picked.senderId);
@@ -409,7 +428,7 @@ export class E2EEEpochRelay {
 				membershipDeltaId: pending.membershipDeltaId,
 				attempts: pending.attempts,
 			});
-			this.clearPendingCommitRequest(roomId, epochNumber);
+			this.notifyPendingJoiners(roomId, pending);
 			return;
 		}
 		console.log('[DEBUG-e2ee] SFU: committer timed out, redesignating', {
@@ -428,6 +447,24 @@ export class E2EEEpochRelay {
 			clearTimeout(pending.timer);
 		}
 		this.pendingCommitRequests.delete(key);
+	}
+
+	private notifyPendingJoiners(
+		roomId: string,
+		pending: PendingCommitRequest,
+	): void {
+		if (pending.joiningSenderIds.length === 0) return;
+		for (const senderId of pending.joiningSenderIds) {
+			const participantId = this.resolveParticipantBySenderId(roomId, senderId);
+			if (!participantId) continue;
+			this.emitToTarget(roomId, participantId, {
+				type: 'join-status',
+				status: 'pending',
+				epochNumber: pending.epochNumber,
+				message:
+					'Waiting for an encrypted participant to admit you to the E2EE session.',
+			});
+		}
 	}
 
 	private async requestCommitFromHost(

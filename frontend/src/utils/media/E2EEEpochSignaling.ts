@@ -1,16 +1,24 @@
 export type E2eeEpochEnvelope =
 	| E2eeEpochKeyPackageRequest
+	| E2eeEpochGenesisRequest
 	| E2eeEpochKeyPackage
 	| E2eeEpochCommitRequest
 	| E2eeEpochCommit
 	| E2eeEpochWelcome
 	| E2eeEpochAck
-	| E2eeEpochResyncRequest;
+	| E2eeEpochResyncRequest
+	| E2eeEpochJoinStatus;
 
 export type E2eeEpochKeyPackageRequest = {
 	type: "key-package-request";
 	epochNumber: number;
 	reason: "enable" | "join" | "reconnect";
+};
+
+export type E2eeEpochGenesisRequest = {
+	type: "genesis-request";
+	epochNumber: 1;
+	message: string;
 };
 
 export type E2eeEpochKeyPackage = {
@@ -67,4 +75,11 @@ export type E2eeEpochResyncRequest = {
 	fromParticipantId: string;
 	fromSenderId: number;
 	knownEpochNumber?: number;
+};
+
+export type E2eeEpochJoinStatus = {
+	type: "join-status";
+	status: "pending";
+	epochNumber: number;
+	message: string;
 };
