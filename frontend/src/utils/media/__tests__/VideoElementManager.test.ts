@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AudioMixer } from "../AudioMixer";
-import { MIXER_OUTPUT_KEY, VideoElementManager } from "../VideoElementManager";
+import { AudioMixer, MIXER_OUTPUT_KEY } from "../AudioMixer";
+import { VideoElementManager } from "../VideoElementManager";
 import { installAudioContextMock } from "./audioContextMock";
 
 type StreamCtor = new (tracks: MediaStreamTrack[]) => MediaStream;

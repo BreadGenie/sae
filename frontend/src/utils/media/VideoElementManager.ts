@@ -17,10 +17,6 @@ interface DeferredAttachment {
 
 const STALE_REATTACH_MS = 60_000;
 
-export { MIXER_OUTPUT_KEY };
-// Re-export so existing `import { MIXER_OUTPUT_KEY } from "./VideoElementManager"`
-// callers keep working.
-
 export class VideoElementManager {
 	videoElements: Map<string, HTMLVideoElement>;
 	audioElements: Map<string, HTMLAudioElement>;
