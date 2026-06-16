@@ -12,7 +12,9 @@
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format .",
-		"format:write": "biome format --write ."
+		"format:write": "biome format --write .",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"keywords": [
 		"mediasoup",
@@ -41,6 +43,7 @@
 		"@types/node": "^20.11.24",
 		"nodemon": "^3.0.1",
 		"ts-node": "^10.9.2",
-		"typescript": "^5.3.3"
+		"typescript": "^5.3.3",
+		"vitest": "^4.1.6"
 	}
 }
