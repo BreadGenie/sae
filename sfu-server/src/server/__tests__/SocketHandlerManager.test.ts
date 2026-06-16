@@ -9,16 +9,7 @@ function connectFullSocket(
 	harness: ReturnType<typeof createManager>,
 	overrides: Partial<MockSocket> = {},
 ): MockSocket {
-	const socket = createMockSocket({
-		scope: 'full',
-		isHost: false,
-		isCohost: false,
-		userId: 'user-1',
-		userName: 'Alice',
-		meetingId: 'room-1',
-		site: undefined,
-		...overrides,
-	});
+	const socket = createMockSocket(overrides);
 	harness.connect(socket);
 	return socket;
 }
@@ -195,8 +186,6 @@ describe('SocketHandlerManager characterization', () => {
 		await new Promise((r) => setImmediate(r));
 
 		harness.io.socketsAdapterRooms.set('room-1', new Set([host.id, target.id]));
-		harness.io.socketsMap.set(host.id, host);
-		harness.io.socketsMap.set(target.id, target);
 
 		target.emitCalls.length = 0;
 		host.emitCalls.length = 0;

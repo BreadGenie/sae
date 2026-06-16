@@ -17,15 +17,11 @@ export type TypedSocket = Socket<
 	SocketData
 >;
 
-export type SocketEventName = string;
-
 export interface MockSocket extends TypedSocket {
-	fire(event: SocketEventName, ...args: unknown[]): void;
+	fire(event: string, ...args: unknown[]): void;
 	emitCalls: { event: string; data: unknown }[];
 	toEmits: { roomId: string; event: string; data: unknown }[];
 	joinCalls: string[];
-	leaveCalls: string[];
-	disconnectCalls: boolean[];
 }
 
 const SOCKET_DEFAULTS = {
@@ -42,40 +38,23 @@ const SOCKET_DEFAULTS = {
 export function createMockSocket(
 	partial: Partial<TypedSocket> = {},
 ): MockSocket {
-	const handlers = new Map<SocketEventName, ((...args: unknown[]) => void)[]>();
+	const handlers = new Map<string, ((...args: unknown[]) => void)[]>();
 	const emitCalls: { event: string; data: unknown }[] = [];
 	const toEmits: { roomId: string; event: string; data: unknown }[] = [];
 	const joinCalls: string[] = [];
-	const leaveCalls: string[] = [];
-	const disconnectCalls: boolean[] = [];
-	const useFns: Array<(p: unknown, n: (err?: Error) => void) => void> = [];
 
 	const socket = {
-		id: SOCKET_DEFAULTS.id,
-		userId: SOCKET_DEFAULTS.userId,
-		userName: SOCKET_DEFAULTS.userName,
-		meetingId: SOCKET_DEFAULTS.meetingId,
-		site: SOCKET_DEFAULTS.site,
-		isHost: SOCKET_DEFAULTS.isHost,
-		isCohost: SOCKET_DEFAULTS.isCohost,
-		scope: SOCKET_DEFAULTS.scope,
+		...SOCKET_DEFAULTS,
 		handshake: {
 			address: '127.0.0.1',
 			headers: {} as Record<string, string | string[] | undefined>,
-			auth: {},
-			query: {},
 		},
 		connected: true,
-		disconnected: false,
 		...partial,
-		on(event: SocketEventName, handler: (...args: unknown[]) => void) {
+		on(event: string, handler: (...args: unknown[]) => void) {
 			const list = handlers.get(event) ?? [];
 			list.push(handler);
 			handlers.set(event, list);
-			return this;
-		},
-		off(event: SocketEventName) {
-			handlers.delete(event);
 			return this;
 		},
 		emit(event: string, data?: unknown) {
@@ -83,40 +62,30 @@ export function createMockSocket(
 			return true;
 		},
 		to(roomId: string) {
-			const ctx = {
+			return {
 				emit(event: string, data?: unknown) {
 					toEmits.push({ roomId, event, data });
 					return true;
 				},
 			};
-			return ctx;
 		},
 		join(roomId: string) {
 			joinCalls.push(roomId);
 			return Promise.resolve(this);
 		},
-		leave(roomId: string) {
-			leaveCalls.push(roomId);
-			return Promise.resolve(this);
-		},
-		disconnect(close: boolean) {
-			disconnectCalls.push(close);
-			(socket as { disconnected: boolean }).disconnected = true;
+		disconnect(_close: boolean) {
 			return socket;
 		},
-		use(fn: (p: unknown, n: (err?: Error) => void) => void) {
-			useFns.push(fn);
+		use() {
 			return this;
 		},
-		fire(event: SocketEventName, ...args: unknown[]) {
+		fire(event: string, ...args: unknown[]) {
 			const list = handlers.get(event) ?? [];
 			for (const h of list) h(...args);
 		},
 		emitCalls,
 		toEmits,
 		joinCalls,
-		leaveCalls,
-		disconnectCalls,
 	} as unknown as MockSocket;
 
 	return socket;
@@ -124,14 +93,12 @@ export function createMockSocket(
 
 interface MockServer {
 	io: Server<ClientToServerEvents, ServerToClientEvents>;
-	useFns: Array<(s: Socket, n: (err?: Error) => void) => void>;
 	connectionFn: ((s: Socket) => void) | null;
 	socketsAdapterRooms: Map<string, Set<string>>;
 	socketsMap: Map<string, Socket>;
 }
 
 function createMockServer(): MockServer {
-	const useFns: Array<(s: Socket, n: (err?: Error) => void) => void> = [];
 	const socketsAdapterRooms = new Map<string, Set<string>>();
 	const socketsMap = new Map<string, Socket>();
 
@@ -140,15 +107,13 @@ function createMockServer(): MockServer {
 			ClientToServerEvents,
 			ServerToClientEvents
 		>,
-		useFns,
 		connectionFn: null,
 		socketsAdapterRooms,
 		socketsMap,
 	};
 
 	const io = {
-		use(fn: (s: Socket, n: (err?: Error) => void) => void) {
-			useFns.push(fn);
+		use() {
 			return io;
 		},
 		on(event: string, fn: (s: Socket) => void) {
@@ -156,9 +121,7 @@ function createMockServer(): MockServer {
 			return io;
 		},
 		sockets: {
-			adapter: {
-				rooms: socketsAdapterRooms,
-			},
+			adapter: { rooms: socketsAdapterRooms },
 			sockets: socketsMap,
 		},
 	} as unknown as Server<ClientToServerEvents, ServerToClientEvents>;
@@ -168,7 +131,7 @@ function createMockServer(): MockServer {
 }
 
 function createMockMediasoupManager(): MediasoupManager {
-	const fns = {
+	return {
 		onNetworkQualityUpdate: vi.fn().mockReturnValue(() => {}),
 		createRoom: vi.fn().mockResolvedValue({
 			peers: new Map(),
@@ -177,49 +140,17 @@ function createMockMediasoupManager(): MediasoupManager {
 		closeRoom: vi.fn().mockResolvedValue(undefined),
 		addPeer: vi.fn(),
 		removePeer: vi.fn().mockResolvedValue(undefined),
-		getRouterRtpCapabilities: vi.fn().mockReturnValue({}),
-		getExistingProducers: vi.fn().mockResolvedValue([]),
-		getRoomParticipants: vi.fn().mockReturnValue([]),
-		applyMediaControl: vi.fn(),
 		peerExistsInRoom: vi.fn().mockReturnValue(true),
-		createWebRtcTransport: vi.fn().mockResolvedValue({}),
-		connectWebRtcTransport: vi.fn().mockResolvedValue(undefined),
-		restartWebRtcTransportIce: vi.fn().mockResolvedValue({}),
-		createPlainTransport: vi.fn().mockResolvedValue({}),
-		createProducer: vi.fn().mockResolvedValue({
-			id: 'producer-1',
-			kind: 'audio',
-			appData: {},
-		}),
-		createConsumer: vi.fn().mockResolvedValue({}),
-		closeProducer: vi
-			.fn()
-			.mockReturnValue({ isScreen: false, removedConsumers: [] }),
-		closeConsumer: vi.fn().mockResolvedValue(undefined),
-		updateConsumerPreferences: vi.fn().mockResolvedValue({}),
-		pauseProducer: vi.fn().mockResolvedValue(true),
-		resumeProducer: vi.fn().mockResolvedValue(true),
-		notifyPeerRemoved: vi.fn(),
-		setPeerMediaState: vi.fn(),
-		getRoomStats: vi.fn().mockReturnValue({ rooms: 0, peers: 0 }),
-		getRouterStats: vi.fn().mockReturnValue({}),
-		close: vi.fn(),
-		cleanup: vi.fn(),
-	};
-	return fns as unknown as MediasoupManager;
+	} as unknown as MediasoupManager;
 }
 
 function createMockAuthManager(): AuthManager {
 	return {
-		authenticateSocket: vi.fn().mockReturnValue(true),
 		ensureFullAccess: vi.fn(),
 		ensurePresenceAccess: vi.fn(),
-		updateSocketToken: vi.fn(),
 		isTokenExpired: vi.fn().mockReturnValue(false),
 		triggerTokenExpiry: vi.fn(),
 		cleanupSocket: vi.fn(),
-		getUserAvatar: vi.fn(),
-		destroy: vi.fn(),
 	} as unknown as AuthManager;
 }
 
@@ -235,11 +166,7 @@ export function createManager(): ManagerHarness {
 	const io = createMockServer();
 	const mediasoup = createMockMediasoupManager();
 	const authManager = createMockAuthManager();
-	const manager = new SocketHandlerManager(
-		io.io,
-		mediasoup as unknown as MediasoupManager,
-		authManager as unknown as AuthManager,
-	);
+	const manager = new SocketHandlerManager(io.io, mediasoup, authManager);
 	manager.setupSocketHandlers();
 
 	const connect = (socket: MockSocket) => {
