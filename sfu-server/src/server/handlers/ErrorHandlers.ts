@@ -1,11 +1,9 @@
 import type { Socket } from 'socket.io';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 
 export class ErrorHandlers implements SocketHandler {
-	constructor(deps: import('./Handler').HandlerDeps) {
-		void deps;
-	}
+	constructor(_deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('error', (error) => {

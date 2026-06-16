@@ -1,10 +1,10 @@
 import type { Socket } from 'socket.io';
 import type { ReactionMessage } from '../../types';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 
 export class ReactionHandlers implements SocketHandler {
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('reaction:send', (data = {}) => {

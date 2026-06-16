@@ -1,11 +1,11 @@
 import type { Socket } from 'socket.io';
 import type { ParticipantInfo, PreviewParticipantInfo } from '../../types';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 import { checkSocketRateLimits, getRoomId } from './utils';
 
 export class RoomQueryHandlers implements SocketHandler {
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('get_router_rtp_capabilities', async (_data, callback) => {

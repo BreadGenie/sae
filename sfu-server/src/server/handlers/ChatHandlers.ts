@@ -1,10 +1,10 @@
 import type { Socket } from 'socket.io';
 import type { ChatMessage } from '../../types';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 
 export class ChatHandlers implements SocketHandler {
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('chat:toggle_restriction', (data) => {

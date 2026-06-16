@@ -1,14 +1,18 @@
 import type { Server, Socket } from 'socket.io';
-import type { ServerToClientEvents, UserData } from '../types';
+import type {
+	ClientToServerEvents,
+	ServerToClientEvents,
+	UserData,
+} from '../types';
 
 export class RoomRegistry {
-	private io: Server<ClientToServerEventsShim, ServerToClientEvents>;
+	private io: Server<ClientToServerEvents, ServerToClientEvents>;
 	private fullAccessSockets: Map<string, Set<string>> = new Map();
 	private previewSockets: Map<string, Set<string>> = new Map();
 	private raisedHands: Record<string, Record<string, string>> = {};
 	private hostOnlyChat: Record<string, boolean> = {};
 
-	constructor(io: Server<ClientToServerEventsShim, ServerToClientEvents>) {
+	constructor(io: Server<ClientToServerEvents, ServerToClientEvents>) {
 		this.io = io;
 	}
 
@@ -27,14 +31,6 @@ export class RoomRegistry {
 	removeSocket(roomId: string, socketId: string): void {
 		this.fullAccessSockets.get(roomId)?.delete(socketId);
 		this.previewSockets.get(roomId)?.delete(socketId);
-	}
-
-	getFullAccessSocketIds(roomId: string): string[] {
-		return Array.from(this.fullAccessSockets.get(roomId) ?? []);
-	}
-
-	getPreviewSocketIds(roomId: string): string[] {
-		return Array.from(this.previewSockets.get(roomId) ?? []);
 	}
 
 	setRaisedHand(roomId: string, peerId: string, isoTimestamp: string): void {
@@ -62,18 +58,10 @@ export class RoomRegistry {
 		return Boolean(this.hostOnlyChat[roomId]);
 	}
 
-	getRoomStats(roomId: string): {
-		fullAccessCount: number;
-		previewCount: number;
-		isEmpty: boolean;
-	} {
+	isEmpty(roomId: string): boolean {
 		const fullAccessCount = this.fullAccessSockets.get(roomId)?.size ?? 0;
 		const previewCount = this.previewSockets.get(roomId)?.size ?? 0;
-		return {
-			fullAccessCount,
-			previewCount,
-			isEmpty: fullAccessCount === 0 && previewCount === 0,
-		};
+		return fullAccessCount === 0 && previewCount === 0;
 	}
 
 	cleanupRoom(roomId: string): void {
@@ -88,12 +76,7 @@ export class RoomRegistry {
 		event: string,
 		data: unknown,
 	): void {
-		const socketIds = this.fullAccessSockets.get(roomId);
-		if (!socketIds) return;
-		for (const socketId of socketIds) {
-			const socket = this.io.sockets.sockets.get(socketId);
-			if (socket) emitToSocket(socket, event, data);
-		}
+		this.emitToScope(this.fullAccessSockets.get(roomId), event, data);
 	}
 
 	emitToPreviewParticipants(
@@ -101,12 +84,7 @@ export class RoomRegistry {
 		event: string,
 		data: unknown,
 	): void {
-		const socketIds = this.previewSockets.get(roomId);
-		if (!socketIds) return;
-		for (const socketId of socketIds) {
-			const socket = this.io.sockets.sockets.get(socketId);
-			if (socket) emitToSocket(socket, event, data);
-		}
+		this.emitToScope(this.previewSockets.get(roomId), event, data);
 	}
 
 	emitParticipantEvent(
@@ -146,13 +124,19 @@ export class RoomRegistry {
 			}
 		}
 	}
-}
 
-type ClientToServerEventsShim = Record<string, (...args: unknown[]) => void>;
-
-function emitToSocket(socket: Socket, event: string, data: unknown): void {
-	(socket as unknown as { emit: (e: string, d: unknown) => boolean }).emit(
-		event,
-		data,
-	);
+	private emitToScope(
+		socketIds: Set<string> | undefined,
+		event: string,
+		data: unknown,
+	): void {
+		if (!socketIds) return;
+		for (const socketId of socketIds) {
+			const socket: Socket | undefined = this.io.sockets.sockets.get(socketId);
+			if (socket) {
+				// biome-ignore lint/suspicious/noExplicitAny: Internal utility method for type-safe event emission
+				(socket as any).emit(event, data);
+			}
+		}
+	}
 }

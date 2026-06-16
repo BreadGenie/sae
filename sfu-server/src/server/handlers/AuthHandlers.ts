@@ -1,6 +1,6 @@
 import type { Socket } from 'socket.io';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 
 export class AuthHandlers implements SocketHandler {
 	register(socket: Socket): void {
@@ -30,5 +30,5 @@ export class AuthHandlers implements SocketHandler {
 		});
 	}
 
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 }

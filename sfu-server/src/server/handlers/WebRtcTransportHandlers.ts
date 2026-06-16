@@ -1,10 +1,10 @@
 import type { Socket } from 'socket.io';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 import { getRoomId } from './utils';
 
 export class WebRtcTransportHandlers implements SocketHandler {
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('create_webrtc_transport', async (data, callback) => {

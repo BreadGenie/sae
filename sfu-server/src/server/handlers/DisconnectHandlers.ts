@@ -1,10 +1,10 @@
 import type { Socket } from 'socket.io';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 import { isRealParticipant } from './utils';
 
 export class DisconnectHandlers implements SocketHandler {
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('disconnect', async () => {
@@ -22,11 +22,7 @@ export class DisconnectHandlers implements SocketHandler {
 
 			if (roomId && participantId) {
 				try {
-					if (socket.scope === 'full') {
-						this.deps.registry.removeSocket(roomId, socket.id);
-					} else if (socket.scope === 'presence-preview') {
-						this.deps.registry.removeSocket(roomId, socket.id);
-					}
+					this.deps.registry.removeSocket(roomId, socket.id);
 
 					if (socket.scope === 'full') {
 						await this.deps.mediasoup.removePeer(roomId, participantId);
@@ -57,16 +53,9 @@ export class DisconnectHandlers implements SocketHandler {
 							participantId,
 							roomId,
 						);
-					} else if (socket.scope === 'presence-preview') {
-						loggers.socketHandler.info(
-							'Preview socket %s disconnected for user %s (no peer to remove)',
-							socket.id,
-							participantId,
-						);
 					}
 
-					const stats = this.deps.registry.getRoomStats(roomId);
-					if (stats.isEmpty) {
+					if (this.deps.registry.isEmpty(roomId)) {
 						this.deps.registry.cleanupRoom(roomId);
 						this.deps.mediasoup.closeRoom(roomId);
 					}

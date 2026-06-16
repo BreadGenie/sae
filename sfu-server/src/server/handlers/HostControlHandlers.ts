@@ -1,10 +1,10 @@
 import type { Socket } from 'socket.io';
 import { loggers } from '../../utils/logger';
-import type { SocketHandler } from './Handler';
+import type { HandlerDeps, SocketHandler } from './Handler';
 import { findSocketByParticipantId } from './utils';
 
 export class HostControlHandlers implements SocketHandler {
-	constructor(private deps: import('./Handler').HandlerDeps) {}
+	constructor(private deps: HandlerDeps) {}
 
 	register(socket: Socket): void {
 		socket.on('host_control', async (data) => {

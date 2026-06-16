@@ -1,23 +1,25 @@
-import type { Server, Socket } from 'socket.io';
+import type { Server } from 'socket.io';
 import type { MediasoupManager } from '../mediasoup/MediasoupManager';
 import type { ClientToServerEvents, ServerToClientEvents } from '../types';
 import { RateLimiter } from '../utils/rateLimiter';
 import type { AuthManager } from './AuthManager';
-import { AuthHandlers } from './handlers/AuthHandlers';
-import { ChatHandlers } from './handlers/ChatHandlers';
-import { ConsumerHandlers } from './handlers/ConsumerHandlers';
-import { DisconnectHandlers } from './handlers/DisconnectHandlers';
-import { ErrorHandlers } from './handlers/ErrorHandlers';
-import type { HandlerDeps } from './handlers/Handler';
-import { HostControlHandlers } from './handlers/HostControlHandlers';
-import { MediaControlHandlers } from './handlers/MediaControlHandlers';
-import { ProducerHandlers } from './handlers/ProducerHandlers';
-import { RaiseHandHandlers } from './handlers/RaiseHandHandlers';
-import { ReactionHandlers } from './handlers/ReactionHandlers';
-import { RoomJoinHandlers } from './handlers/RoomJoinHandlers';
-import { RoomQueryHandlers } from './handlers/RoomQueryHandlers';
-import { ScreenShareHandlers } from './handlers/ScreenShareHandlers';
-import { WebRtcTransportHandlers } from './handlers/WebRtcTransportHandlers';
+import {
+	AuthHandlers,
+	ChatHandlers,
+	ConsumerHandlers,
+	DisconnectHandlers,
+	ErrorHandlers,
+	HostControlHandlers,
+	MediaControlHandlers,
+	ProducerHandlers,
+	RaiseHandHandlers,
+	ReactionHandlers,
+	RoomJoinHandlers,
+	RoomQueryHandlers,
+	ScreenShareHandlers,
+	WebRtcTransportHandlers,
+} from './handlers';
+import type { HandlerDeps, SocketHandler } from './handlers/Handler';
 import { RoomRegistry } from './RoomRegistry';
 
 export class SocketHandlerManager {
@@ -26,7 +28,7 @@ export class SocketHandlerManager {
 	private authManager: AuthManager;
 	private registry: RoomRegistry;
 	private rateLimiter: RateLimiter;
-	private handlers: Array<{ register: (socket: Socket) => void }>;
+	private handlers: SocketHandler[];
 
 	constructor(
 		io: Server<ClientToServerEvents, ServerToClientEvents>,
@@ -78,11 +80,8 @@ export class SocketHandlerManager {
 
 	setupSocketHandlers(): void {
 		this.io.use((socket, next) => {
-			if (this.authManager.authenticateSocket(socket)) {
-				next();
-			} else {
-				next(new Error('Authentication failed'));
-			}
+			this.authManager.authenticateSocket(socket);
+			next();
 		});
 
 		this.io.on('connection', (socket) => {
