@@ -122,7 +122,7 @@ export function createMockSocket(
 	return socket;
 }
 
-export interface MockServer {
+interface MockServer {
 	io: Server<ClientToServerEvents, ServerToClientEvents>;
 	useFns: Array<(s: Socket, n: (err?: Error) => void) => void>;
 	connectionFn: ((s: Socket) => void) | null;
@@ -130,7 +130,7 @@ export interface MockServer {
 	socketsMap: Map<string, Socket>;
 }
 
-export function createMockServer(): MockServer {
+function createMockServer(): MockServer {
 	const useFns: Array<(s: Socket, n: (err?: Error) => void) => void> = [];
 	const socketsAdapterRooms = new Map<string, Set<string>>();
 	const socketsMap = new Map<string, Socket>();
@@ -167,7 +167,7 @@ export function createMockServer(): MockServer {
 	return mock;
 }
 
-export function createMockMediasoupManager(): MediasoupManager {
+function createMockMediasoupManager(): MediasoupManager {
 	const fns = {
 		onNetworkQualityUpdate: vi.fn().mockReturnValue(() => {}),
 		createRoom: vi.fn().mockResolvedValue({
@@ -209,7 +209,7 @@ export function createMockMediasoupManager(): MediasoupManager {
 	return fns as unknown as MediasoupManager;
 }
 
-export function createMockAuthManager(): AuthManager {
+function createMockAuthManager(): AuthManager {
 	return {
 		authenticateSocket: vi.fn().mockReturnValue(true),
 		ensureFullAccess: vi.fn(),
@@ -223,7 +223,7 @@ export function createMockAuthManager(): AuthManager {
 	} as unknown as AuthManager;
 }
 
-export interface ManagerHarness {
+interface ManagerHarness {
 	manager: SocketHandlerManager;
 	io: MockServer;
 	mediasoup: ReturnType<typeof createMockMediasoupManager>;

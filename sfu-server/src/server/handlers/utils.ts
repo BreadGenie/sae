@@ -16,7 +16,7 @@ export function getRoomId(socket: Socket): string {
 	return `${site}::${meetingId}`;
 }
 
-export function isDevOrCiEnvironment(): boolean {
+function isDevOrCiEnvironment(): boolean {
 	const devEnv = process.env.NODE_ENV === 'development';
 	const inCi = process.env.CI === 'true' || !!process.env.GITHUB_ACTIONS;
 	return devEnv || inCi;
