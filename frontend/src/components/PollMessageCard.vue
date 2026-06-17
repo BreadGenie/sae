@@ -46,11 +46,11 @@
 import { computed, inject, ref } from "vue";
 
 const props = defineProps<{
-    poll: {
-        pollId: string;
-        question: string;
-        options: { id: string; text: string; votes: number }[];
-    };
+	poll: {
+		pollId: string;
+		question: string;
+		options: { id: string; text: string; votes: number }[];
+	};
 }>();
 
 const pollService = inject("poll") as any;
@@ -58,21 +58,21 @@ const pollService = inject("poll") as any;
 const localVotedOption = ref<string | null>(null);
 
 const totalVotes = computed(() => {
-    return props.poll.options.reduce((sum, opt) => sum + opt.votes, 0);
+	return props.poll.options.reduce((sum, opt) => sum + opt.votes, 0);
 });
 
 const getPercentage = (votes: number) => {
-    if (totalVotes.value === 0) return 0;
-    return Math.round((votes / totalVotes.value) * 100);
+	if (totalVotes.value === 0) return 0;
+	return Math.round((votes / totalVotes.value) * 100);
 };
 
 const handleVote = (optionId: string) => {
-    if (localVotedOption.value) return;
+	if (localVotedOption.value) return;
 
-    localVotedOption.value = optionId;
+	localVotedOption.value = optionId;
 
-    if (pollService) {
-        pollService.submitVote(props.poll.pollId, optionId);
-    }
+	if (pollService) {
+		pollService.submitVote(props.poll.pollId, optionId);
+	}
 };
 </script>
