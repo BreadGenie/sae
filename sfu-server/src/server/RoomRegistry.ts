@@ -61,12 +61,12 @@ export class RoomRegistry {
 	}
 
 	public getActivePolls(roomId: string): Map<string, ActivePoll> | undefined {
-    return this.activePolls[roomId];
-}
+		return this.activePolls[roomId];
+	}
 
-public setActivePolls(roomId: string, polls: Map<string, ActivePoll>): void {
-    this.activePolls[roomId] = polls;
-}
+	public setActivePolls(roomId: string, polls: Map<string, ActivePoll>): void {
+		this.activePolls[roomId] = polls;
+	}
 
 	isEmpty(roomId: string): boolean {
 		const fullAccessCount = this.fullAccessSockets.get(roomId)?.size ?? 0;

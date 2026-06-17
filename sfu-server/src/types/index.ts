@@ -214,13 +214,13 @@ export interface ClientToServerEvents {
 	'chat:send': (data: ChatSendRequest) => void;
 	'chat:toggle_restriction': (data: { enabled: boolean }) => void;
 	'poll:create': (
-        data: { question: string; options: { id?: string; text: string }[] },
-        callback: (response: SFUResponse & { poll?: PollPayloadFE }) => void,
-    ) => void;
+		data: { question: string; options: { id?: string; text: string }[] },
+		callback: (response: SFUResponse & { poll?: PollPayloadFE }) => void,
+	) => void;
 	'poll:vote': (
-        data: { pollId: string; optionId: string },
-        callback: (response: SFUResponse) => void,
-    ) => void;
+		data: { pollId: string; optionId: string },
+		callback: (response: SFUResponse) => void,
+	) => void;
 	'reaction:send': (data: ReactionSendRequest) => void;
 	'consumer:update_preferences': (
 		data: ConsumerUpdatePreferencesRequest,
@@ -435,17 +435,17 @@ export interface ActivePoll {
 	createdBy: string;
 	question: string;
 	options: PollOption[];
-	votedUsers: Set<string>
-	isActive: boolean
+	votedUsers: Set<string>;
+	isActive: boolean;
 }
 
 // for FE, sending the votedUser each payload not a good idea, if the votedUser are in huge qty
 export interface PollPayloadFE {
 	pollId: string;
-    createdBy: string;
-    question: string;
-    options: PollOption[];
-    isActive: boolean;
+	createdBy: string;
+	question: string;
+	options: PollOption[];
+	isActive: boolean;
 }
 
 // Socket.IO module augmentation

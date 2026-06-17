@@ -11,6 +11,7 @@ import { registerErrorHandlers } from './handlers/ErrorHandlers';
 import type { HandlerDeps } from './handlers/Handler';
 import { registerHostControlHandlers } from './handlers/HostControlHandlers';
 import { registerMediaControlHandlers } from './handlers/MediaControlHandlers';
+import { registerPollHandlers } from './handlers/PollHandlers';
 import { registerProducerHandlers } from './handlers/ProducerHandlers';
 import { registerRaiseHandHandlers } from './handlers/RaiseHandHandlers';
 import { registerReactionHandlers } from './handlers/ReactionHandlers';
@@ -19,7 +20,6 @@ import { registerRoomQueryHandlers } from './handlers/RoomQueryHandlers';
 import { registerScreenShareHandlers } from './handlers/ScreenShareHandlers';
 import { registerWebRtcTransportHandlers } from './handlers/WebRtcTransportHandlers';
 import { RoomRegistry } from './RoomRegistry';
-import { registerPollHandlers } from './handlers/PollHandlers';
 
 export class SocketHandlerManager {
 	private io: Server<ClientToServerEvents, ServerToClientEvents>;

@@ -10,9 +10,9 @@ export const usePollStore = defineStore("poll", () => {
 
 	function addPoll(poll: PollPayloadFE) {
 		polls.value = {
-            ...polls.value,
-            [poll.pollId]: poll
-		}
+			...polls.value,
+			[poll.pollId]: poll,
+		};
 	}
 
 	function updatePoll(poll: PollPayloadFE) {

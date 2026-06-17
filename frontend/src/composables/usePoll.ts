@@ -41,16 +41,19 @@ export function usePoll(deps: {
 		}
 
 		try {
-			const response = await sfuClient.sendRequest("poll:create", { question, options }) as any;
-			
+			const response = (await sfuClient.sendRequest("poll:create", {
+				question,
+				options,
+			})) as any;
+
 			if (response && response.success) {
-                if (response.poll) {
-                    pollStore.addPoll(response.poll);
-                }
-                toast.success("Poll created!");
-            } else {
-                toast.error(response?.error || "Failed to create poll");
-            }
+				if (response.poll) {
+					pollStore.addPoll(response.poll);
+				}
+				toast.success("Poll created!");
+			} else {
+				toast.error(response?.error || "Failed to create poll");
+			}
 		} catch (error) {
 			console.error("Failed to create poll:", error);
 			toast.error("Failed to create poll");

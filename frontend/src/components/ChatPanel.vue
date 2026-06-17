@@ -123,8 +123,8 @@ import {
 	toRefs,
 	watch,
 } from "vue";
-import { tokenizeChatMessage } from "../utils/chatMessageTokens";
 import { usePollStore } from "@/composables/usePollStore.js";
+import { tokenizeChatMessage } from "../utils/chatMessageTokens";
 import CreatePollModal from "./CreatePollModal.vue";
 import EmojiPicker from "./EmojiPicker.vue";
 
@@ -162,8 +162,6 @@ const pollService = inject("poll") as any;
 const showPollModal = ref(false);
 
 const activePolls = computed(() => pollStore.activePolls);
-
-
 
 const handlePollSubmit = (payload: {
 	question: string;
