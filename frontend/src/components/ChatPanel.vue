@@ -124,8 +124,6 @@ import {
 	watch,
 } from "vue";
 import { tokenizeChatMessage } from "../utils/chatMessageTokens";
-import EmojiPicker from "./EmojiPicker.vue";
-import CreatePollModal from "./CreatePollModal.vue";
 import { usePollStore } from "@/composables/usePollStore.js";
 import CreatePollModal from "./CreatePollModal.vue";
 import EmojiPicker from "./EmojiPicker.vue";
@@ -160,18 +158,20 @@ const props = defineProps<{
 }>();
 
 const pollStore = usePollStore();
-
-const poll = inject("poll") as any;
+const pollService = inject("poll") as any;
 const showPollModal = ref(false);
 
 const activePolls = computed(() => pollStore.activePolls);
+
+
 
 const handlePollSubmit = (payload: {
 	question: string;
 	options: { text: string }[];
 }) => {
-	if (poll) {
-		poll.createPoll(payload.question, payload.options);
+	if (pollService) {
+		pollService.createPoll(payload.question, payload.options);
+		showPollModal.value = false;
 	}
 };
 
