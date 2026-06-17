@@ -20,8 +20,8 @@
                             v-if="isHost || isCohost"
                             :options="[
                                 {
-                                    label: 'Launch Poll',
-                                    icon: 'bar-chart-2',
+                                    label: 'Create Poll',
+                                    icon: 'chart-bar',
                                     onClick: () => { showPollModal = true; }
                                 }
                             ]"

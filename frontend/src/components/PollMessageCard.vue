@@ -1,7 +1,7 @@
 <template>
-    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-3">
+    <div class="border border-gray-200 rounded-lg p-3">
         <div class="flex items-start gap-2 mb-3 text-gray-900 font-medium">
-            <lucide-bar-chart-2 class="w-4 h-4 mt-0.5 text-[#e54e17] shrink-0" />
+            <lucide-bar-chart-2 class="w-4 h-4 mt-0.5 text-gray-900 shrink-0" />
             <h4 class="text-sm leading-tight">{{ poll.question }}</h4>
         </div>
         
@@ -13,13 +13,13 @@
                 :disabled="!!localVotedOption"
                 class="relative w-full text-left rounded-md overflow-hidden border border-gray-200 transition-colors focus:outline-none bg-gray-50"
                 :class="{ 
-                    'hover:border-[#e54e17] hover:bg-white cursor-pointer': !localVotedOption,
-                    'border-[#e54e17] ring-1 ring-[#e54e17]': localVotedOption === option.id,
+                    'hover:border-gray-400 hover:bg-gray-100 cursor-pointer': !localVotedOption,
+                    'border-gray-900 ring-1 ring-gray-900': localVotedOption === option.id,
                     'opacity-75 cursor-default': localVotedOption && localVotedOption !== option.id
                 }"
             >
                 <div 
-                    class="absolute inset-y-0 left-0 bg-[#e54e17]/20 transition-all duration-500 ease-out"
+                    class="absolute inset-y-0 left-0 bg-gray-200 transition-all duration-500 ease-out"
                     :style="{ width: `${getPercentage(option.votes)}%` }"
                 ></div>
                 
@@ -46,11 +46,11 @@
 import { computed, inject, ref } from "vue";
 
 const props = defineProps<{
-	poll: {
-		pollId: string;
-		question: string;
-		options: { id: string; text: string; votes: number }[];
-	};
+    poll: {
+        pollId: string;
+        question: string;
+        options: { id: string; text: string; votes: number }[];
+    };
 }>();
 
 const pollService = inject("poll") as any;
@@ -58,21 +58,21 @@ const pollService = inject("poll") as any;
 const localVotedOption = ref<string | null>(null);
 
 const totalVotes = computed(() => {
-	return props.poll.options.reduce((sum, opt) => sum + opt.votes, 0);
+    return props.poll.options.reduce((sum, opt) => sum + opt.votes, 0);
 });
 
 const getPercentage = (votes: number) => {
-	if (totalVotes.value === 0) return 0;
-	return Math.round((votes / totalVotes.value) * 100);
+    if (totalVotes.value === 0) return 0;
+    return Math.round((votes / totalVotes.value) * 100);
 };
 
 const handleVote = (optionId: string) => {
-	if (localVotedOption.value) return;
+    if (localVotedOption.value) return;
 
-	localVotedOption.value = optionId;
+    localVotedOption.value = optionId;
 
-	if (pollService) {
-		pollService.submitVote(props.poll.pollId, optionId);
-	}
+    if (pollService) {
+        pollService.submitVote(props.poll.pollId, optionId);
+    }
 };
 </script>
